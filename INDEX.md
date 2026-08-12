@@ -5,6 +5,8 @@ from `.txt` into their proper formats. Use this file to find anything.
 
 This document uses Simplified Technical English (ASD-STE100).
 
+Open questions and findings to discuss are in [NOTES.md](NOTES.md).
+
 ## The original build flow
 
 ```
