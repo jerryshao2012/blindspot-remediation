@@ -1,0 +1,24 @@
+# ---------------------------------------------------------------------------
+# COMPONENT 7 POC MEASUREMENT POLICY
+# ---------------------------------------------------------------------------
+#
+# These are executable demonstration values.
+#
+# They are NOT claimed to be BMO production policy.
+#
+# Business and process thresholds should ultimately come from approved
+# business definitions, operational risk standards, process owners, Finance,
+# Value Engineering, or another accountable enterprise function.
+#
+# Component 7 must consume definitions rather than allowing an engineering
+# agent to invent what "business success" means.
+
+policy:
+
+  policy_version: "poc-outcome-measurement-1.0"
+
+  minimum_process_instances: 100
+
+  minimum_kpi_sample_size: 100
+
+  confidence_level: 0.95

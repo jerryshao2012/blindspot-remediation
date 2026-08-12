@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# EXAMPLE POC OPERATIONAL POLICY
+# ---------------------------------------------------------------------------
+#
+# THESE VALUES ARE NOT BMO PRODUCTION SLOs.
+#
+# They are complete executable example values so the POC does not contain
+# hidden placeholders.
+#
+# Real thresholds should be defined from:
+#
+#     existing service SLOs
+#     production baselines
+#     service criticality
+#     downstream dependencies
+#     business-process requirements
+#     operational risk appetite
+#
+# Component 6 should normally inherit established service SLOs rather than
+# inventing new ones simply because AI generated the code.
+
+policy:
+
+  policy_version: "poc-operational-1.0"
+
+  minimum_observations: 100
+
+  minimum_availability: 0.990
+
+  maximum_error_rate: 0.010
+
+  critical_error_rate: 0.050
+
+  maximum_timeout_rate: 0.010
+
+  maximum_dependency_failure_rate: 0.020
+
+  maximum_p95_latency_ms: 1500
+
+  critical_p95_latency_ms: 5000

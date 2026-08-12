@@ -1,0 +1,48 @@
+# Local deterministic executor configuration.
+#
+# This file is deliberately usable without Azure credentials or an LLM.
+# Paths are resolved relative to the process working directory.
+
+artifact_root: "./artifacts"
+git_executable: "git"
+
+git_identity:
+  name: "AI Engineering POC Executor"
+  email: "ai-engineering-poc@example.invalid"
+
+maximum_captured_output_bytes: 1000000
+
+# Failed workspaces are automatically removed by TemporaryDirectory.
+#
+# This variable is retained for the later container implementation where a
+# failed workspace may optionally be copied to a restricted diagnostic volume.
+# The current POC does not preserve failed workspaces even when this is true.
+keep_failed_workspace: false
+
+local_checks:
+  - check_id: "python-compile"
+    name: "Compile Python source files"
+    command:
+      - "python"
+      - "-m"
+      - "compileall"
+      - "-q"
+      - "."
+    timeout_seconds: 300
+    required: true
+    working_directory: "."
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+  - check_id: "pytest"
+    name: "Run repository tests"
+    command:
+      - "python"
+      - "-m"
+      - "pytest"
+      - "-q"
+    timeout_seconds: 900
+    required: true
+    working_directory: "."
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"

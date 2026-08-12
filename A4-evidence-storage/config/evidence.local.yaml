@@ -1,0 +1,10 @@
+# Local evidence backend used by the POC.
+#
+# This directory is logically equivalent to the future Azure evidence
+# container. Nothing outside EvidenceStore should depend on this filesystem
+# layout.
+
+root: "./evidence-store"
+
+# Re-read newly written evidence and verify it immediately.
+verify_after_write: true

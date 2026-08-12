@@ -1,0 +1,11 @@
+# Local deterministic release-gate runtime configuration.
+
+artifact_root: "./gate-artifacts"
+git_executable: "git"
+maximum_captured_output_bytes: 1000000
+
+# Temporary workspaces are deleted by default. These fields reserve the intended
+# future behaviour for Azure diagnostic volumes. Component 3 does not currently
+# preserve temporary workspaces.
+preserve_successful_workspace: false
+preserve_failed_workspace: false

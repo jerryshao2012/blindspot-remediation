@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------
+# COMPONENT 9 — CONTROL-PLANE POLICY
+# ---------------------------------------------------------------------------
+#
+# This file documents platform-level policy.
+#
+# Task-specific execution and gating requirements remain in task definitions.
+#
+# Production values require approval through the appropriate engineering,
+# security, risk, and governance processes.
+
+policy_version: "orchestrator-poc-1.0"
+
+principles:
+
+  deterministic_orchestration: true
+
+  orchestrator_llm_calls_allowed: false
+
+  unregistered_task_types_allowed: false
+
+  unregistered_repositories_allowed: false
+
+  evidence_persistence_required: true
+
+  silent_gate_override_allowed: false
+
+  silent_budget_override_allowed: false
+
+  human_review_inside_release_gate_allowed: false
+
+  automatic_release_default: false

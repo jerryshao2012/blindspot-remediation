@@ -1,0 +1,65 @@
+[TRANSCRIPTION NOTE — NOT PART OF THE PROMPT]
+[Transcribed from a photograph. The photograph was cut off partway through the]
+[KEEP THESE CORE CAPABILITIES list. Everything below the marker at the end of]
+[this file is missing. Replace this file with the real prompt_truncate.txt when]
+[you have access to it. Do not treat this copy as complete.]
+
+Create a NEW repository from the existing L1 engineering automation repository.
+
+Do not modify the original repository.
+
+The new repository must be a smaller, laptop-runnable version whose scope ends at the release gate. It must also include a local API connector to an LLM so that a developer can run the complete truncated pipeline from a laptop.
+
+Read the existing repository first and reuse its relevant code, contracts, comments, tests, design rationale, and evaluation logic. Preserve substantive code verbatim wherever possible. Only modify code where necessary to remove downstream dependencies or make the system runnable locally.
+
+SCOPE
+
+Keep only the engineering path through:
+
+TaskRequest
+ChangeExecutionService
+CandidateArtifact
+ReleaseGateService
+GateDecision
+
+GateDecision must support:
+
+PASS
+FAIL
+HUMAN_REVIEW_REQUIRED
+
+GateDecision is the terminal online domain result.
+
+The repository must NOT:
+
+deploy code to production;
+observe released code in production;
+collect post-release operational metrics; calculate process outcomes; calculate
+business KPIs; implement production feedback loops; automatically modify prompts or
+policies from production feedback; implement production rollback or deployment.
+
+It is acceptable to return, print, persist, or publish GateDecision. Nothing after
+that belongs to this repository.
+
+KEEP THESE CORE CAPABILITIES
+
+Preserve and reconcile the existing implementations for:
+
+canonical shared contracts;
+TaskRequest;
+TaskSpecification;
+CapabilityIdentity;
+CandidateArtifact;
+EvidenceArtifact;
+EvidenceBundle;
+EvidenceProvenance;
+ExecutionReceipt;
+GateDecision;
+GateOutcome;
+ModelUsage;
+ResourceUsage;
+ChangeExecutionService;
+EvidencePlanner;
+EvidenceDiversityMapper;
+
+[END OF PHOTOGRAPHED TEXT — REMAINDER OF FILE NOT CAPTURED]

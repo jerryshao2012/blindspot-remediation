@@ -1,0 +1,22 @@
+version: "1.0.0"
+task_type: "X1-python-bounded-change"
+title: "Bounded Python source change"
+task_description: >
+  Apply the requested bounded source-code change without modifying pipeline,
+  infrastructure, credential, or deployment files.
+acceptance_criteria:
+  - "The modified Python source compiles successfully."
+  - "All configured repository tests pass."
+  - "The candidate does not modify prohibited paths."
+  - "Configured coverage requirements are satisfied."
+permitted_paths:
+  - "src/**/*.py"
+  - "tests/**/*.py"
+  - "pyproject.toml"
+prohibited_paths:
+  - ".azure-pipelines/**"
+  - "infrastructure/**"
+  - "secrets/**"
+metadata:
+  owner: "enterprise-platform-engineering"
+  risk_tier: "low"

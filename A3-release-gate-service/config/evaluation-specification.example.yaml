@@ -1,0 +1,106 @@
+version: "1.0.0"
+task_type: "X1-python-bounded-change"
+controls:
+  - control_id: "python-compile"
+    name: "Python compilation"
+    description: >
+      Compile all Python source files without producing persistent bytecode.
+    command:
+      - "python"
+      - "-m"
+      - "compileall"
+      - "-q"
+      - "."
+    timeout_seconds: 300
+    working_directory: "."
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    severity: "mandatory"
+    strategy: "compilation"
+    expected_exit_codes:
+      - 0
+    reports: []
+    continue_after_failure: true
+
+  - control_id: "pytest"
+    name: "Authoritative repository tests"
+    description: >
+      Execute the repository test suite and produce JUnit XML.
+    command:
+      - "python"
+      - "-m"
+      - "pytest"
+      - "-q"
+      - "--junitxml=.gate-reports/pytest.xml"
+    timeout_seconds: 900
+    working_directory: "."
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    severity: "mandatory"
+    strategy: "existing_tests"
+    expected_exit_codes:
+      - 0
+    reports:
+      - report_id: "junit"
+        path: ".gate-reports/pytest.xml"
+        parser: "junit_xml"
+        required: true
+        artifact_kind: "test_results"
+        media_type: "application/xml"
+        metric_paths: {}
+    continue_after_failure: true
+
+  - control_id: "coverage"
+    name: "Coverage measurement"
+    description: >
+      Run the repository tests under Coverage.py and emit a JSON report.
+    command:
+      - "python"
+      - "-m"
+      - "coverage"
+      - "run"
+      - "--branch"
+      - "-m"
+      - "pytest"
+      - "-q"
+    timeout_seconds: 900
+    working_directory: "."
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    severity: "advisory"
+    strategy: "existing_tests"
+    expected_exit_codes:
+      - 0
+    reports: []
+    continue_after_failure: true
+
+  - control_id: "coverage-json"
+    name: "Coverage JSON generation"
+    description: >
+      Convert Coverage.py data into a structured JSON report.
+    command:
+      - "python"
+      - "-m"
+      - "coverage"
+      - "json"
+      - "-o"
+      - ".gate-reports/coverage.json"
+    timeout_seconds: 300
+    working_directory: "."
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    severity: "advisory"
+    strategy: "existing_tests"
+    expected_exit_codes:
+      - 0
+    reports:
+      - report_id: "coverage"
+        path: ".gate-reports/coverage.json"
+        parser: "coverage_json"
+        required: true
+        artifact_kind: "coverage_report"
+        media_type: "application/json"
+        metric_paths: {}
+    continue_after_failure: true
+metadata:
+  evidence_round: "baseline-deterministic"

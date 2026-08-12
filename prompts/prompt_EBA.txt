@@ -1,0 +1,57 @@
+[TRANSCRIPTION NOTE — NOT PART OF THE PROMPT]
+[Transcribed from a photograph. The photograph was cut off partway through the]
+[INTEGRATION CONTRACT list. Everything below the marker at the end of this file]
+[is missing. Replace this file with the real prompt_EBA.txt when you have access]
+[to it. Do not treat this copy as complete.]
+
+You are acting as a senior software engineer integrating an existing Evidence Diversity Mapper repository into the latest L1 engineering automation repository.
+
+Both repositories already exist.
+
+Do not redesign either repository from scratch.
+
+First inspect both repositories and understand their public contracts, package structure, tests, and configuration before changing code.
+
+GOAL
+
+Integrate the Evidence Diversity Mapper into the L1 automation repository so that ReleaseGateService can use conceptual evidence coverage during evidence planning.
+
+The integration should preserve the existing architecture:
+
+ChangeExecutionService generates CandidateArtifact.
+
+ReleaseGateService gathers and evaluates evidence.
+
+EvidencePlanner decides what evidence should be collected.
+
+Evidence Diversity Mapper analyzes the conceptual coverage of the current EvidenceBundle and identifies sparse, missing, or uncertain conceptual regions.
+
+EvidencePlanner may use those gaps to request additional evidence.
+
+The final GatePolicy remains responsible for PASS, FAIL, or HUMAN_REVIEW_REQUIRED.
+
+The Evidence Diversity Mapper must not make the gate decision itself.
+
+IMPORTANT INTEGRATION BOUNDARY
+
+Treat the Evidence Diversity Mapper as an external reusable product.
+
+Do not copy its internal implementation into the L1 repository unless absolutely required.
+
+Prefer using its published Python package, local package reference, or documented API.
+
+The L1 repository should own only a thin evidence-domain adapter.
+
+Do not make the generic Diversity Mapper import L1 release-gate classes.
+
+INTEGRATION CONTRACT
+
+Inspect the mapper repository and identify its actual equivalents of:
+
+ConceptSchema
+ArtifactDescriptor
+ConceptMapping
+CoverageAssessment
+CoverageGap
+
+[END OF PHOTOGRAPHED TEXT — REMAINDER OF FILE NOT CAPTURED]

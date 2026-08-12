@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-engineering-workflow-integration"
+version = "0.1.0"
+description = "Workflow integration boundary for governed AI engineering automation."
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28,<1",
+    "pydantic>=2.10,<3",
+]
+
+[project.optional-dependencies]
+azure = [
+    "azure-identity>=1.19,<2",
+]
+
+dev = [
+    "mypy>=1.14,<2",
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<1",
+    "respx>=0.22,<1",
+    "ruff>=0.9,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/engineering_workflow_integration"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]

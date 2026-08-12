@@ -1,0 +1,37 @@
+version: "1.0.0"
+task_type: "X1-python-bounded-change"
+fail_on_mandatory_control_failure: true
+fail_on_dominant_failure: true
+human_review_on_advisory_failure: true
+human_review_on_warning: true
+more_evidence_on_skipped_mandatory_control: true
+more_evidence_on_missing_required_report: true
+metric_thresholds:
+  - threshold_id: "no-test-failures"
+    metric: "pytest.tests_failures"
+    operator: "eq"
+    expected_value: 0
+    failure_decision: "fail"
+    missing_metric_action: "more_evidence_required"
+    description: "The authoritative test suite must contain no failures."
+
+  - threshold_id: "no-test-errors"
+    metric: "pytest.tests_errors"
+    operator: "eq"
+    expected_value: 0
+    failure_decision: "fail"
+    missing_metric_action: "more_evidence_required"
+    description: "The authoritative test suite must contain no errors."
+
+  - threshold_id: "minimum-coverage"
+    metric: "coverage-json.coverage_percent"
+    operator: "gte"
+    expected_value: 80
+    failure_decision: "human_review_required"
+    missing_metric_action: "more_evidence_required"
+    description: >
+      Initial POC coverage must be at least 80 percent. This is an example
+      threshold, not a universal engineering standard.
+metadata:
+  policy_owner: "enterprise-applied-ai-evals"
+  policy_status: "poc"

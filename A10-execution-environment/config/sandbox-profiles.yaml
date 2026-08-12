@@ -1,0 +1,103 @@
+profiles:
+
+  - profile_id: "change-execution-v1"
+
+    role: "change_execution"
+
+    runner_image: "engineering-change-runner"
+
+    # Replace through the normal image-build process with the digest of the
+    # approved runner image.
+    #
+    # This value is deliberately syntactically valid but cannot accidentally
+    # identify an approved production image.
+    runner_image_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+    limits:
+      wall_clock_seconds: 1200
+      cpu_cores: 2
+      memory_mb: 4096
+      output_bytes: 10000000
+
+    network:
+      mode: "deny_all"
+      allowed_hosts: []
+
+    allowed_executables:
+      - "python"
+      - "pytest"
+      - "dotnet"
+      - "npm"
+
+    environment_variables:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    allow_production_credentials: false
+
+    preserve_workspace_after_execution: false
+
+
+  - profile_id: "release-gate-v1"
+
+    role: "release_gate"
+
+    runner_image: "engineering-verifier"
+
+    runner_image_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+    limits:
+      wall_clock_seconds: 3600
+      cpu_cores: 4
+      memory_mb: 8192
+      output_bytes: 25000000
+
+    network:
+      mode: "deny_all"
+      allowed_hosts: []
+
+    allowed_executables:
+      - "python"
+      - "pytest"
+      - "dotnet"
+      - "npm"
+      - "mutmut"
+      - "stryker"
+
+    environment_variables:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    allow_production_credentials: false
+
+    preserve_workspace_after_execution: false
+
+
+  - profile_id: "benchmark-v1"
+
+    role: "benchmark"
+
+    runner_image: "engineering-benchmark-runner"
+
+    runner_image_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+    limits:
+      wall_clock_seconds: 7200
+      cpu_cores: 4
+      memory_mb: 8192
+      output_bytes: 25000000
+
+    network:
+      mode: "deny_all"
+      allowed_hosts: []
+
+    allowed_executables:
+      - "python"
+      - "pytest"
+      - "dotnet"
+      - "npm"
+
+    environment_variables:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    allow_production_credentials: false
+
+    preserve_workspace_after_execution: false
