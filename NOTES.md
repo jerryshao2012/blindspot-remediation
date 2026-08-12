@@ -157,6 +157,79 @@ Use this in the presentation. It shows the problem before it shows the solution.
 
 ---
 
+## N-6 — Where you measure decides what you can measure
+
+**What a manager told us.**
+
+One task arrives. The system handles it. You accumulate approximately 10 tasks, and
+then you measure. The flow of tasks is the unit, not the time. Continuous monitoring is
+not part of this flow. A gate threshold such as 80% or 70% is an arbitrary number. It
+becomes meaningful only when you compare it with the true performance.
+
+**This is correct.** It agrees with the design. B2 records the threshold problem as
+NI-09, with the status OPEN.
+
+Two points need more detail.
+
+**First. The quantity of tasks controls what you can say.**
+
+B5 contains the calculation. If no task fails, the result is:
+
+    10 tasks    ->  the true failure rate can still be 27.8%
+    30 tasks    ->  the true failure rate can still be 11.4%
+    100 tasks   ->  the true failure rate can still be 3.7%
+    1000 tasks  ->  the true failure rate can still be 0.4%
+
+Thus 10 tasks with no failure agree with a system that fails one time in four. Select
+the quantity of tasks from the accuracy that the decision needs.
+
+**Second. Production cannot measure both types of error.**
+
+- The gate says PASS and the code fails in use. You learn this. It is a false release.
+- The gate says PASS and the code operates correctly. You learn very little. The gate
+  can be correct, or the gate can be lucky.
+- The gate says FAIL and the gate was incorrect. **You never learn this.** The code did
+  not go to production. Thus nothing occurred.
+
+The offline benchmark knows the correct answer for each case, in both directions,
+because it holds the hidden answers.
+
+Thus the two measurements do different work:
+
+    offline benchmark  ->  sets the threshold. Sees both types of error.
+                           Quick and repeatable. But the tasks are artificial.
+
+    production         ->  shows if the benchmark was realistic. Real data.
+                           But slow, infrequent, one direction only, and mixed
+                           with other causes.
+
+Calibrate with the benchmark. Confirm with production. If production is much worse than
+the benchmark, then the benchmark was not representative. That is a fault in the
+benchmark, not a fault in the AI.
+
+**What to do.**
+
+Show both measurements in the presentation. Do not show only one.
+
+---
+
+## N-7 — The two services have different duties
+
+**What a manager told us.**
+
+`ChangeExecutionService` changes the code. `ReleaseGateService` is the live guardrail.
+
+**Why this is important.**
+
+This gives each service a different requirement:
+
+- The guardrail operates on every change. Thus it must be quick and economical.
+- The offline measurement operates sometimes. Thus it can be slow and expensive.
+
+Do not give the guardrail the work of the offline measurement.
+
+---
+
 ## Closed notes
 
 None yet.
