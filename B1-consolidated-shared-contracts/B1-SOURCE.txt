@@ -1,0 +1,4059 @@
+B1 — CONSOLIDATED SHARED CONTRACTS
+================================================================================
+
+PURPOSE
+-------
+
+This B1 package replaces the overlapping contract definitions that accumulated
+while Components 1–12 were designed sequentially.
+
+The objective is NOT to move every model in the platform into one enormous
+package.
+
+The objective is to establish ONE canonical definition for every object that
+crosses a component boundary.
+
+After B1:
+
+    Component 1 owns:
+        shared boundary contracts
+
+    Component 2 owns:
+        change-generation implementation details
+
+    Component 3 owns:
+        release-gate implementation details
+
+    Component 4 owns:
+        evidence persistence implementation
+
+    Component 5 owns:
+        campaign/statistical qualification implementation
+
+    Component 6 owns:
+        operational-observability implementation
+
+    Component 7 owns:
+        process/KPI implementation
+
+    Component 8 owns:
+        economics implementation
+
+    Component 9 owns:
+        orchestration/state-machine implementation
+
+    Component 10 owns:
+        sandbox provisioning/runner implementation
+
+    Component 11 owns:
+        task-specification registration, validation,
+        qualification lifecycle and resolution
+
+    Component 12 owns:
+        provider-specific Azure DevOps/Jira integration
+
+
+The most important B1 consolidation decisions are:
+
+    1. Component 11's richer TaskSpecification replaces Component 9's older
+       TaskDefinition.
+
+    2. GateOutcome and GateDisposition collapse into ONE GateDisposition enum.
+
+    3. CandidatePatch becomes ONE canonical CandidateArtifact.
+
+    4. ArtifactReference becomes ONE canonical content-addressed artifact
+       reference.
+
+    5. TaskRequest becomes ONE canonical intake contract.
+
+    6. AI/token accounting becomes ONE canonical RunUsageLedger.
+
+    7. ExecutionRequest and ExecutionReceipt become shared contracts because
+       Components 2, 3, 4 and 5 exchange them.
+
+    8. OrchestrationRun and RunOutcome use the same shared IDs, usage objects,
+       task specification identity and gate vocabulary.
+
+    9. The full correlation spine is explicitly modeled.
+
+   10. Component-specific INTERNAL classes remain component-specific.
+
+
+================================================================================
+REPOSITORY STRUCTURE
+================================================================================
+
+shared-contracts/
+├── pyproject.toml
+├── src/
+│   └── ai_engineering_contracts/
+│       ├── __init__.py
+│       ├── base.py
+│       ├── ids.py
+│       ├── enums.py
+│       ├── hashing.py
+│       ├── references.py
+│       ├── usage.py
+│       ├── evidence.py
+│       ├── task_specification.py
+│       ├── task.py
+│       ├── candidate.py
+│       ├── gate.py
+│       ├── execution.py
+│       ├── orchestration.py
+│       └── correlation.py
+└── tests/
+    ├── test_hashing.py
+    ├── test_task_specification.py
+    ├── test_gate.py
+    ├── test_execution.py
+    └── test_orchestration.py
+
+
+================================================================================
+FILE: pyproject.toml
+================================================================================
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-engineering-contracts"
+version = "1.0.0"
+description = "Canonical shared contracts for the governed AI engineering automation platform."
+requires-python = ">=3.11"
+
+dependencies = [
+    "pydantic>=2.10,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.14,<2",
+    "pytest>=8.3,<9",
+    "ruff>=0.9,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_engineering_contracts"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "SIM",
+    "RUF",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/base.py
+================================================================================
+
+"""
+Common Pydantic behaviour for all cross-component contracts.
+
+WHY THIS FILE EXISTS
+--------------------
+
+During early prototyping it is easy for one component to accept unexpected
+fields while another silently ignores them. That is undesirable in an
+assurance-oriented platform because contract drift can remain invisible.
+
+All shared contracts therefore:
+
+    * reject unknown fields;
+    * are immutable after construction;
+    * strip surrounding whitespace;
+    * validate default values.
+
+Immutability is especially useful for objects such as GateDecision,
+TaskSpecification and ExecutionReceipt. If evidence is later changed, the
+platform should create a NEW object rather than silently mutating the historical
+one.
+
+This does not make the objects cryptographically immutable. Component 4 remains
+responsible for durable evidence integrity.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+)
+
+from typing_extensions import Annotated
+
+
+CONTRACT_SCHEMA_VERSION = "1.0.0"
+
+
+def _require_timezone(value: datetime) -> datetime:
+    """
+    Reject timezone-naive timestamps.
+
+    A distributed platform can span Azure services, developer workstations,
+    build systems and possibly multiple regions.
+
+    A timestamp such as:
+
+        2026-08-07 10:30
+
+    is ambiguous.
+
+    A timestamp such as:
+
+        2026-08-07T10:30:00-04:00
+
+    is not.
+
+    We do NOT force timestamps to UTC at the schema boundary. Keeping the
+    original offset can sometimes be useful for evidence. Applications may
+    normalize to UTC for storage/querying.
+    """
+
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(
+            "Cross-component timestamps must include timezone information."
+        )
+
+    return value
+
+
+AwareDatetime = Annotated[
+    datetime,
+    AfterValidator(_require_timezone),
+]
+
+
+class ContractModel(BaseModel):
+    """
+    Base class for canonical shared contracts.
+
+    Do not loosen `extra="forbid"` merely because a provider sends additional
+    data.
+
+    Provider-specific payloads should first be normalized by an adapter such as
+    Component 12.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        str_strip_whitespace=True,
+        validate_default=True,
+    )
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/ids.py
+================================================================================
+
+"""
+Semantic identifier aliases.
+
+WHY NOT USE PLAIN `str` EVERYWHERE?
+-----------------------------------
+
+At runtime these identifiers are strings, but giving them semantic names makes
+method signatures much easier for junior developers to understand.
+
+For example:
+
+    def evaluate(run_id: RunId, candidate_id: CandidateId) -> ...
+
+communicates much more than:
+
+    def evaluate(run_id: str, candidate_id: str) -> ...
+
+These aliases also provide consistent length validation.
+
+We intentionally do NOT prescribe UUID format because external systems may use
+their own durable identifiers.
+"""
+
+from typing_extensions import Annotated
+
+from pydantic import Field
+
+
+TaskId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+TaskRequestId = Annotated[
+    str,
+    Field(min_length=1, max_length=512),
+]
+
+RunId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+CandidateId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+EvidenceId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+ArtifactId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+DecisionId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+ReleaseId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+DeploymentId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+ProcessInstanceId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+TraceId = Annotated[
+    str,
+    Field(min_length=1, max_length=256),
+]
+
+SpecificationVersion = Annotated[
+    str,
+    Field(min_length=1, max_length=64),
+]
+
+Sha256Digest = Annotated[
+    str,
+    Field(pattern=r"^[0-9a-f]{64}$"),
+]
+
+ContainerImageDigest = Annotated[
+    str,
+    Field(pattern=r"^sha256:[0-9a-f]{64}$"),
+]
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/enums.py
+================================================================================
+
+"""
+Canonical cross-component enumerations.
+
+IMPORTANT CONSOLIDATION
+-----------------------
+
+Previous components introduced both:
+
+    GateOutcome
+
+and:
+
+    GateDisposition
+
+with almost identical meanings.
+
+That is exactly the kind of duplication B1 removes.
+
+There is now only:
+
+    GateDisposition
+
+Every component must import it from this package.
+
+Do NOT recreate a local enum merely because an external provider uses different
+words. Component 12 should translate the provider vocabulary into this one.
+"""
+
+from enum import StrEnum
+
+
+class GateDisposition(StrEnum):
+    """
+    The four meaningful results of ReleaseGateService.
+
+    PASS
+        Existing evidence supports autonomous progression according to the
+        applicable gate policy.
+
+    FAIL
+        Evidence provides a dominant failure signal or violates a mandatory
+        gate requirement.
+
+    MORE_EVIDENCE_REQUIRED
+        The candidate has neither passed nor failed conclusively and another
+        bounded evidence cycle may be justified.
+
+    HUMAN_REVIEW_REQUIRED
+        The autonomous gate cannot justify further autonomous progression.
+        The actual human remains OUTSIDE ReleaseGateService.
+    """
+
+    PASS = "pass"
+    FAIL = "fail"
+    MORE_EVIDENCE_REQUIRED = "more_evidence_required"
+    HUMAN_REVIEW_REQUIRED = "human_review_required"
+
+
+class RunState(StrEnum):
+    """
+    Canonical online orchestration states.
+
+    RELEASE_APPROVAL_REQUIRED is included explicitly.
+
+    This corrects the temporary Component 9 POC behaviour where a technically
+    successful gate with auto-release disabled had to be represented as a
+    PIPELINE_ERROR. That was useful while avoiding an unimplemented workflow,
+    but it is not the correct final domain model.
+    """
+
+    CREATED = "created"
+    VALIDATING = "validating"
+    READY = "ready"
+
+    EXECUTING_CHANGE = "executing_change"
+    CANDIDATE_AVAILABLE = "candidate_available"
+
+    GATING = "gating"
+    MORE_EVIDENCE = "more_evidence"
+
+    READY_FOR_RELEASE = "ready_for_release"
+    RELEASE_APPROVAL_REQUIRED = "release_approval_required"
+
+    HUMAN_REVIEW_REQUIRED = "human_review_required"
+
+    RELEASED = "released"
+
+    FAILED_VALIDATION = "failed_validation"
+    CHANGE_FAILED = "change_failed"
+    GATE_FAILED = "gate_failed"
+
+    BUDGET_EXCEEDED = "budget_exceeded"
+    PIPELINE_ERROR = "pipeline_error"
+    CANCELLED = "cancelled"
+
+
+class FinalDisposition(StrEnum):
+    """
+    Stable terminal classification independent of the detailed state machine.
+    """
+
+    RELEASED = "released"
+    REJECTED = "rejected"
+
+    HUMAN_REVIEW_REQUIRED = "human_review_required"
+    RELEASE_APPROVAL_REQUIRED = "release_approval_required"
+
+    BUDGET_EXCEEDED = "budget_exceeded"
+    PIPELINE_ERROR = "pipeline_error"
+    CANCELLED = "cancelled"
+
+
+class TaskSourceKind(StrEnum):
+    """
+    Where a task entered the automation core.
+
+    Component 5 normally uses BENCHMARK.
+    Component 12 normally produces WORKFLOW.
+    Manual demonstrations can use OPERATOR.
+    """
+
+    WORKFLOW = "workflow"
+    OPERATOR = "operator"
+    BENCHMARK = "benchmark"
+
+
+class SpecificationStatus(StrEnum):
+    DRAFT = "draft"
+    QUALIFYING = "qualifying"
+    APPROVED = "approved"
+    SUSPENDED = "suspended"
+    RETIRED = "retired"
+
+
+class RiskTier(StrEnum):
+    LOW = "low"
+    MODERATE = "moderate"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class SandboxRole(StrEnum):
+    CHANGE_EXECUTION = "change_execution"
+    RELEASE_GATE = "release_gate"
+    BENCHMARK = "benchmark"
+
+
+class ExecutionStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    COMMAND_FAILED = "command_failed"
+    TIMED_OUT = "timed_out"
+    POLICY_DENIED = "policy_denied"
+    INFRASTRUCTURE_FAILED = "infrastructure_failed"
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/hashing.py
+================================================================================
+
+"""
+Canonical hashing utilities.
+
+HASHING RULE
+------------
+
+If two logically identical shared contracts serialize differently because of
+dictionary order, their evidence hashes should NOT differ.
+
+We therefore:
+
+    1. serialize Pydantic models in JSON mode;
+    2. sort dictionary keys;
+    3. remove irrelevant whitespace;
+    4. hash UTF-8 bytes with SHA-256.
+
+This helper creates CONTENT IDENTITIES.
+
+It does not provide signatures or attestations. Those are stronger capabilities
+and remain an intentionally later implementation item.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from typing import Any
+
+from pydantic import BaseModel
+
+
+def canonical_json_bytes(value: Any) -> bytes:
+    if isinstance(value, BaseModel):
+        value = value.model_dump(
+            mode="json",
+            exclude_none=False,
+        )
+
+    serialized = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+    return serialized.encode("utf-8")
+
+
+def sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def content_sha256(value: Any) -> str:
+    """
+    Return the canonical SHA-256 digest of a supported JSON-compatible object.
+    """
+
+    return sha256_bytes(
+        canonical_json_bytes(value)
+    )
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/references.py
+================================================================================
+
+"""
+Canonical references shared across component boundaries.
+
+One recurring design principle is:
+
+    LARGE CONTENT LIVES IN ARTIFACT STORAGE.
+    CONTRACTS CARRY REFERENCES AND HASHES.
+
+For example, a mutation report may be several megabytes.
+
+GateDecision should point to the report rather than embedding the entire report
+inside an orchestration database row.
+"""
+
+from __future__ import annotations
+
+from pydantic import Field
+from typing_extensions import Annotated
+
+from .base import (
+    AwareDatetime,
+    ContractModel,
+)
+from .ids import (
+    ArtifactId,
+    CandidateId,
+    DeploymentId,
+    ReleaseId,
+    RunId,
+    Sha256Digest,
+    SpecificationVersion,
+    TaskId,
+    TaskRequestId,
+)
+
+
+class ArtifactReference(ContractModel):
+    """
+    Immutable reference to a content-addressed artifact.
+
+    `uri` is deliberately a string rather than HttpUrl because the platform may
+    legitimately use custom schemes such as:
+
+        artifact://...
+        blob://...
+        evidence://...
+
+    Access control is an infrastructure responsibility. The URI should never
+    contain embedded credentials.
+    """
+
+    artifact_id: ArtifactId
+
+    uri: Annotated[
+        str,
+        Field(min_length=1),
+    ]
+
+    sha256: Sha256Digest
+
+    media_type: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    created_at: AwareDatetime
+
+    producer_component: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    metadata: dict[str, str] = Field(
+        default_factory=dict
+    )
+
+
+class TaskSpecificationReference(ContractModel):
+    """
+    Exact identity of a capability specification.
+
+    `version` is useful for humans.
+
+    `sha256` is the real content identity.
+    """
+
+    task_type: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    version: SpecificationVersion
+
+    sha256: Sha256Digest
+
+
+class RepositoryReference(ContractModel):
+    """
+    Provider-neutral repository identity.
+
+    Component 12 may construct this from Azure DevOps or Jira-linked metadata.
+
+    No credential belongs in this object.
+    """
+
+    provider: Annotated[
+        str,
+        Field(min_length=1, max_length=64),
+    ]
+
+    organization: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    project: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    repository_id: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    repository_name: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    target_branch: Annotated[
+        str,
+        Field(min_length=1, max_length=512),
+    ]
+
+
+class ExternalResourceReference(ContractModel):
+    """
+    Reference to a work item, Jira issue, pull request or another external
+    workflow object.
+    """
+
+    provider: Annotated[
+        str,
+        Field(min_length=1, max_length=64),
+    ]
+
+    organization: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    project: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    resource_type: Annotated[
+        str,
+        Field(min_length=1, max_length=64),
+    ]
+
+    resource_id: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    web_url: str | None = None
+
+
+class PullRequestReference(ContractModel):
+    """
+    Exact pull-request candidate identity.
+
+    `source_commit_sha` is important.
+
+    A gate PASS applies to a specific candidate commit, not vaguely to a pull
+    request that may later receive more commits.
+    """
+
+    provider: Annotated[
+        str,
+        Field(min_length=1, max_length=64),
+    ]
+
+    organization: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    project: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    repository_id: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    pull_request_id: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    source_commit_sha: Annotated[
+        str,
+        Field(pattern=r"^[0-9a-fA-F]{7,64}$"),
+    ]
+
+
+class ReleaseReference(ContractModel):
+    release_id: ReleaseId
+
+    run_id: RunId
+    candidate_id: CandidateId
+
+    created_at: AwareDatetime
+
+
+class DeploymentReference(ContractModel):
+    deployment_id: DeploymentId
+
+    release_id: ReleaseId
+
+    environment: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    deployed_at: AwareDatetime
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/usage.py
+================================================================================
+
+"""
+Canonical AI/resource usage accounting.
+
+WHY SHARE THIS MODEL?
+---------------------
+
+Components 2 and 3 PRODUCE usage.
+
+Component 9 ACCUMULATES usage.
+
+Component 4 PRESERVES usage.
+
+Component 5 ANALYZES usage during qualification.
+
+Component 8 calculates ECONOMICS from usage.
+
+Those components therefore need one vocabulary.
+
+Component 8 may have richer cost records internally; those do NOT need to move
+into this shared package.
+"""
+
+from __future__ import annotations
+
+from pydantic import Field
+from typing_extensions import Annotated
+
+from .base import ContractModel
+
+
+class AIUsage(ContractModel):
+    input_tokens: Annotated[
+        int,
+        Field(ge=0),
+    ] = 0
+
+    output_tokens: Annotated[
+        int,
+        Field(ge=0),
+    ] = 0
+
+    cached_input_tokens: Annotated[
+        int,
+        Field(ge=0),
+    ] = 0
+
+    request_count: Annotated[
+        int,
+        Field(ge=0),
+    ] = 0
+
+    def plus(
+        self,
+        other: "AIUsage",
+    ) -> "AIUsage":
+        """
+        Pure helper used to accumulate usage without mutating evidence objects.
+        """
+
+        return AIUsage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cached_input_tokens=(
+                self.cached_input_tokens
+                + other.cached_input_tokens
+            ),
+            request_count=(
+                self.request_count
+                + other.request_count
+            ),
+        )
+
+
+class RunUsageLedger(ContractModel):
+    """
+    Cumulative resource accounting for one orchestrated engineering run.
+
+    Sandbox execution seconds are included because our earlier analysis showed
+    that release gating—especially mutation testing—may incur significant
+    non-LLM compute cost.
+    """
+
+    ai: AIUsage = Field(
+        default_factory=AIUsage
+    )
+
+    execution_attempts: Annotated[
+        int,
+        Field(ge=0),
+    ] = 0
+
+    gate_attempts: Annotated[
+        int,
+        Field(ge=0),
+    ] = 0
+
+    more_evidence_cycles: Annotated[
+        int,
+        Field(ge=0),
+    ] = 0
+
+    sandbox_execution_seconds: Annotated[
+        float,
+        Field(ge=0.0),
+    ] = 0.0
+
+
+class ResourceBudget(ContractModel):
+    """
+    Hard orchestration ceilings.
+
+    These are controls, not performance targets.
+
+    The budget belongs in the qualified TaskSpecification and is enforced by
+    Component 9.
+
+    Components 2 and 3 may additionally have tighter LOCAL limits.
+    """
+
+    maximum_execution_attempts: Annotated[
+        int,
+        Field(ge=1),
+    ] = 2
+
+    maximum_gate_attempts: Annotated[
+        int,
+        Field(ge=1),
+    ] = 3
+
+    maximum_more_evidence_cycles: Annotated[
+        int,
+        Field(ge=0),
+    ] = 2
+
+    maximum_llm_input_tokens: Annotated[
+        int,
+        Field(ge=0),
+    ] = 500_000
+
+    maximum_llm_output_tokens: Annotated[
+        int,
+        Field(ge=0),
+    ] = 100_000
+
+    maximum_llm_requests: Annotated[
+        int,
+        Field(ge=0),
+    ] = 200
+
+    maximum_wall_clock_seconds: Annotated[
+        int,
+        Field(ge=1),
+    ] = 7_200
+
+    # Cost ceilings are optional because authoritative cost information may not
+    # be available synchronously during every POC run.
+    #
+    # When configured, currency must also be configured.
+    maximum_total_cost: Annotated[
+        float | None,
+        Field(ge=0.0),
+    ] = None
+
+    cost_currency: Annotated[
+        str | None,
+        Field(min_length=3, max_length=3),
+    ] = None
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/evidence.py
+================================================================================
+
+"""
+Shared evidence contracts.
+
+We deliberately keep `evidence_type` extensible rather than creating a giant
+enum.
+
+Task classes can legitimately introduce evidence families that do not exist
+today.
+
+Examples:
+
+    baseline_tests
+    independent_tests
+    mutation_analysis
+    static_analysis
+    compiler_analysis
+    API_compatibility
+    security_scan
+
+The TaskSpecification determines which evidence types are required.
+"""
+
+from __future__ import annotations
+
+from pydantic import Field, model_validator
+from typing_extensions import Annotated, Self
+
+from .base import (
+    AwareDatetime,
+    ContractModel,
+)
+from .ids import (
+    EvidenceId,
+    RunId,
+)
+from .references import ArtifactReference
+
+
+class EvidenceRequirement(ContractModel):
+    evidence_type: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    required: bool = True
+
+    minimum_observations: Annotated[
+        int,
+        Field(ge=1),
+    ] = 1
+
+    independent_from_change_agent: bool = False
+
+    specification_artifact: ArtifactReference | None = None
+
+
+class EvidenceReference(ContractModel):
+    """
+    Canonical pointer to a piece or bundle of gate/qualification evidence.
+    """
+
+    evidence_id: EvidenceId
+
+    run_id: RunId
+
+    evidence_type: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    artifact: ArtifactReference
+
+    created_at: AwareDatetime
+
+    independent_from_change_agent: bool = False
+
+
+class UncertaintyStatement(ContractModel):
+    """
+    Statistical uncertainty associated with ONE named measurement.
+
+    ReleaseGateService may produce several of these.
+
+    Example:
+
+        metric_name = "mutation_detection_rate"
+        estimate = 0.92
+        lower_bound = 0.86
+        upper_bound = 0.96
+        sample_size = 100
+
+    The contract does NOT prescribe which statistical method must be used.
+
+    `method` records it explicitly.
+    """
+
+    metric_name: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    estimate: float
+
+    lower_bound: float
+    upper_bound: float
+
+    confidence_level: Annotated[
+        float,
+        Field(gt=0.0, lt=1.0),
+    ]
+
+    sample_size: Annotated[
+        int,
+        Field(ge=1),
+    ]
+
+    method: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.lower_bound > self.upper_bound:
+            raise ValueError(
+                "Uncertainty lower_bound cannot exceed upper_bound."
+            )
+
+        if not (
+            self.lower_bound
+            <= self.estimate
+            <= self.upper_bound
+        ):
+            raise ValueError(
+                "Uncertainty estimate must lie within its interval."
+            )
+
+        return self
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/task_specification.py
+================================================================================
+
+"""
+Canonical TaskSpecification schema.
+
+MAJOR B1 DECISION
+-----------------
+
+The full TaskSpecification schema now belongs in Component 1 because it is
+consumed by multiple components:
+
+    Component 2
+        needs skill and change contracts.
+
+    Component 3
+        needs evidence and gate contracts.
+
+    Component 5
+        needs benchmark/qualification contracts.
+
+    Component 9
+        needs governance and resource budgets.
+
+    Component 10
+        is referenced through execution profile IDs.
+
+    Component 11
+        owns registration, validation, approval and resolution behaviour.
+
+Therefore:
+
+    Component 1 = WHAT THE CONTRACT IS.
+    Component 11 = HOW THE CONTRACT IS GOVERNED.
+
+The older Component 9 TaskDefinition must be removed.
+"""
+
+from __future__ import annotations
+
+from pydantic import (
+    Field,
+    model_validator,
+)
+from typing_extensions import (
+    Annotated,
+    Self,
+)
+
+from .base import (
+    AwareDatetime,
+    CONTRACT_SCHEMA_VERSION,
+    ContractModel,
+)
+from .enums import (
+    GateDisposition,
+    RiskTier,
+    SpecificationStatus,
+)
+from .evidence import EvidenceRequirement
+from .ids import (
+    Sha256Digest,
+    SpecificationVersion,
+)
+from .references import ArtifactReference
+from .usage import ResourceBudget
+
+
+class PathRule(ContractModel):
+    """
+    Declarative repository path permission.
+
+    IMPORTANT:
+
+    This rule is policy DATA.
+
+    Component 10 / repository tooling must actually enforce it.
+
+    Telling an LLM that a path is forbidden is not equivalent to authorization
+    enforcement.
+    """
+
+    pattern: Annotated[
+        str,
+        Field(min_length=1),
+    ]
+
+    allow_write: bool
+
+    explanation: Annotated[
+        str,
+        Field(min_length=1),
+    ]
+
+
+class RepositoryScope(ContractModel):
+    repository_id: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    allowed_base_branches: tuple[str, ...]
+
+    path_rules: tuple[PathRule, ...]
+
+    maximum_files_changed: Annotated[
+        int,
+        Field(ge=1, le=10_000),
+    ]
+
+    maximum_changed_lines: Annotated[
+        int,
+        Field(ge=1, le=1_000_000),
+    ]
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> Self:
+        if not self.allowed_base_branches:
+            raise ValueError(
+                "RepositoryScope requires at least one permitted base branch."
+            )
+
+        if not self.path_rules:
+            raise ValueError(
+                "RepositoryScope requires explicit path rules."
+            )
+
+        if not any(
+            rule.allow_write
+            for rule in self.path_rules
+        ):
+            raise ValueError(
+                "RepositoryScope does not permit writing any path."
+            )
+
+        return self
+
+
+class SkillContract(ContractModel):
+    """
+    Governed instruction artifacts consumed by Component 2.
+
+    Skills are treated as versioned/content-addressed engineering artifacts,
+    not merely ephemeral prompt text.
+    """
+
+    required_skills: tuple[
+        ArtifactReference,
+        ...,
+    ]
+
+    optional_skills: tuple[
+        ArtifactReference,
+        ...,
+    ] = ()
+
+    repository_instructions: tuple[
+        ArtifactReference,
+        ...,
+    ] = ()
+
+
+class ChangeContract(ContractModel):
+    permitted_languages: tuple[str, ...]
+
+    permitted_operations: tuple[str, ...]
+
+    forbidden_operations: tuple[str, ...]
+
+    require_existing_tests_before_change: bool = True
+    require_candidate_diff: bool = True
+    require_change_rationale: bool = True
+
+    @model_validator(mode="after")
+    def validate_change_contract(self) -> Self:
+        if not self.permitted_languages:
+            raise ValueError(
+                "At least one implementation language must be permitted."
+            )
+
+        if not self.permitted_operations:
+            raise ValueError(
+                "At least one change operation must be permitted."
+            )
+
+        overlap = (
+            set(self.permitted_operations)
+            & set(self.forbidden_operations)
+        )
+
+        if overlap:
+            raise ValueError(
+                "An operation cannot be both permitted and forbidden: "
+                f"{sorted(overlap)!r}"
+            )
+
+        return self
+
+
+class ExecutionContract(ContractModel):
+    """
+    Component 11 says WHICH Component 10 profile should apply.
+
+    Component 10 owns the profile itself.
+
+    This prevents duplicating sandbox policy inside TaskSpecification.
+    """
+
+    change_execution_profile_id: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    release_gate_profile_id: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    benchmark_profile_id: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+
+class EvidenceContract(ContractModel):
+    requirements: tuple[
+        EvidenceRequirement,
+        ...,
+    ]
+
+    diversity_specification: ArtifactReference | None = None
+
+    require_baseline_comparison: bool = True
+    require_environment_provenance: bool = True
+
+    @model_validator(mode="after")
+    def validate_requirements(self) -> Self:
+        if not self.requirements:
+            raise ValueError(
+                "At least one evidence requirement must exist."
+            )
+
+        names = [
+            item.evidence_type
+            for item in self.requirements
+        ]
+
+        if len(names) != len(set(names)):
+            raise ValueError(
+                "Evidence requirement types must be unique."
+            )
+
+        return self
+
+
+class GateContract(ContractModel):
+    gate_policy: ArtifactReference
+
+    permitted_outcomes: tuple[
+        GateDisposition,
+        ...,
+    ]
+
+    fail_closed_on_missing_required_evidence: bool = True
+    fail_closed_on_policy_error: bool = True
+
+    @model_validator(mode="after")
+    def validate_gate_contract(self) -> Self:
+        outcomes = set(self.permitted_outcomes)
+
+        if GateDisposition.PASS not in outcomes:
+            raise ValueError(
+                "GateContract must permit PASS."
+            )
+
+        if GateDisposition.FAIL not in outcomes:
+            raise ValueError(
+                "GateContract must permit FAIL."
+            )
+
+        return self
+
+
+class BenchmarkContract(ContractModel):
+    benchmark_suite: ArtifactReference
+
+    minimum_cases: Annotated[
+        int,
+        Field(ge=1),
+    ]
+
+    qualification_policy: ArtifactReference
+
+    require_hidden_oracle: bool = True
+
+
+class GovernanceContract(ContractModel):
+    """
+    Governance and orchestration constraints.
+
+    ResourceBudget used to appear in several places in the prototype.
+    It now exists ONCE here.
+    """
+
+    risk_tier: RiskTier
+
+    resource_budget: ResourceBudget
+
+    human_review_allowed: bool = True
+
+    auto_release_allowed: bool = False
+
+
+class TaskSpecification(ContractModel):
+    """
+    Complete definition of one qualified automation capability version.
+
+    IMPORTANT:
+        Changing ANY material field creates a new specification content hash
+        and should normally result in a new specification version.
+
+    The registry in Component 11 is responsible for enforcing immutability and
+    lifecycle status.
+    """
+
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    task_type: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    version: SpecificationVersion
+
+    display_name: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    description: Annotated[
+        str,
+        Field(min_length=1),
+    ]
+
+    status: SpecificationStatus
+
+    created_at: AwareDatetime
+
+    repository_scope: RepositoryScope
+    skill_contract: SkillContract
+    change_contract: ChangeContract
+    execution_contract: ExecutionContract
+    evidence_contract: EvidenceContract
+    gate_contract: GateContract
+    benchmark_contract: BenchmarkContract
+    governance_contract: GovernanceContract
+
+    @model_validator(mode="after")
+    def validate_cross_contract_rules(self) -> Self:
+        outcomes = set(
+            self.gate_contract.permitted_outcomes
+        )
+
+        if (
+            GateDisposition.HUMAN_REVIEW_REQUIRED
+            in outcomes
+            and not self.governance_contract.human_review_allowed
+        ):
+            raise ValueError(
+                "Gate permits HUMAN_REVIEW_REQUIRED but governance "
+                "prohibits human review."
+            )
+
+        if (
+            self.governance_contract.auto_release_allowed
+            and self.status != SpecificationStatus.APPROVED
+        ):
+            raise ValueError(
+                "Only an APPROVED TaskSpecification may allow auto-release."
+            )
+
+        budget = self.governance_contract.resource_budget
+
+        if (
+            budget.maximum_total_cost is None
+            and budget.cost_currency is not None
+        ):
+            raise ValueError(
+                "cost_currency is meaningless when maximum_total_cost "
+                "is not configured."
+            )
+
+        if (
+            budget.maximum_total_cost is not None
+            and budget.cost_currency is None
+        ):
+            raise ValueError(
+                "A configured maximum_total_cost requires cost_currency."
+            )
+
+        return self
+
+
+class RegisteredTaskSpecification(ContractModel):
+    """
+    Registry representation after Component 11 validates and fingerprints the
+    specification.
+    """
+
+    specification: TaskSpecification
+    specification_sha256: Sha256Digest
+
+
+class ResolvedTaskContract(ContractModel):
+    """
+    Exact capability contract frozen for an engineering run.
+
+    Every online/offline run should carry this digest all the way through the
+    evidence chain.
+    """
+
+    specification: TaskSpecification
+    specification_sha256: Sha256Digest
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/task.py
+================================================================================
+
+"""
+Canonical incoming engineering task contracts.
+
+MAJOR CONSOLIDATION
+-------------------
+
+Component 9 and Component 12 previously had separate TaskRequest classes.
+
+They are now one object.
+
+Two identifiers are intentionally retained:
+
+    request_id
+        identifies this request/trigger.
+
+    task_id
+        identifies the underlying engineering task/work item.
+
+For example, an Azure DevOps update may create a unique request while still
+referring to Work Item 1234.
+"""
+
+from __future__ import annotations
+
+from pydantic import Field
+from typing_extensions import Annotated
+
+from .base import (
+    AwareDatetime,
+    CONTRACT_SCHEMA_VERSION,
+    ContractModel,
+)
+from .enums import TaskSourceKind
+from .ids import (
+    SpecificationVersion,
+    TaskId,
+    TaskRequestId,
+)
+from .references import (
+    ExternalResourceReference,
+    RepositoryReference,
+)
+
+
+class RequestedCapability(ContractModel):
+    """
+    Capability requested by the task source.
+
+    This is NOT yet authoritative.
+
+    Component 9 passes this request to Component 11, which returns the resolved
+    and content-hashed TaskSpecification.
+    """
+
+    task_type: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    requested_version: SpecificationVersion
+
+
+class TaskRequest(ContractModel):
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    request_id: TaskRequestId
+    task_id: TaskId
+
+    source_kind: TaskSourceKind
+
+    capability: RequestedCapability
+
+    title: Annotated[
+        str,
+        Field(min_length=1, max_length=512),
+    ]
+
+    requested_change: Annotated[
+        str,
+        Field(min_length=1),
+    ]
+
+    repository: RepositoryReference
+
+    base_revision: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    created_at: AwareDatetime
+
+    requested_by: str | None = None
+
+    external_work_item: ExternalResourceReference | None = None
+
+    metadata: dict[str, str] = Field(
+        default_factory=dict
+    )
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/candidate.py
+================================================================================
+
+"""
+Canonical candidate-change artifact.
+
+MAJOR CONSOLIDATION
+-------------------
+
+Previous components used CandidatePatch.
+
+The platform now uses CandidateArtifact.
+
+Why "Artifact"?
+
+Because the candidate is more than the textual patch.
+
+It carries:
+
+    candidate identity
+    baseline revision
+    candidate revision
+    immutable patch artifact
+    run identity
+    task identity
+    execution evidence
+    creation timestamp
+
+The actual code remains in version control/artifact storage.
+"""
+
+from __future__ import annotations
+
+from pydantic import Field
+from typing_extensions import Annotated
+
+from .base import (
+    AwareDatetime,
+    CONTRACT_SCHEMA_VERSION,
+    ContractModel,
+)
+from .ids import (
+    CandidateId,
+    RunId,
+    TaskId,
+)
+from .references import ArtifactReference
+
+
+class CandidateArtifact(ContractModel):
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    candidate_id: CandidateId
+
+    run_id: RunId
+    task_id: TaskId
+
+    base_revision: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    candidate_revision: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    patch_artifact: ArtifactReference
+
+    execution_evidence: tuple[
+        ArtifactReference,
+        ...,
+    ] = ()
+
+    change_rationale: Annotated[
+        str | None,
+        Field(max_length=10_000),
+    ] = None
+
+    created_at: AwareDatetime
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/gate.py
+================================================================================
+
+"""
+Canonical ReleaseGate boundary contracts.
+
+ReleaseGateService should return ONE GateDecision object.
+
+The Orchestrator should never need to infer meaning from arbitrary strings or
+inspect internal release-gate classes.
+"""
+
+from __future__ import annotations
+
+from pydantic import (
+    Field,
+    model_validator,
+)
+from typing_extensions import (
+    Annotated,
+    Self,
+)
+
+from .base import (
+    AwareDatetime,
+    CONTRACT_SCHEMA_VERSION,
+    ContractModel,
+)
+from .enums import GateDisposition
+from .evidence import (
+    EvidenceReference,
+    UncertaintyStatement,
+)
+from .ids import (
+    CandidateId,
+    DecisionId,
+    RunId,
+)
+from .references import ArtifactReference
+from .usage import AIUsage
+
+
+class GateDecision(ContractModel):
+    """
+    Authoritative candidate-level result emitted by Component 3.
+
+    A PASS with zero evidence is rejected by schema validation.
+
+    This does NOT imply that "some evidence exists" proves the gate is good.
+    Component 5 still evaluates the quality of the gate itself.
+    """
+
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    decision_id: DecisionId
+
+    run_id: RunId
+    candidate_id: CandidateId
+
+    disposition: GateDisposition
+
+    gate_policy: ArtifactReference
+
+    evidence: tuple[
+        EvidenceReference,
+        ...,
+    ]
+
+    uncertainty: tuple[
+        UncertaintyStatement,
+        ...,
+    ] = ()
+
+    reason_codes: tuple[
+        str,
+        ...,
+    ] = ()
+
+    # Used only when the gate explicitly requests another evidence cycle.
+    requested_evidence_types: tuple[
+        str,
+        ...,
+    ] = ()
+
+    ai_usage: AIUsage = Field(
+        default_factory=AIUsage
+    )
+
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_decision(self) -> Self:
+        if not self.evidence:
+            raise ValueError(
+                "A GateDecision must reference at least one evidence item."
+            )
+
+        if (
+            self.disposition
+            == GateDisposition.MORE_EVIDENCE_REQUIRED
+            and not self.requested_evidence_types
+        ):
+            raise ValueError(
+                "MORE_EVIDENCE_REQUIRED must specify the additional "
+                "evidence family or families being requested."
+            )
+
+        if (
+            self.disposition
+            != GateDisposition.MORE_EVIDENCE_REQUIRED
+            and self.requested_evidence_types
+        ):
+            raise ValueError(
+                "requested_evidence_types are only valid for "
+                "MORE_EVIDENCE_REQUIRED."
+            )
+
+        return self
+
+
+class HumanReviewSignal(ContractModel):
+    """
+    Signal sent OUT of the autonomous pipeline.
+
+    It does not represent the human's eventual decision.
+
+    Component 12 may translate this into the enterprise workflow.
+    """
+
+    run_id: RunId
+    candidate_id: CandidateId
+
+    gate_decision_id: DecisionId
+
+    reasons: tuple[str, ...]
+
+    evidence: tuple[
+        EvidenceReference,
+        ...,
+    ]
+
+    created_at: AwareDatetime
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/execution.py
+================================================================================
+
+"""
+Shared boundary contracts for Component 10.
+
+Only contracts exchanged BETWEEN components live here.
+
+Component 10's low-level:
+
+    SandboxProfile
+    RunnerResult
+    AzureContainerAppsJobRunner
+
+remain private to Component 10.
+
+This prevents Component 1 from becoming coupled to one execution technology.
+"""
+
+from __future__ import annotations
+
+from pydantic import Field
+from typing_extensions import Annotated
+
+from .base import (
+    AwareDatetime,
+    CONTRACT_SCHEMA_VERSION,
+    ContractModel,
+)
+from .enums import (
+    ExecutionStatus,
+    SandboxRole,
+)
+from .ids import (
+    RunId,
+    Sha256Digest,
+)
+from .references import ArtifactReference
+
+
+class ExecutionCommand(ContractModel):
+    """
+    Structured command rather than a shell string.
+
+    This avoids making shell parsing part of the shared contract.
+
+    Component 10 remains responsible for enforcing the executable allow-list.
+    """
+
+    executable: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    arguments: tuple[str, ...] = ()
+
+    working_directory: Annotated[
+        str,
+        Field(min_length=1),
+    ] = "/workspace"
+
+    environment: dict[str, str] = Field(
+        default_factory=dict
+    )
+
+
+class ExecutionRequest(ContractModel):
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    request_id: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    run_id: RunId
+
+    component_name: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    role: SandboxRole
+
+    profile_id: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    inputs: tuple[
+        ArtifactReference,
+        ...,
+    ]
+
+    command: ExecutionCommand
+
+    created_at: AwareDatetime
+
+    metadata: dict[str, str] = Field(
+        default_factory=dict
+    )
+
+
+class ExecutionOutput(ContractModel):
+    name: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    artifact: ArtifactReference
+
+
+class ExecutionReceipt(ContractModel):
+    """
+    Evidence returned by Component 10.
+
+    It proves the execution event and environment identity.
+
+    It does NOT prove that the software was semantically correct.
+    """
+
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    request_id: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    run_id: RunId
+
+    sandbox_id: Annotated[
+        str,
+        Field(min_length=1, max_length=256),
+    ]
+
+    profile_id: Annotated[
+        str,
+        Field(min_length=1, max_length=128),
+    ]
+
+    role: SandboxRole
+
+    status: ExecutionStatus
+
+    runner_image: Annotated[
+        str,
+        Field(min_length=1),
+    ]
+
+    runner_image_digest: Annotated[
+        str,
+        Field(pattern=r"^sha256:[0-9a-f]{64}$"),
+    ]
+
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+
+    exit_code: int | None
+
+    stdout_sha256: Sha256Digest
+    stderr_sha256: Sha256Digest
+
+    stdout_bytes: Annotated[
+        int,
+        Field(ge=0),
+    ]
+
+    stderr_bytes: Annotated[
+        int,
+        Field(ge=0),
+    ]
+
+    outputs: tuple[
+        ExecutionOutput,
+        ...,
+    ]
+
+    environment_fingerprint: Sha256Digest
+    policy_fingerprint: Sha256Digest
+
+    cleanup_completed: bool
+
+    failure_reason: str | None = None
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/orchestration.py
+================================================================================
+
+"""
+Canonical orchestration boundary contracts.
+
+Component 9 still owns:
+
+    state transition implementation
+    retry logic
+    budget enforcement
+    component invocation
+    cancellation logic
+
+The shared package owns the DATA exchanged with Components 4, 5, 8 and 12.
+"""
+
+from __future__ import annotations
+
+from pydantic import (
+    Field,
+    model_validator,
+)
+from typing_extensions import (
+    Annotated,
+    Self,
+)
+
+from .base import (
+    AwareDatetime,
+    CONTRACT_SCHEMA_VERSION,
+    ContractModel,
+)
+from .candidate import CandidateArtifact
+from .enums import (
+    FinalDisposition,
+    RunState,
+)
+from .ids import (
+    RunId,
+)
+from .references import (
+    ArtifactReference,
+    TaskSpecificationReference,
+)
+from .task import TaskRequest
+from .usage import RunUsageLedger
+
+
+TERMINAL_RUN_STATES = frozenset({
+    RunState.RELEASED,
+    RunState.RELEASE_APPROVAL_REQUIRED,
+    RunState.HUMAN_REVIEW_REQUIRED,
+    RunState.FAILED_VALIDATION,
+    RunState.CHANGE_FAILED,
+    RunState.GATE_FAILED,
+    RunState.BUDGET_EXCEEDED,
+    RunState.PIPELINE_ERROR,
+    RunState.CANCELLED,
+})
+
+
+class StateTransition(ContractModel):
+    from_state: RunState
+    to_state: RunState
+
+    timestamp: AwareDatetime
+
+    reason: Annotated[
+        str,
+        Field(min_length=1, max_length=4096),
+    ]
+
+    evidence: ArtifactReference | None = None
+
+
+class OrchestrationRun(ContractModel):
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    run_id: RunId
+
+    task: TaskRequest
+
+    # The exact specification is frozen BEFORE Component 2 is invoked.
+    task_specification: TaskSpecificationReference
+
+    state: RunState
+
+    started_at: AwareDatetime
+    updated_at: AwareDatetime
+
+    usage: RunUsageLedger = Field(
+        default_factory=RunUsageLedger
+    )
+
+    candidate: CandidateArtifact | None = None
+
+    transitions: tuple[
+        StateTransition,
+        ...,
+    ] = ()
+
+    @model_validator(mode="after")
+    def validate_time_order(self) -> Self:
+        if self.updated_at < self.started_at:
+            raise ValueError(
+                "OrchestrationRun.updated_at cannot precede started_at."
+            )
+
+        return self
+
+
+class RunOutcome(ContractModel):
+    """
+    Terminal orchestration result consumed by Components 4, 5, 8 and 12.
+    """
+
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    run_id: RunId
+
+    task_id: str
+    task_type: str
+
+    task_specification: TaskSpecificationReference
+
+    final_state: RunState
+    disposition: FinalDisposition
+
+    candidate_id: str | None
+
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+
+    usage: RunUsageLedger
+
+    evidence: tuple[
+        ArtifactReference,
+        ...,
+    ]
+
+    reason_codes: tuple[
+        str,
+        ...,
+    ]
+
+    @model_validator(mode="after")
+    def validate_terminal_result(self) -> Self:
+        if self.final_state not in TERMINAL_RUN_STATES:
+            raise ValueError(
+                "RunOutcome requires a terminal RunState."
+            )
+
+        if self.completed_at < self.started_at:
+            raise ValueError(
+                "RunOutcome.completed_at cannot precede started_at."
+            )
+
+        expected: dict[
+            FinalDisposition,
+            set[RunState],
+        ] = {
+            FinalDisposition.RELEASED: {
+                RunState.RELEASED,
+            },
+            FinalDisposition.RELEASE_APPROVAL_REQUIRED: {
+                RunState.RELEASE_APPROVAL_REQUIRED,
+            },
+            FinalDisposition.HUMAN_REVIEW_REQUIRED: {
+                RunState.HUMAN_REVIEW_REQUIRED,
+            },
+            FinalDisposition.BUDGET_EXCEEDED: {
+                RunState.BUDGET_EXCEEDED,
+            },
+            FinalDisposition.PIPELINE_ERROR: {
+                RunState.PIPELINE_ERROR,
+            },
+            FinalDisposition.CANCELLED: {
+                RunState.CANCELLED,
+            },
+            FinalDisposition.REJECTED: {
+                RunState.FAILED_VALIDATION,
+                RunState.CHANGE_FAILED,
+                RunState.GATE_FAILED,
+            },
+        }
+
+        if self.final_state not in expected[self.disposition]:
+            raise ValueError(
+                "RunOutcome final_state and disposition are inconsistent: "
+                f"{self.final_state.value} / {self.disposition.value}."
+            )
+
+        return self
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/correlation.py
+================================================================================
+
+"""
+Canonical end-to-end correlation spine.
+
+This model exists because our architecture now crosses many distinct domains:
+
+    engineering workflow
+    AI engineering run
+    candidate artifact
+    release
+    deployment
+    runtime trace
+    business process
+
+Not every identifier exists at every lifecycle stage.
+
+Fields therefore become populated progressively.
+
+The object should not be interpreted as a causal graph.
+
+It is a correlation spine.
+"""
+
+from __future__ import annotations
+
+from .base import (
+    CONTRACT_SCHEMA_VERSION,
+    ContractModel,
+)
+from .ids import (
+    CandidateId,
+    DeploymentId,
+    ProcessInstanceId,
+    ReleaseId,
+    RunId,
+    TaskId,
+    TaskRequestId,
+    TraceId,
+)
+from .references import (
+    PullRequestReference,
+    TaskSpecificationReference,
+)
+
+
+class CorrelationContext(ContractModel):
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    task_request_id: TaskRequestId
+    task_id: TaskId
+
+    task_specification: TaskSpecificationReference
+
+    run_id: RunId
+
+    candidate_id: CandidateId | None = None
+
+    pull_request: PullRequestReference | None = None
+
+    release_id: ReleaseId | None = None
+
+    deployment_id: DeploymentId | None = None
+
+    trace_id: TraceId | None = None
+
+    process_instance_id: ProcessInstanceId | None = None
+
+
+================================================================================
+FILE: src/ai_engineering_contracts/__init__.py
+================================================================================
+
+"""
+Canonical public API for Component 1.
+
+IMPORT RULE
+-----------
+
+Other components should import shared objects FROM THIS PACKAGE.
+
+Preferred:
+
+    from ai_engineering_contracts import GateDecision
+
+Avoid:
+
+    from ai_engineering_contracts.gate import GateDecision
+
+The first approach makes later internal file reorganization easier.
+
+Do not export component-private implementation classes here.
+"""
+
+from .base import (
+    AwareDatetime,
+    CONTRACT_SCHEMA_VERSION,
+    ContractModel,
+)
+from .candidate import CandidateArtifact
+from .correlation import CorrelationContext
+from .enums import (
+    ExecutionStatus,
+    FinalDisposition,
+    GateDisposition,
+    RiskTier,
+    RunState,
+    SandboxRole,
+    SpecificationStatus,
+    TaskSourceKind,
+)
+from .evidence import (
+    EvidenceReference,
+    EvidenceRequirement,
+    UncertaintyStatement,
+)
+from .execution import (
+    ExecutionCommand,
+    ExecutionOutput,
+    ExecutionReceipt,
+    ExecutionRequest,
+)
+from .gate import (
+    GateDecision,
+    HumanReviewSignal,
+)
+from .hashing import (
+    canonical_json_bytes,
+    content_sha256,
+    sha256_bytes,
+)
+from .orchestration import (
+    OrchestrationRun,
+    RunOutcome,
+    StateTransition,
+    TERMINAL_RUN_STATES,
+)
+from .references import (
+    ArtifactReference,
+    DeploymentReference,
+    ExternalResourceReference,
+    PullRequestReference,
+    ReleaseReference,
+    RepositoryReference,
+    TaskSpecificationReference,
+)
+from .task import (
+    RequestedCapability,
+    TaskRequest,
+)
+from .task_specification import (
+    BenchmarkContract,
+    ChangeContract,
+    EvidenceContract,
+    ExecutionContract,
+    GateContract,
+    GovernanceContract,
+    PathRule,
+    RegisteredTaskSpecification,
+    RepositoryScope,
+    ResolvedTaskContract,
+    SkillContract,
+    TaskSpecification,
+)
+from .usage import (
+    AIUsage,
+    ResourceBudget,
+    RunUsageLedger,
+)
+
+__all__ = [
+    "AIUsage",
+    "ArtifactReference",
+    "AwareDatetime",
+    "BenchmarkContract",
+    "CONTRACT_SCHEMA_VERSION",
+    "CandidateArtifact",
+    "ChangeContract",
+    "ContractModel",
+    "CorrelationContext",
+    "DeploymentReference",
+    "EvidenceContract",
+    "EvidenceReference",
+    "EvidenceRequirement",
+    "ExecutionCommand",
+    "ExecutionContract",
+    "ExecutionOutput",
+    "ExecutionReceipt",
+    "ExecutionRequest",
+    "ExecutionStatus",
+    "ExternalResourceReference",
+    "FinalDisposition",
+    "GateContract",
+    "GateDecision",
+    "GateDisposition",
+    "GovernanceContract",
+    "HumanReviewSignal",
+    "OrchestrationRun",
+    "PathRule",
+    "PullRequestReference",
+    "RegisteredTaskSpecification",
+    "ReleaseReference",
+    "RepositoryReference",
+    "RequestedCapability",
+    "ResolvedTaskContract",
+    "ResourceBudget",
+    "RiskTier",
+    "RunOutcome",
+    "RunState",
+    "RunUsageLedger",
+    "SandboxRole",
+    "SkillContract",
+    "SpecificationStatus",
+    "StateTransition",
+    "TERMINAL_RUN_STATES",
+    "TaskRequest",
+    "TaskSourceKind",
+    "TaskSpecification",
+    "TaskSpecificationReference",
+    "UncertaintyStatement",
+    "canonical_json_bytes",
+    "content_sha256",
+    "sha256_bytes",
+]
+
+__version__ = "1.0.0"
+
+
+================================================================================
+TESTS
+================================================================================
+
+
+================================================================================
+FILE: tests/test_hashing.py
+================================================================================
+
+"""
+Tests for content identity.
+
+These tests are intentionally simple because this function will underpin
+evidence and specification identities throughout the POC.
+"""
+
+from ai_engineering_contracts import content_sha256
+
+
+def test_dictionary_order_does_not_change_digest() -> None:
+    first = {
+        "a": 1,
+        "b": 2,
+    }
+
+    second = {
+        "b": 2,
+        "a": 1,
+    }
+
+    assert content_sha256(first) == content_sha256(second)
+
+
+def test_content_change_changes_digest() -> None:
+    assert (
+        content_sha256({"value": 1})
+        != content_sha256({"value": 2})
+    )
+
+
+def test_sha256_has_expected_length() -> None:
+    digest = content_sha256(
+        {"example": "contract"}
+    )
+
+    assert len(digest) == 64
+
+
+================================================================================
+FILE: tests/test_task_specification.py
+================================================================================
+
+from datetime import datetime, timezone
+
+import pytest
+from pydantic import ValidationError
+
+from ai_engineering_contracts import (
+    ArtifactReference,
+    BenchmarkContract,
+    ChangeContract,
+    EvidenceContract,
+    EvidenceRequirement,
+    ExecutionContract,
+    GateContract,
+    GateDisposition,
+    GovernanceContract,
+    PathRule,
+    RepositoryScope,
+    ResourceBudget,
+    RiskTier,
+    SkillContract,
+    SpecificationStatus,
+    TaskSpecification,
+)
+
+
+NOW = datetime.now(timezone.utc)
+
+
+def artifact(
+    identifier: str,
+    digest_character: str,
+) -> ArtifactReference:
+    """
+    Build a valid synthetic artifact for schema tests.
+
+    These are test-only hashes. They are not production configuration.
+    """
+
+    return ArtifactReference(
+        artifact_id=identifier,
+        uri=f"artifact://{identifier}",
+        sha256=digest_character * 64,
+        media_type="application/octet-stream",
+        created_at=NOW,
+        producer_component="test-suite",
+    )
+
+
+def make_specification(
+    *,
+    status: SpecificationStatus = SpecificationStatus.QUALIFYING,
+    auto_release: bool = False,
+) -> TaskSpecification:
+
+    return TaskSpecification(
+        task_type="X1",
+        version="1.0.0",
+        display_name="POC X1",
+        description="A deliberately narrow engineering capability.",
+        status=status,
+        created_at=NOW,
+
+        repository_scope=RepositoryScope(
+            repository_id="engineering-poc",
+            allowed_base_branches=("main",),
+            path_rules=(
+                PathRule(
+                    pattern="src/**/*.py",
+                    allow_write=True,
+                    explanation="Application source.",
+                ),
+                PathRule(
+                    pattern="task_specs/**",
+                    allow_write=False,
+                    explanation="Agent may not modify governing policy.",
+                ),
+            ),
+            maximum_files_changed=10,
+            maximum_changed_lines=500,
+        ),
+
+        skill_contract=SkillContract(
+            required_skills=(
+                artifact("skill", "a"),
+            ),
+        ),
+
+        change_contract=ChangeContract(
+            permitted_languages=("python",),
+            permitted_operations=("modify_source",),
+            forbidden_operations=("modify_gate_policy",),
+        ),
+
+        execution_contract=ExecutionContract(
+            change_execution_profile_id="change-v1",
+            release_gate_profile_id="gate-v1",
+            benchmark_profile_id="benchmark-v1",
+        ),
+
+        evidence_contract=EvidenceContract(
+            requirements=(
+                EvidenceRequirement(
+                    evidence_type="baseline_tests",
+                ),
+                EvidenceRequirement(
+                    evidence_type="independent_tests",
+                    independent_from_change_agent=True,
+                ),
+            ),
+        ),
+
+        gate_contract=GateContract(
+            gate_policy=artifact("gate-policy", "b"),
+            permitted_outcomes=(
+                GateDisposition.PASS,
+                GateDisposition.FAIL,
+                GateDisposition.MORE_EVIDENCE_REQUIRED,
+                GateDisposition.HUMAN_REVIEW_REQUIRED,
+            ),
+        ),
+
+        benchmark_contract=BenchmarkContract(
+            benchmark_suite=artifact("benchmark", "c"),
+            minimum_cases=30,
+            qualification_policy=artifact(
+                "qualification-policy",
+                "d",
+            ),
+        ),
+
+        governance_contract=GovernanceContract(
+            risk_tier=RiskTier.MODERATE,
+            resource_budget=ResourceBudget(),
+            human_review_allowed=True,
+            auto_release_allowed=auto_release,
+        ),
+    )
+
+
+def test_qualifying_specification_is_valid() -> None:
+    specification = make_specification()
+
+    assert specification.task_type == "X1"
+
+
+def test_unapproved_capability_cannot_enable_auto_release() -> None:
+    with pytest.raises(ValidationError):
+        make_specification(
+            status=SpecificationStatus.QUALIFYING,
+            auto_release=True,
+        )
+
+
+def test_approved_capability_may_enable_auto_release() -> None:
+    specification = make_specification(
+        status=SpecificationStatus.APPROVED,
+        auto_release=True,
+    )
+
+    assert (
+        specification.governance_contract.auto_release_allowed
+        is True
+    )
+
+
+def test_contract_cannot_permit_and_forbid_same_operation() -> None:
+    with pytest.raises(ValidationError):
+        ChangeContract(
+            permitted_languages=("python",),
+            permitted_operations=("modify_source",),
+            forbidden_operations=("modify_source",),
+        )
+
+
+================================================================================
+FILE: tests/test_gate.py
+================================================================================
+
+from datetime import datetime, timezone
+
+import pytest
+from pydantic import ValidationError
+
+from ai_engineering_contracts import (
+    AIUsage,
+    ArtifactReference,
+    EvidenceReference,
+    GateDecision,
+    GateDisposition,
+)
+
+
+NOW = datetime.now(timezone.utc)
+
+
+def artifact(
+    identifier: str,
+    char: str,
+) -> ArtifactReference:
+    return ArtifactReference(
+        artifact_id=identifier,
+        uri=f"artifact://{identifier}",
+        sha256=char * 64,
+        media_type="application/json",
+        created_at=NOW,
+        producer_component="ReleaseGateService",
+    )
+
+
+def evidence() -> EvidenceReference:
+    return EvidenceReference(
+        evidence_id="evidence-1",
+        run_id="run-1",
+        evidence_type="independent_tests",
+        artifact=artifact("test-report", "a"),
+        created_at=NOW,
+        independent_from_change_agent=True,
+    )
+
+
+def test_pass_requires_evidence() -> None:
+    decision = GateDecision(
+        decision_id="decision-1",
+        run_id="run-1",
+        candidate_id="candidate-1",
+        disposition=GateDisposition.PASS,
+        gate_policy=artifact("gate-policy", "b"),
+        evidence=(evidence(),),
+        ai_usage=AIUsage(
+            input_tokens=1000,
+            output_tokens=100,
+            request_count=2,
+        ),
+        created_at=NOW,
+    )
+
+    assert decision.disposition == GateDisposition.PASS
+
+
+def test_gate_decision_without_evidence_is_invalid() -> None:
+    with pytest.raises(ValidationError):
+        GateDecision(
+            decision_id="decision-1",
+            run_id="run-1",
+            candidate_id="candidate-1",
+            disposition=GateDisposition.PASS,
+            gate_policy=artifact("gate-policy", "b"),
+            evidence=(),
+            created_at=NOW,
+        )
+
+
+def test_more_evidence_must_identify_requested_evidence() -> None:
+    with pytest.raises(ValidationError):
+        GateDecision(
+            decision_id="decision-1",
+            run_id="run-1",
+            candidate_id="candidate-1",
+            disposition=GateDisposition.MORE_EVIDENCE_REQUIRED,
+            gate_policy=artifact("gate-policy", "b"),
+            evidence=(evidence(),),
+            requested_evidence_types=(),
+            created_at=NOW,
+        )
+
+
+def test_more_evidence_with_explicit_request_is_valid() -> None:
+    decision = GateDecision(
+        decision_id="decision-1",
+        run_id="run-1",
+        candidate_id="candidate-1",
+        disposition=GateDisposition.MORE_EVIDENCE_REQUIRED,
+        gate_policy=artifact("gate-policy", "b"),
+        evidence=(evidence(),),
+        requested_evidence_types=(
+            "additional_mutation_analysis",
+        ),
+        created_at=NOW,
+    )
+
+    assert decision.requested_evidence_types == (
+        "additional_mutation_analysis",
+    )
+
+
+================================================================================
+FILE: tests/test_execution.py
+================================================================================
+
+from datetime import datetime, timezone
+
+import pytest
+from pydantic import ValidationError
+
+from ai_engineering_contracts import (
+    ArtifactReference,
+    ExecutionCommand,
+    ExecutionRequest,
+    SandboxRole,
+)
+
+
+NOW = datetime.now(timezone.utc)
+
+
+def artifact() -> ArtifactReference:
+    return ArtifactReference(
+        artifact_id="repo-snapshot",
+        uri="artifact://repo-snapshot",
+        sha256="a" * 64,
+        media_type="application/x-tar",
+        created_at=NOW,
+        producer_component="ArtifactBroker",
+    )
+
+
+def test_execution_request_is_structured() -> None:
+    request = ExecutionRequest(
+        request_id="execution-1",
+        run_id="run-1",
+        component_name="ReleaseGateService",
+        role=SandboxRole.RELEASE_GATE,
+        profile_id="release-gate-v1",
+        inputs=(artifact(),),
+        command=ExecutionCommand(
+            executable="pytest",
+            arguments=("-q",),
+        ),
+        created_at=NOW,
+    )
+
+    assert request.command.executable == "pytest"
+
+
+def test_naive_timestamp_is_rejected() -> None:
+    from datetime import datetime
+
+    with pytest.raises(ValidationError):
+        ExecutionRequest(
+            request_id="execution-1",
+            run_id="run-1",
+            component_name="ReleaseGateService",
+            role=SandboxRole.RELEASE_GATE,
+            profile_id="release-gate-v1",
+            inputs=(artifact(),),
+            command=ExecutionCommand(
+                executable="pytest",
+            ),
+            created_at=datetime(2026, 8, 7, 10, 0, 0),
+        )
+
+
+================================================================================
+FILE: tests/test_orchestration.py
+================================================================================
+
+from datetime import datetime, timezone
+
+import pytest
+from pydantic import ValidationError
+
+from ai_engineering_contracts import (
+    ArtifactReference,
+    FinalDisposition,
+    ResourceBudget,
+    RunOutcome,
+    RunState,
+    RunUsageLedger,
+    TaskSpecificationReference,
+)
+
+
+NOW = datetime.now(timezone.utc)
+
+
+def specification_reference() -> TaskSpecificationReference:
+    return TaskSpecificationReference(
+        task_type="X1",
+        version="1.0.0",
+        sha256="a" * 64,
+    )
+
+
+def evidence() -> ArtifactReference:
+    return ArtifactReference(
+        artifact_id="run-evidence",
+        uri="evidence://run-evidence",
+        sha256="b" * 64,
+        media_type="application/json",
+        created_at=NOW,
+        producer_component="EvidenceService",
+    )
+
+
+def test_released_outcome_is_valid() -> None:
+    result = RunOutcome(
+        run_id="run-1",
+        task_id="task-1",
+        task_type="X1",
+        task_specification=specification_reference(),
+        final_state=RunState.RELEASED,
+        disposition=FinalDisposition.RELEASED,
+        candidate_id="candidate-1",
+        started_at=NOW,
+        completed_at=NOW,
+        usage=RunUsageLedger(),
+        evidence=(evidence(),),
+        reason_codes=("GATE_PASS",),
+    )
+
+    assert result.disposition == FinalDisposition.RELEASED
+
+
+def test_released_disposition_cannot_use_gate_failed_state() -> None:
+    with pytest.raises(ValidationError):
+        RunOutcome(
+            run_id="run-1",
+            task_id="task-1",
+            task_type="X1",
+            task_specification=specification_reference(),
+            final_state=RunState.GATE_FAILED,
+            disposition=FinalDisposition.RELEASED,
+            candidate_id="candidate-1",
+            started_at=NOW,
+            completed_at=NOW,
+            usage=RunUsageLedger(),
+            evidence=(evidence(),),
+            reason_codes=(),
+        )
+
+
+def test_release_approval_is_not_pipeline_error() -> None:
+    """
+    Regression test for the temporary Component 9 POC compromise.
+
+    Gate PASS + organizational approval requirement is now represented
+    explicitly instead of being mislabeled as a pipeline failure.
+    """
+
+    result = RunOutcome(
+        run_id="run-1",
+        task_id="task-1",
+        task_type="X1",
+        task_specification=specification_reference(),
+        final_state=RunState.RELEASE_APPROVAL_REQUIRED,
+        disposition=FinalDisposition.RELEASE_APPROVAL_REQUIRED,
+        candidate_id="candidate-1",
+        started_at=NOW,
+        completed_at=NOW,
+        usage=RunUsageLedger(),
+        evidence=(evidence(),),
+        reason_codes=("EXTERNAL_RELEASE_APPROVAL_REQUIRED",),
+    )
+
+    assert (
+        result.final_state
+        == RunState.RELEASE_APPROVAL_REQUIRED
+    )
+
+
+================================================================================
+B1 MIGRATION INSTRUCTIONS
+================================================================================
+
+The code above should NOT simply be added beside the old contracts.
+
+The duplicate contracts in Components 2–12 should be removed and replaced with
+imports from `ai_engineering_contracts`.
+
+The migration should be performed as follows.
+
+
+------------------------------------------------------------------------------
+COMPONENT 2 — ChangeExecutionService
+------------------------------------------------------------------------------
+
+REMOVE LOCAL DEFINITIONS:
+
+    CandidatePatch
+    TaskRequest
+    AI/token usage summary if duplicated
+    ArtifactReference if duplicated
+
+IMPORT:
+
+    from ai_engineering_contracts import (
+        AIUsage,
+        CandidateArtifact,
+        ResolvedTaskContract,
+        TaskRequest,
+    )
+
+COMPONENT 2 SHOULD RETURN SOMETHING LIKE:
+
+    class ChangeExecutionResult(...):
+        succeeded: bool
+        candidate: CandidateArtifact | None
+        ai_usage: AIUsage
+
+ChangeExecutionResult can remain Component-2-specific because only Component 2's
+port needs it.
+
+The candidate itself is shared.
+
+
+------------------------------------------------------------------------------
+COMPONENT 3 — ReleaseGateService
+------------------------------------------------------------------------------
+
+REMOVE LOCAL DEFINITIONS:
+
+    GateOutcome
+    GateDisposition
+    ReleaseGateResult
+    EvidenceReference duplicates
+    uncertainty interval duplicates used for cross-component output
+
+RETURN:
+
+    GateDecision
+
+IMPORT:
+
+    from ai_engineering_contracts import (
+        GateDecision,
+        GateDisposition,
+        EvidenceReference,
+        UncertaintyStatement,
+    )
+
+This is a major simplification.
+
+Component 3 should have ONE public result:
+
+    GateDecision
+
+
+------------------------------------------------------------------------------
+COMPONENT 4 — Evidence & Provenance
+------------------------------------------------------------------------------
+
+USE:
+
+    ArtifactReference
+    EvidenceReference
+    GateDecision
+    CandidateArtifact
+    ExecutionReceipt
+    OrchestrationRun
+    RunOutcome
+    CorrelationContext
+
+Component 4 should NOT redefine them.
+
+Component 4 remains responsible for:
+
+    storage
+    immutability mechanisms
+    retrieval
+    manifests
+    integrity verification
+    eventual signing/attestation
+
+
+------------------------------------------------------------------------------
+COMPONENT 5 — Pipeline Evaluation & Qualification
+------------------------------------------------------------------------------
+
+IMPORT:
+
+    TaskSpecificationReference
+    RunOutcome
+    GateDisposition
+    CandidateArtifact
+    ExecutionReceipt
+    AIUsage
+    RunUsageLedger
+
+KEEP LOCAL:
+
+    BenchmarkCase
+    HiddenOracle
+    CampaignResult
+    QualificationStatistics
+    ConfidenceInterval calculations
+    readiness decision
+
+Those are Component 5 domain concepts and should NOT move into Component 1.
+
+
+------------------------------------------------------------------------------
+COMPONENT 6 — Production Operational Observability
+------------------------------------------------------------------------------
+
+IMPORT:
+
+    CorrelationContext
+    DeploymentReference
+
+KEEP LOCAL:
+
+    OperationalEvent
+    OperationalWindow
+    latency/error/SLO models
+    health classifications
+
+These belong to Component 6.
+
+
+------------------------------------------------------------------------------
+COMPONENT 7 — Process Outcome & Business Measurement
+------------------------------------------------------------------------------
+
+IMPORT:
+
+    CorrelationContext
+    DeploymentReference
+
+KEEP LOCAL:
+
+    ProcessEvent
+    ProcessWindow
+    KPIObservation
+    AttributionAssessment
+    AttributionDesign
+    AttributionStrength
+
+Those concepts belong specifically to Component 7 and should NOT be pushed into
+Component 1 merely for symmetry.
+
+
+------------------------------------------------------------------------------
+COMPONENT 8 — Engineering Productivity & Automation Economics
+------------------------------------------------------------------------------
+
+IMPORT:
+
+    AIUsage
+    RunUsageLedger
+    RunOutcome
+    TaskSpecificationReference
+    CorrelationContext
+
+KEEP LOCAL:
+
+    HumanEffortRecord
+    CostRecord
+    CostAllocationMethod
+    EngineeringEconomicsReport
+    BaselineMetrics
+    ValueAssessment
+    DORA-style aggregation
+
+These are Component 8 domain models.
+
+
+------------------------------------------------------------------------------
+COMPONENT 9 — EngineeringAutomationOrchestrator
+------------------------------------------------------------------------------
+
+THIS COMPONENT REQUIRES THE LARGEST CLEANUP.
+
+DELETE OLD:
+
+    TaskDefinition
+    GateDisposition
+    CandidatePatch
+    UsageLedger
+    TaskRequest
+    RunState
+    FinalDisposition
+    OrchestrationRun
+    RunOutcome
+
+IMPORT CANONICAL VERSIONS.
+
+MOST IMPORTANTLY:
+
+OLD:
+
+    registry.resolve(task.task_type)
+        -> TaskDefinition
+
+NEW:
+
+    Component 11.resolve(
+        task_type=task.capability.task_type,
+        version=task.capability.requested_version,
+    )
+        -> ResolvedTaskContract
+
+THEN CREATE:
+
+    TaskSpecificationReference(
+        task_type=resolved.specification.task_type,
+        version=resolved.specification.version,
+        sha256=resolved.specification_sha256,
+    )
+
+and freeze it into OrchestrationRun BEFORE invoking Component 2.
+
+Component 9 should read budgets from:
+
+    resolved.specification
+        .governance_contract
+        .resource_budget
+
+It should read evidence-cycle limits from the SAME object.
+
+It should no longer carry another independent copy.
+
+
+------------------------------------------------------------------------------
+IMPORTANT COMPONENT 9 STATE-MACHINE CORRECTION
+------------------------------------------------------------------------------
+
+OLD TEMPORARY BEHAVIOUR:
+
+    Gate PASS
+    +
+    automatic_release_allowed == false
+
+        -> PIPELINE_ERROR
+
+REMOVE THIS.
+
+NEW:
+
+    Gate PASS
+        ↓
+    READY_FOR_RELEASE
+        ↓
+    if auto_release_allowed:
+        release
+    else:
+        RELEASE_APPROVAL_REQUIRED
+
+This is now explicitly supported by:
+
+    RunState.RELEASE_APPROVAL_REQUIRED
+
+and:
+
+    FinalDisposition.RELEASE_APPROVAL_REQUIRED
+
+
+------------------------------------------------------------------------------
+COMPONENT 10 — ExecutionEnvironmentService
+------------------------------------------------------------------------------
+
+REMOVE LOCAL CROSS-BOUNDARY DEFINITIONS:
+
+    ExecutionRequest
+    ExecutionCommand
+    ExecutionOutput
+    ExecutionReceipt
+    SandboxRole
+    ExecutionStatus
+    ArtifactReference
+
+IMPORT FROM COMPONENT 1.
+
+KEEP LOCAL:
+
+    SandboxProfile
+    NetworkPolicy
+    ResourceLimits
+    RunnerResult
+    SandboxRunnerPort implementation
+    AzureContainerAppsJobRunner
+    policy engine
+
+Those are Component 10 implementation concepts.
+
+
+------------------------------------------------------------------------------
+COMPONENT 11 — TaskSpecificationRegistry
+------------------------------------------------------------------------------
+
+THIS COMPONENT CHANGES CONCEPTUALLY.
+
+MOVE ITS SCHEMA CLASSES TO COMPONENT 1.
+
+DELETE LOCAL DEFINITIONS:
+
+    TaskSpecification
+    RepositoryScope
+    SkillContract
+    ChangeContract
+    ExecutionContract
+    EvidenceContract
+    GateContract
+    BenchmarkContract
+    GovernanceContract
+    RiskTier
+    SpecificationStatus
+
+IMPORT THEM.
+
+COMPONENT 11 SHOULD RETAIN:
+
+    TaskSpecificationRegistry
+    TaskSpecificationValidator
+    SpecificationRepositoryPort
+    InMemorySpecificationRepository
+    approval/promotion validation
+    immutable registration logic
+    artifact-resolution checks
+
+In other words:
+
+    COMPONENT 1:
+        defines TaskSpecification.
+
+    COMPONENT 11:
+        governs TaskSpecification.
+
+
+------------------------------------------------------------------------------
+COMPONENT 12 — EngineeringWorkflowIntegrationService
+------------------------------------------------------------------------------
+
+REMOVE LOCAL DUPLICATES:
+
+    TaskRequest
+    RepositoryReference
+    ExternalReference
+    PullRequestReference
+    GateOutcome
+
+IMPORT:
+
+    TaskRequest
+    RequestedCapability
+    RepositoryReference
+    ExternalResourceReference
+    PullRequestReference
+    GateDisposition
+
+KEEP LOCAL:
+
+    NormalizedWorkflowEvent
+    ExternalEventType
+    ExternalStatus
+    provider adapters
+    idempotency storage
+    provider-specific status mapping
+
+Component 12 should translate:
+
+    GateDisposition.PASS
+        -> Azure status succeeded
+
+    GateDisposition.FAIL
+        -> Azure status failed
+
+    GateDisposition.MORE_EVIDENCE_REQUIRED
+        -> Azure status pending
+
+    GateDisposition.HUMAN_REVIEW_REQUIRED
+        -> Azure status pending
+
+
+================================================================================
+IMPORTANT THINGS B1 INTENTIONALLY DOES NOT CENTRALIZE
+================================================================================
+
+The following SHOULD REMAIN OUTSIDE Component 1.
+
+This is deliberate.
+
+
+1. RELEASE-GATE PLANNER INTERNAL MODELS
+
+Examples:
+
+    EvidencePlan
+    DiversityMap
+    TestGenerationPlan
+    MutationCampaignPlan
+
+Why?
+
+They are Component 3 implementation concepts.
+
+
+2. BENCHMARK / HIDDEN ORACLE MODELS
+
+Examples:
+
+    GoldenBenchmark
+    BenchmarkCase
+    HiddenOracle
+
+Why?
+
+They belong to Component 5.
+
+
+3. OPERATIONAL TELEMETRY MODELS
+
+Examples:
+
+    OperationalEvent
+    SLOResult
+    RuntimeHealthWindow
+
+Why?
+
+They belong to Component 6.
+
+
+4. BUSINESS PROCESS / KPI MODELS
+
+Examples:
+
+    ProcessEvent
+    KPIObservation
+    AttributionAssessment
+
+Why?
+
+They belong to Component 7.
+
+
+5. ECONOMIC MODELS
+
+Examples:
+
+    CostRecord
+    HumanEffortRecord
+    EngineeringEconomicsReport
+
+Why?
+
+They belong to Component 8.
+
+
+6. SANDBOX IMPLEMENTATION CONFIGURATION
+
+Examples:
+
+    SandboxProfile
+    NetworkPolicy
+    RunnerResult
+
+Why?
+
+They belong to Component 10.
+
+Only the execution request and receipt cross the architectural boundary.
+
+
+7. AZURE DEVOPS / JIRA PAYLOAD MODELS
+
+Why?
+
+They belong to Component 12 adapters.
+
+Provider vocabulary must not leak into the automation core.
+
+
+================================================================================
+DEPENDENCY RULE AFTER B1
+================================================================================
+
+The desired dependency direction becomes:
+
+
+                    ┌───────────────────────────┐
+                    │        COMPONENT 1        │
+                    │     SHARED CONTRACTS      │
+                    └─────────────┬─────────────┘
+                                  │
+          ┌───────────────────────┼────────────────────────┐
+          │                       │                        │
+          ▼                       ▼                        ▼
+     Component 2             Component 3             Component 4
+     Change Exec             Release Gate             Evidence
+          │                       │                        │
+          └───────────────────────┼────────────────────────┘
+                                  │
+          ┌───────────────────────┼────────────────────────┐
+          ▼                       ▼                        ▼
+     Component 5             Component 6             Component 7
+     Qualification           Operations              Outcomes
+                                  │
+          ┌───────────────────────┼────────────────────────┐
+          ▼                       ▼                        ▼
+     Component 8             Component 9            Component 10
+     Economics               Orchestrator            Sandbox
+                                  │
+                    ┌─────────────┴─────────────┐
+                    ▼                           ▼
+               Component 11               Component 12
+               Task Registry              Workflow Integration
+
+
+RULE:
+
+    Components 2–12 may depend on Component 1.
+
+    Component 1 MUST NOT import Components 2–12.
+
+This prevents dependency cycles and keeps the contracts package genuinely
+foundational.
+
+
+================================================================================
+THE CANONICAL FLOW AFTER B1
+================================================================================
+
+External task
+    │
+    ▼
+Component 12
+    │
+    ▼
+TaskRequest
+    │
+    ▼
+Component 9
+    │
+    ▼
+Component 11
+    │
+    ▼
+ResolvedTaskContract
+    │
+    ▼
+TaskSpecificationReference frozen into OrchestrationRun
+    │
+    ▼
+Component 2
+    │
+    ▼
+CandidateArtifact
+    │
+    ▼
+Component 10
+    │
+    ▼
+ExecutionReceipt
+    │
+    ▼
+Component 3
+    │
+    ▼
+EvidenceReference(s)
+    │
+    ▼
+GateDecision
+    │
+    ├──────── PASS
+    │
+    ├──────── FAIL
+    │
+    ├──────── MORE_EVIDENCE_REQUIRED
+    │
+    └──────── HUMAN_REVIEW_REQUIRED
+    │
+    ▼
+Component 9
+    │
+    ▼
+RunOutcome
+    │
+    ├──────── Component 4 evidence
+    ├──────── Component 5 qualification
+    ├──────── Component 8 economics
+    └──────── Component 12 workflow status
+
+
+================================================================================
+CORRELATION SPINE AFTER B1
+================================================================================
+
+TaskRequestId
+      │
+      ▼
+TaskId
+      │
+      ▼
+TaskSpecificationReference
+      │
+      ▼
+RunId
+      │
+      ▼
+CandidateId
+      │
+      ▼
+PullRequestReference
+      │
+      ▼
+ReleaseId
+      │
+      ▼
+DeploymentId
+      │
+      ▼
+TraceId
+      │
+      ▼
+ProcessInstanceId
+
+
+IMPORTANT:
+
+This is a CORRELATION spine.
+
+It is not evidence that:
+
+    code change
+        CAUSED
+    downstream business outcome.
+
+Component 7's attribution layer retains that distinction.
+
+
+================================================================================
+CONTRACT VERSIONING RULE
+================================================================================
+
+Top-level cross-component contracts contain:
+
+    schema_version = "1.0.0"
+
+This version refers to:
+
+    THE STRUCTURE OF THE CONTRACT
+
+not:
+
+    TaskSpecification version
+    gate-policy version
+    skill version
+    model version
+    application version
+
+Those versions remain separate.
+
+Example:
+
+    GateDecision schema version:
+        1.0.0
+
+    Gate policy artifact version:
+        3.2.0
+
+Both can legitimately coexist.
+
+
+================================================================================
+WHAT SHOULD TRIGGER A SHARED-CONTRACT VERSION CHANGE?
+================================================================================
+
+Examples of potentially BREAKING changes:
+
+    renaming disposition values
+
+    removing fields
+
+    changing field meaning
+
+    making an optional field mandatory
+
+    changing identifier semantics
+
+
+Examples of potentially NON-BREAKING changes:
+
+    adding an optional field
+
+    adding documentation
+
+    adding helper methods that do not change serialization
+
+
+For the POC, all Components 1–12 should use exactly:
+
+    ai-engineering-contracts == 1.0.0
+
+Do NOT independently upgrade one service during the first integrated POC.
+
+
+================================================================================
+VALIDATION COMMANDS
+================================================================================
+
+From the shared-contracts repository:
+
+    python -m pip install -e ".[dev]"
+
+    ruff check .
+
+    mypy src
+
+    pytest
+
+
+All four should pass before the other components are migrated.
+
+
+================================================================================
+RECOMMENDED MIGRATION ORDER
+================================================================================
+
+Do NOT attempt to edit all twelve components simultaneously.
+
+Use this order:
+
+
+STEP 1
+------
+Install the new shared-contract package.
+
+
+STEP 2
+------
+Migrate Component 11 first.
+
+Reason:
+
+Component 11 owns TaskSpecification governance, and the old Component 9
+TaskDefinition depends conceptually on this migration.
+
+
+STEP 3
+------
+Migrate Component 9.
+
+Remove TaskDefinition and use ResolvedTaskContract.
+
+
+STEP 4
+------
+Migrate Component 2.
+
+Use canonical TaskRequest, ResolvedTaskContract and CandidateArtifact.
+
+
+STEP 5
+------
+Migrate Component 10.
+
+Use canonical ExecutionRequest and ExecutionReceipt.
+
+
+STEP 6
+------
+Migrate Component 3.
+
+Use canonical GateDecision and GateDisposition.
+
+
+STEP 7
+------
+Migrate Component 4.
+
+Store canonical evidence objects.
+
+
+STEP 8
+------
+Migrate Component 5.
+
+Consume canonical RunOutcome and evidence.
+
+
+STEP 9
+------
+Migrate Component 12.
+
+Normalize external workflow data into canonical TaskRequest.
+
+
+STEP 10
+-------
+Migrate Components 6–8 to the canonical correlation and usage objects.
+
+
+STEP 11
+-------
+Search the complete codebase for these obsolete names:
+
+    class GateOutcome
+    class GateDisposition
+    class TaskDefinition
+    class CandidatePatch
+    class UsageLedger
+    class TaskRequest
+    class ExecutionReceipt
+    class ArtifactReference
+
+Outside Component 1, none should be defined locally.
+
+Imports are expected.
+
+Definitions are not.
+
+
+================================================================================
+B1 ACCEPTANCE CRITERIA
+================================================================================
+
+B1 is complete when all of the following are true:
+
+
+[1]
+
+There is exactly one GateDisposition enum.
+
+
+[2]
+
+There is exactly one TaskRequest contract.
+
+
+[3]
+
+There is exactly one CandidateArtifact contract.
+
+
+[4]
+
+There is exactly one ArtifactReference contract.
+
+
+[5]
+
+There is exactly one ExecutionReceipt contract.
+
+
+[6]
+
+There is exactly one shared RunUsageLedger.
+
+
+[7]
+
+Component 9 no longer defines TaskDefinition.
+
+
+[8]
+
+Component 11 uses the canonical TaskSpecification schema.
+
+
+[9]
+
+Component 3 returns canonical GateDecision.
+
+
+[10]
+
+Component 9 records an exact TaskSpecificationReference in every run.
+
+
+[11]
+
+Gate PASS with external approval requirements produces:
+
+    RELEASE_APPROVAL_REQUIRED
+
+and never:
+
+    PIPELINE_ERROR.
+
+
+[12]
+
+Component 12 uses canonical GateDisposition when publishing repository status.
+
+
+[13]
+
+Components 2–12 import shared contracts rather than re-declaring them.
+
+
+[14]
+
+Component 1 imports nothing from Components 2–12.
+
+
+[15]
+
+All shared-contract tests pass.
+
+
+[16]
+
+All migrated component tests pass.
+
+
+================================================================================
+B1 FINAL ARCHITECTURAL RESULT
+================================================================================
+
+Before B1, our architecture had correctly separated responsibilities, but the
+sequential design process had created several parallel vocabularies.
+
+For example:
+
+    GateOutcome
+    GateDisposition
+
+    CandidatePatch
+    candidate artifact concepts
+
+    TaskDefinition
+    TaskSpecification
+
+    multiple TaskRequest models
+
+    multiple token/usage models
+
+    multiple artifact references
+
+
+After B1, the vocabulary becomes:
+
+
+TASK
+    TaskRequest
+
+
+CAPABILITY
+    TaskSpecification
+    ResolvedTaskContract
+    TaskSpecificationReference
+
+
+CHANGE
+    CandidateArtifact
+
+
+EXECUTION
+    ExecutionRequest
+    ExecutionReceipt
+
+
+EVIDENCE
+    ArtifactReference
+    EvidenceReference
+    UncertaintyStatement
+
+
+GATE
+    GateDecision
+    GateDisposition
+
+
+ORCHESTRATION
+    OrchestrationRun
+    StateTransition
+    RunOutcome
+
+
+RESOURCE ACCOUNTING
+    AIUsage
+    RunUsageLedger
+    ResourceBudget
+
+
+CORRELATION
+    CorrelationContext
+
+
+This is the contract vocabulary that Components 2–12 should now speak.
+
+The practical architectural principle is:
+
+    COMPONENT 1 DEFINES THE LANGUAGE.
+
+    COMPONENTS 2–12 ARE NOT ALLOWED TO INVENT
+    SYNONYMS FOR SHARED CONCEPTS.
+
+That gives us the stable foundation required before B2, the explicit
+NOT-IMPLEMENTED inventory, and before we attempt the final composition root and
+end-to-end X1 test.
+

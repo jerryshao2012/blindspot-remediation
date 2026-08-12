@@ -1,0 +1,1499 @@
+B4 — COMPOSITION ROOT AND FIRST END-TO-END X1 TEST
+==================================================
+PURPOSE
+-------
+This B4 deliverable performs the next step in the agreed repository sequence:
+1. Construct a composition root that wires the previously developed logical
+   components together without allowing domain components to instantiate their
+   own infrastructure dependencies.
+2. Define one narrow X1 capability suitable for the POC.
+3. Execute one deterministic end-to-end X1 software test through the major
+   architectural boundaries:
+       TaskRequest
+           ↓
+       capability resolution
+           ↓
+       ChangeExecutionService
+           ↓
+       CandidateArtifact
+           ↓
+       ReleaseGateService
+           ↓
+       GateDecision
+           ↓
+       orchestration result
+           ↓
+       evidence preservation / workflow publication
+4. Verify several architectural invariants explicitly.
+5. Keep stochastic AI evaluation OUT of this software E2E test.
+This distinction is important:
+    tests/test_e2e/test_x1_end_to_end.py
+answers:
+    "Are the platform components correctly wired and do the important
+     architectural contracts behave as expected?"
+Component 5 / EvaluationCampaignRunner answers:
+    "How reliably does the AI automation capability solve X1 across
+     a representative hidden benchmark?"
+Those are different questions and should remain different pieces of the
+repository.
+=======================================================================
+FILE: src/l1_automation/bootstrap/__init__.py
+=======================================================================
+"""
+Composition/bootstrap package.
+This package is deliberately small.
+The composition root is the ONE place where concrete implementations are
+selected and connected to the domain/application services.
+Domain components must not import this package.
+Dependency direction should remain approximately:
+    bootstrap
+        ↓
+    application/domain
+        ↓
+    ports
+and:
+    bootstrap
+        ↓
+    infrastructure adapters
+        ↓
+    ports
+The domain therefore knows the interfaces it requires, while the composition
+root decides which implementation satisfies each interface.
+This prevents Azure SDK concerns, model-provider concerns, storage concerns,
+and workflow-provider concerns from leaking into the release-gating and
+evaluation logic.
+"""
+=======================================================================
+FILE: src/l1_automation/bootstrap/settings.py
+=======================================================================
+"""
+Validated runtime settings for the L1 automation platform.
+Important distinction
+---------------------
+Runtime infrastructure configuration and assurance policy are NOT the same
+thing.
+Examples of runtime configuration:
+    - execution mode
+    - Azure resource identifiers
+    - evidence-storage location
+    - model deployment identifier
+Examples of assurance policy:
+    - required evidence classes
+    - mutation threshold
+    - hard-veto findings
+    - evidence-generation budget
+    - gate escalation rules
+Assurance policy belongs to the versioned task capability / GatePolicy
+artifacts and must not be casually replaced with environment variables.
+This module therefore intentionally contains only bootstrap/runtime concerns.
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+from enum import StrEnum
+import os
+class RuntimeMode(StrEnum):
+    """Supported platform runtime modes."""
+    LOCAL = "local"
+    AZURE_POC = "azure_poc"
+@dataclass(frozen=True, slots=True)
+class PlatformSettings:
+    """
+    Immutable bootstrap configuration.
+    The first E2E test uses LOCAL mode deliberately. A software integration
+    test should not require an Azure subscription or live LLM endpoint merely
+    to prove that the architecture is wired correctly.
+    Production/Azure-specific settings should be introduced only through
+    concrete infrastructure adapters.
+    """
+    runtime_mode: RuntimeMode = RuntimeMode.LOCAL
+    service_name: str = "l1-engineering-automation"
+    environment_name: str = "local"
+    evidence_namespace: str = "x1-e2e"
+    @classmethod
+    def from_environment(cls) -> "PlatformSettings":
+        """
+        Construct settings from environment variables.
+        Unknown runtime modes fail immediately. We do not silently fall back
+        to LOCAL because accidentally running a production-shaped process
+        with local adapters would create a misleading operating state.
+        """
+        raw_mode = os.getenv(
+            "L1_AUTOMATION_RUNTIME_MODE",
+            RuntimeMode.LOCAL.value,
+        ).strip().lower()
+        try:
+            runtime_mode = RuntimeMode(raw_mode)
+        except ValueError as exc:
+            allowed = ", ".join(mode.value for mode in RuntimeMode)
+            raise ValueError(
+                "Unsupported L1_AUTOMATION_RUNTIME_MODE="
+                f"{raw_mode!r}. Allowed values: {allowed}."
+            ) from exc
+        service_name = os.getenv(
+            "L1_AUTOMATION_SERVICE_NAME",
+            "l1-engineering-automation",
+        ).strip()
+        environment_name = os.getenv(
+            "L1_AUTOMATION_ENVIRONMENT",
+            "local",
+        ).strip()
+        evidence_namespace = os.getenv(
+            "L1_AUTOMATION_EVIDENCE_NAMESPACE",
+            "x1-e2e",
+        ).strip()
+        for name, value in (
+            ("service_name", service_name),
+            ("environment_name", environment_name),
+            ("evidence_namespace", evidence_namespace),
+        ):
+            if not value:
+                raise ValueError(
+                    f"{name} must contain a non-empty value."
+                )
+        return cls(
+            runtime_mode=runtime_mode,
+            service_name=service_name,
+            environment_name=environment_name,
+            evidence_namespace=evidence_namespace,
+        )
+=======================================================================
+FILE: src/l1_automation/bootstrap/x1_poc.py
+=======================================================================
+"""
+B4 composition root for the first X1 proof of concept.
+WHY THIS FILE EXISTS
+--------------------
+Earlier components intentionally define responsibilities independently:
+    ChangeExecutionService
+    ReleaseGateService
+    EvidenceRepository
+    ExecutionEnvironment
+    CapabilityRegistry
+    Orchestrator
+    WorkflowIntegration
+    ...
+At some point, however, concrete objects must actually be constructed and
+connected.
+That location is the composition root.
+The composition root is intentionally NOT:
+    - a domain service;
+    - an AI agent;
+    - a release gate;
+    - an evaluation runner;
+    - a service locator used throughout the codebase.
+It is startup wiring.
+IMPORTANT ASSURANCE RULE
+------------------------
+The composition root may choose implementations.
+It must NOT weaken the assurance architecture.
+For example, it must not wire:
+    ChangeExecutionService
+        and
+    ReleaseGateService
+to a shared mutable workspace that allows the release gate accidentally to
+inherit hidden state from candidate generation.
+Likewise, it must not give ReleaseGateService access to the hidden benchmark
+oracle used by EvaluationCampaignRunner.
+The POC composition below intentionally constructs a deterministic local
+system suitable for software testing.
+The real Azure composition is NOT silently simulated here.
+Where enterprise-specific Azure configuration is required, the production
+factory raises NotImplementedError rather than returning an implementation
+that merely looks production-ready.
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+from hashlib import sha256
+from typing import Final
+from uuid import uuid4
+from .settings import PlatformSettings, RuntimeMode
+# ---------------------------------------------------------------------
+# B4 LOCAL DOMAIN TYPES
+# ---------------------------------------------------------------------
+#
+# IMPORTANT:
+#
+# B1 is the canonical owner of shared contracts in the final repository.
+#
+# These compact B4 types are deliberately isolated in this composition/test
+# slice so that the end-to-end example remains executable even while the
+# repository is being consolidated.
+#
+# During final repository reconciliation, these types should be replaced by
+# direct imports from the canonical B1 contracts.
+#
+# They are NOT competing production contracts.
+#
+# This is preferable to guessing the exact historical import paths of the
+# individually authored Components 1–12 and silently creating incompatible
+# imports.
+# ---------------------------------------------------------------------
+from dataclasses import field
+from enum import StrEnum
+class GateOutcome(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    HUMAN_REVIEW_REQUIRED = "human_review_required"
+class RunState(StrEnum):
+    RECEIVED = "received"
+    CANDIDATE_CREATED = "candidate_created"
+    GATING = "gating"
+    READY_FOR_RELEASE = "ready_for_release"
+    FAILED_GATE = "failed_gate"
+    HUMAN_REVIEW_REQUIRED = "human_review_required"
+@dataclass(frozen=True, slots=True)
+class TaskRequest:
+    task_request_id: str
+    task_type: str
+    repository_id: str
+    baseline_revision: str
+    instruction: str
+@dataclass(frozen=True, slots=True)
+class TaskSpecification:
+    task_type: str
+    version: str
+    allowed_paths: tuple[str, ...]
+    required_evidence: tuple[str, ...]
+@dataclass(frozen=True, slots=True)
+class CandidateArtifact:
+    candidate_id: str
+    task_request_id: str
+    baseline_revision: str
+    patch_text: str
+    sha256: str
+@dataclass(frozen=True, slots=True)
+class EvidenceArtifact:
+    evidence_id: str
+    candidate_id: str
+    evidence_type: str
+    passed: bool
+    details: str
+    sha256: str
+@dataclass(frozen=True, slots=True)
+class GateDecision:
+    decision_id: str
+    candidate_id: str
+    candidate_sha256: str
+    outcome: GateOutcome
+    reason_codes: tuple[str, ...]
+    evidence_ids: tuple[str, ...]
+@dataclass(frozen=True, slots=True)
+class OrchestrationResult:
+    run_id: str
+    task_request_id: str
+    candidate: CandidateArtifact
+    gate_decision: GateDecision
+    final_state: RunState
+# ---------------------------------------------------------------------
+# HELPER FUNCTIONS
+# ---------------------------------------------------------------------
+def _sha256_text(value: str) -> str:
+    """
+    Return a lowercase SHA-256 digest for UTF-8 text.
+    Content hashing is used here to demonstrate candidate/evidence binding.
+    A cryptographic digest proves byte identity/integrity; it does NOT prove
+    that the content is semantically correct.
+    """
+    return sha256(value.encode("utf-8")).hexdigest()
+# ---------------------------------------------------------------------
+# LOCAL EVIDENCE REPOSITORY
+# ---------------------------------------------------------------------
+class InMemoryEvidenceRepository:
+    """
+    Deterministic evidence repository used by the B4 software E2E test.
+    This implementation deliberately stores artifacts in memory.
+    It demonstrates the EvidenceRepository responsibility but does NOT prove:
+        - Azure Blob Storage behavior;
+        - enterprise retention;
+        - encryption configuration;
+        - managed identity;
+        - immutability policy;
+        - disaster recovery.
+    Those are infrastructure/integration concerns and must be tested against
+    their real adapters separately.
+    """
+    def __init__(self) -> None:
+        self._evidence: dict[str, EvidenceArtifact] = {}
+        self._decisions: dict[str, GateDecision] = {}
+    def save_evidence(
+        self,
+        evidence: EvidenceArtifact,
+    ) -> None:
+        if evidence.evidence_id in self._evidence:
+            existing = self._evidence[evidence.evidence_id]
+            if existing != evidence:
+                raise ValueError(
+                    "Evidence ID collision: the same evidence_id was "
+                    "used for different immutable evidence."
+                )
+            # Idempotent replay of exactly the same artifact is safe.
+            return
+        self._evidence[evidence.evidence_id] = evidence
+    def save_gate_decision(
+        self,
+        decision: GateDecision,
+    ) -> None:
+        if decision.decision_id in self._decisions:
+            existing = self._decisions[decision.decision_id]
+            if existing != decision:
+                raise ValueError(
+                    "Gate decision ID collision detected."
+                )
+            return
+        self._decisions[decision.decision_id] = decision
+    def get_evidence(
+        self,
+        evidence_id: str,
+    ) -> EvidenceArtifact:
+        try:
+            return self._evidence[evidence_id]
+        except KeyError as exc:
+            raise KeyError(
+                f"Unknown evidence_id: {evidence_id}"
+            ) from exc
+    def get_gate_decision(
+        self,
+        decision_id: str,
+    ) -> GateDecision:
+        try:
+            return self._decisions[decision_id]
+        except KeyError as exc:
+            raise KeyError(
+                f"Unknown decision_id: {decision_id}"
+            ) from exc
+    def evidence_for_candidate(
+        self,
+        candidate_id: str,
+    ) -> tuple[EvidenceArtifact, ...]:
+        return tuple(
+            evidence
+            for evidence in self._evidence.values()
+            if evidence.candidate_id == candidate_id
+        )
+# ---------------------------------------------------------------------
+# X1 CAPABILITY REGISTRY
+# ---------------------------------------------------------------------
+X1_TASK_TYPE: Final[str] = "X1"
+X1_SPECIFICATION: Final[TaskSpecification] = TaskSpecification(
+    task_type=X1_TASK_TYPE,
+    version="1.0.0",
+    allowed_paths=("src/calculator.py",),
+    required_evidence=(
+        "syntax",
+        "existing_tests",
+        "x1_acceptance",
+        "mutation_probe",
+    ),
+)
+class LocalCapabilityRegistry:
+    """
+    Minimal deterministic capability registry for B4.
+    The POC deliberately has one registered capability.
+    Unknown capabilities fail closed.
+    A production registry may load signed/versioned YAML and skill artifacts,
+    but the calling semantics should remain the same: the orchestrator asks
+    for an approved capability; it does not invent one.
+    """
+    def __init__(
+        self,
+        specifications: tuple[TaskSpecification, ...],
+    ) -> None:
+        if not specifications:
+            raise ValueError(
+                "At least one approved capability is required."
+            )
+        self._specifications = {
+            specification.task_type: specification
+            for specification in specifications
+        }
+        if len(self._specifications) != len(specifications):
+            raise ValueError(
+                "Duplicate task_type values are not permitted."
+            )
+    def resolve(
+        self,
+        task_type: str,
+    ) -> TaskSpecification:
+        try:
+            return self._specifications[task_type]
+        except KeyError as exc:
+            raise ValueError(
+                f"Task type {task_type!r} is not an approved capability."
+            ) from exc
+# ---------------------------------------------------------------------
+# DETERMINISTIC X1 CHANGE EXECUTION
+# ---------------------------------------------------------------------
+class DeterministicX1ChangeExecutionService:
+    """
+    Deterministic stand-in for Component 2 in the B4 SOFTWARE E2E test.
+    Why not call an LLM here?
+    -------------------------
+    Because B4 is verifying software composition.
+    A live LLM would make this test dependent on:
+        - network availability;
+        - credentials;
+        - model deployment;
+        - model version;
+        - stochastic generation;
+        - inference quota;
+        - inference cost.
+    Those concerns belong in separate adapter/integration tests and, more
+    importantly, Component 5 evaluation campaigns.
+    This deterministic implementation produces the exact candidate needed
+    to exercise the complete PASS path.
+    It is not presented as an AI implementation.
+    The production ChangeExecutionService from Component 2 should replace
+    this test implementation through dependency injection.
+    """
+    def execute(
+        self,
+        task: TaskRequest,
+        specification: TaskSpecification,
+    ) -> CandidateArtifact:
+        if task.task_type != specification.task_type:
+            raise ValueError(
+                "TaskRequest and TaskSpecification task types differ."
+            )
+        if specification.task_type != X1_TASK_TYPE:
+            raise ValueError(
+                "This deterministic executor supports only X1."
+            )
+        # X1 is intentionally narrow:
+        #
+        # Correct an integer addition implementation whose baseline behavior
+        # incorrectly subtracts the second operand.
+        #
+        # The patch representation is intentionally simple in B4 because the
+        # purpose is orchestration and assurance wiring, not Git patch parsing.
+        #
+        # The real Component 2 candidate contract should contain the canonical
+        # patch/repository metadata already defined elsewhere in the project.
+        patch_text = (
+            "--- a/src/calculator.py\n"
+            "+++ b/src/calculator.py\n"
+            "@@\n"
+            "-    return a - b\n"
+            "+    return a + b\n"
+        )
+        digest = _sha256_text(patch_text)
+        return CandidateArtifact(
+            candidate_id=f"candidate-{digest[:16]}",
+            task_request_id=task.task_request_id,
+            baseline_revision=task.baseline_revision,
+            patch_text=patch_text,
+            sha256=digest,
+        )
+# ---------------------------------------------------------------------
+# DETERMINISTIC X1 EVIDENCE COLLECTOR
+# ---------------------------------------------------------------------
+class DeterministicX1EvidenceCollector:
+    """
+    Produce heterogeneous deterministic evidence for the B4 PASS path.
+    This collector intentionally models FOUR distinct evidence categories.
+    It does NOT claim that these four checks are sufficient for production
+    release gating.
+    The purpose is to verify that:
+        evidence can be generated;
+        evidence can be candidate-bound;
+        evidence can be persisted;
+        gate policy can consume heterogeneous evidence.
+    Component 3 remains the owner of the full production release-gating
+    architecture, including evidence planning, diversity mapping, generated
+    tests, static analysis, mutation/adversarial analysis, and uncertainty.
+    """
+    EXPECTED_PATCH: Final[str] = (
+        "--- a/src/calculator.py\n"
+        "+++ b/src/calculator.py\n"
+        "@@\n"
+        "-    return a - b\n"
+        "+    return a + b\n"
+    )
+    def collect(
+        self,
+        candidate: CandidateArtifact,
+        specification: TaskSpecification,
+    ) -> tuple[EvidenceArtifact, ...]:
+        if candidate.sha256 != _sha256_text(candidate.patch_text):
+            raise ValueError(
+                "Candidate content hash does not match candidate bytes."
+            )
+        if specification.task_type != X1_TASK_TYPE:
+            raise ValueError(
+                "X1 evidence collector received non-X1 specification."
+            )
+        expected_patch_present = (
+            candidate.patch_text == self.EXPECTED_PATCH
+        )
+        checks = (
+            (
+                "syntax",
+                expected_patch_present,
+                "Candidate patch has the expected syntactically valid "
+                "X1 replacement form.",
+            ),
+            (
+                "existing_tests",
+                expected_patch_present,
+                "Deterministic X1 regression fixture remains satisfied.",
+            ),
+            (
+                "x1_acceptance",
+                expected_patch_present,
+                "Acceptance property verified: the X1 implementation "
+                "performs integer addition rather than subtraction.",
+            ),
+            (
+                "mutation_probe",
+                expected_patch_present,
+                "Known X1 subtraction mutant is distinguishable from "
+                "the accepted addition behavior.",
+            ),
+        )
+        artifacts: list[EvidenceArtifact] = []
+        for evidence_type, passed, details in checks:
+            payload = (
+                f"{candidate.sha256}|"
+                f"{evidence_type}|"
+                f"{passed}|"
+                f"{details}"
+            )
+            digest = _sha256_text(payload)
+            artifacts.append(
+                EvidenceArtifact(
+                    evidence_id=f"evidence-{digest[:16]}",
+                    candidate_id=candidate.candidate_id,
+                    evidence_type=evidence_type,
+                    passed=passed,
+                    details=details,
+                    sha256=digest,
+                )
+            )
+        return tuple(artifacts)
+# ---------------------------------------------------------------------
+# DETERMINISTIC RELEASE GATE
+# ---------------------------------------------------------------------
+class DeterministicX1ReleaseGateService:
+    """
+    B4 integration implementation of the release-gate boundary.
+    The full Component 3 remains richer than this class.
+    This B4 gate intentionally verifies the architectural invariants that are
+    most important for the first end-to-end software test:
+        1. decision is candidate-bound;
+        2. all required evidence classes must exist;
+        3. decisive failing evidence produces FAIL;
+        4. missing evidence produces HUMAN_REVIEW_REQUIRED;
+        5. complete passing evidence produces PASS;
+        6. the gate decision itself is persisted.
+    Notice what is NOT done:
+        - no LLM declares PASS;
+        - no weighted "AI confidence score" determines release;
+        - no hidden benchmark oracle is available;
+        - no human is secretly called from inside the gate;
+        - no candidate is repaired inside the gate.
+    Those boundaries are intentional.
+    """
+    def __init__(
+        self,
+        *,
+        evidence_repository: InMemoryEvidenceRepository,
+        evidence_collector: DeterministicX1EvidenceCollector,
+    ) -> None:
+        self._evidence_repository = evidence_repository
+        self._evidence_collector = evidence_collector
+    def evaluate(
+        self,
+        candidate: CandidateArtifact,
+        specification: TaskSpecification,
+    ) -> GateDecision:
+        evidence = self._evidence_collector.collect(
+            candidate,
+            specification,
+        )
+        for artifact in evidence:
+            self._evidence_repository.save_evidence(artifact)
+        by_type = {
+            artifact.evidence_type: artifact
+            for artifact in evidence
+        }
+        missing = tuple(
+            required
+            for required in specification.required_evidence
+            if required not in by_type
+        )
+        if missing:
+            outcome = GateOutcome.HUMAN_REVIEW_REQUIRED
+            reasons = tuple(
+                f"missing_required_evidence:{item}"
+                for item in missing
+            )
+        else:
+            failing = tuple(
+                evidence_type
+                for evidence_type in specification.required_evidence
+                if not by_type[evidence_type].passed
+            )
+            if failing:
+                outcome = GateOutcome.FAIL
+                reasons = tuple(
+                    f"required_evidence_failed:{item}"
+                    for item in failing
+                )
+            else:
+                outcome = GateOutcome.PASS
+                reasons = ("all_required_x1_evidence_passed",)
+        evidence_ids = tuple(
+            artifact.evidence_id
+            for artifact in evidence
+        )
+        decision_material = (
+            candidate.candidate_id
+            + "|"
+            + candidate.sha256
+            + "|"
+            + outcome.value
+            + "|"
+            + "|".join(reasons)
+            + "|"
+            + "|".join(evidence_ids)
+        )
+        decision_digest = _sha256_text(decision_material)
+        decision = GateDecision(
+            decision_id=f"gate-{decision_digest[:16]}",
+            candidate_id=candidate.candidate_id,
+            candidate_sha256=candidate.sha256,
+            outcome=outcome,
+            reason_codes=reasons,
+            evidence_ids=evidence_ids,
+        )
+        self._evidence_repository.save_gate_decision(decision)
+        return decision
+# ---------------------------------------------------------------------
+# WORKFLOW PUBLICATION
+# ---------------------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class WorkflowPublication:
+    run_id: str
+    task_request_id: str
+    candidate_id: str
+    gate_outcome: GateOutcome
+    final_state: RunState
+class InMemoryWorkflowPublisher:
+    """
+    Deterministic Component-12-side test adapter.
+    The real Azure DevOps adapter should publish candidate-bound status to the
+    external engineering workflow.
+    This in-memory implementation records publications so the E2E test can
+    prove that orchestration routed the result correctly.
+    It intentionally does NOT pretend to prove Azure DevOps connectivity.
+    """
+    def __init__(self) -> None:
+        self._publications: list[WorkflowPublication] = []
+    def publish(
+        self,
+        publication: WorkflowPublication,
+    ) -> None:
+        self._publications.append(publication)
+    @property
+    def publications(self) -> tuple[WorkflowPublication, ...]:
+        return tuple(self._publications)
+# ---------------------------------------------------------------------
+# ORCHESTRATOR
+# ---------------------------------------------------------------------
+class X1PocOrchestrator:
+    """
+    Deterministic orchestration for the first X1 vertical slice.
+    The orchestrator coordinates components.
+    It does NOT decide whether code is correct.
+    Specifically:
+        ChangeExecutionService
+            produces the candidate.
+        ReleaseGateService
+            produces the technical gate decision.
+        Orchestrator
+            maps that decision into lifecycle state.
+    This distinction prevents workflow control and assurance semantics from
+    becoming tangled.
+    """
+    def __init__(
+        self,
+        *,
+        capability_registry: LocalCapabilityRegistry,
+        change_execution_service: DeterministicX1ChangeExecutionService,
+        release_gate_service: DeterministicX1ReleaseGateService,
+        workflow_publisher: InMemoryWorkflowPublisher,
+    ) -> None:
+        self._capability_registry = capability_registry
+        self._change_execution_service = change_execution_service
+        self._release_gate_service = release_gate_service
+        self._workflow_publisher = workflow_publisher
+    def run(
+        self,
+        task: TaskRequest,
+    ) -> OrchestrationResult:
+        run_id = f"run-{uuid4()}"
+        specification = self._capability_registry.resolve(
+            task.task_type
+        )
+        candidate = self._change_execution_service.execute(
+            task,
+            specification,
+        )
+        decision = self._release_gate_service.evaluate(
+            candidate,
+            specification,
+        )
+        # The mapping below is intentionally deterministic.
+        #
+        # An LLM must not invent workflow transitions.
+        #
+        # If a future GateOutcome is introduced, this code should fail
+        # explicitly until orchestration semantics are intentionally updated.
+        if decision.outcome == GateOutcome.PASS:
+            final_state = RunState.READY_FOR_RELEASE
+        elif decision.outcome == GateOutcome.FAIL:
+            final_state = RunState.FAILED_GATE
+        elif (
+            decision.outcome
+            == GateOutcome.HUMAN_REVIEW_REQUIRED
+        ):
+            final_state = RunState.HUMAN_REVIEW_REQUIRED
+        else:
+            raise RuntimeError(
+                "Unsupported GateOutcome encountered. "
+                "Update deterministic orchestration policy."
+            )
+        result = OrchestrationResult(
+            run_id=run_id,
+            task_request_id=task.task_request_id,
+            candidate=candidate,
+            gate_decision=decision,
+            final_state=final_state,
+        )
+        self._workflow_publisher.publish(
+            WorkflowPublication(
+                run_id=result.run_id,
+                task_request_id=result.task_request_id,
+                candidate_id=candidate.candidate_id,
+                gate_outcome=decision.outcome,
+                final_state=final_state,
+            )
+        )
+        return result
+# ---------------------------------------------------------------------
+# COMPOSED APPLICATION
+# ---------------------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class X1PocApplication:
+    """
+    Object graph returned by the composition root.
+    Tests intentionally receive the composed application rather than
+    constructing internal dependencies themselves.
+    This gives B4 one authoritative wiring location.
+    """
+    settings: PlatformSettings
+    orchestrator: X1PocOrchestrator
+    evidence_repository: InMemoryEvidenceRepository
+    workflow_publisher: InMemoryWorkflowPublisher
+def build_local_x1_poc(
+    settings: PlatformSettings | None = None,
+) -> X1PocApplication:
+    """
+    Build the complete deterministic local X1 POC object graph.
+    This is the primary B4 composition root.
+    No component below reaches back into this function or uses a global
+    service locator.
+    Dependencies flow explicitly through constructors.
+    """
+    resolved_settings = settings or PlatformSettings(
+        runtime_mode=RuntimeMode.LOCAL,
+        service_name="l1-engineering-automation",
+        environment_name="local-e2e",
+        evidence_namespace="x1-e2e",
+    )
+    if resolved_settings.runtime_mode != RuntimeMode.LOCAL:
+        raise ValueError(
+            "build_local_x1_poc requires RuntimeMode.LOCAL."
+        )
+    evidence_repository = InMemoryEvidenceRepository()
+    capability_registry = LocalCapabilityRegistry(
+        specifications=(X1_SPECIFICATION,)
+    )
+    change_execution_service = (
+        DeterministicX1ChangeExecutionService()
+    )
+    evidence_collector = DeterministicX1EvidenceCollector()
+    release_gate_service = DeterministicX1ReleaseGateService(
+        evidence_repository=evidence_repository,
+        evidence_collector=evidence_collector,
+    )
+    workflow_publisher = InMemoryWorkflowPublisher()
+    orchestrator = X1PocOrchestrator(
+        capability_registry=capability_registry,
+        change_execution_service=change_execution_service,
+        release_gate_service=release_gate_service,
+        workflow_publisher=workflow_publisher,
+    )
+    return X1PocApplication(
+        settings=resolved_settings,
+        orchestrator=orchestrator,
+        evidence_repository=evidence_repository,
+        workflow_publisher=workflow_publisher,
+    )
+def build_azure_x1_poc(
+    settings: PlatformSettings,
+) -> X1PocApplication:
+    """
+    Build the Azure POC composition.
+    NOT IMPLEMENTED IN B4.
+    This is intentionally explicit.
+    A responsible Azure implementation requires the final enterprise-specific
+    choices documented in B2, including at minimum:
+        - Azure subscription/resource layout;
+        - managed-identity assignments;
+        - Container Apps Job resource identifiers;
+        - evidence-storage account/container;
+        - approved Azure DevOps organization/project/repository;
+        - model deployment identifiers;
+        - network restrictions;
+        - secret/credential policy;
+        - enterprise retention requirements.
+    Returning the local implementation from this function would be dangerous
+    because callers could believe they were exercising Azure controls when
+    they were not.
+    See NOT-IMPLEMENTED.md for the production implementation plan.
+    """
+    if settings.runtime_mode != RuntimeMode.AZURE_POC:
+        raise ValueError(
+            "build_azure_x1_poc requires RuntimeMode.AZURE_POC."
+        )
+    raise NotImplementedError(
+        "Azure X1 composition requires the enterprise-approved Azure "
+        "resource, identity, network, evidence-retention, model, and "
+        "Azure DevOps configuration documented in NOT-IMPLEMENTED.md. "
+        "B4 deliberately does not fabricate those values."
+    )
+def build_application(
+    settings: PlatformSettings | None = None,
+) -> X1PocApplication:
+    """
+    Public bootstrap entry point.
+    Runtime selection happens HERE rather than throughout domain code.
+    This keeps Azure-specific branching out of ChangeExecutionService,
+    ReleaseGateService, and orchestration policy.
+    """
+    resolved_settings = (
+        settings
+        if settings is not None
+        else PlatformSettings.from_environment()
+    )
+    if resolved_settings.runtime_mode == RuntimeMode.LOCAL:
+        return build_local_x1_poc(resolved_settings)
+    if resolved_settings.runtime_mode == RuntimeMode.AZURE_POC:
+        return build_azure_x1_poc(resolved_settings)
+    # RuntimeMode is currently exhaustive, but keeping an explicit terminal
+    # failure protects this function if the enum is expanded later without
+    # corresponding composition logic.
+    raise RuntimeError(
+        f"No composition is defined for runtime mode "
+        f"{resolved_settings.runtime_mode!r}."
+    )
+=======================================================================
+FILE: tests/test_e2e/test_x1_end_to_end.py
+=======================================================================
+"""
+First deterministic end-to-end test for the X1 POC.
+WHAT THIS TEST PROVES
+---------------------
+This test verifies one complete software path:
+    TaskRequest
+        ↓
+    CapabilityRegistry
+        ↓
+    ChangeExecutionService
+        ↓
+    CandidateArtifact
+        ↓
+    ReleaseGateService
+        ↓
+    EvidenceRepository
+        ↓
+    GateDecision
+        ↓
+    Orchestrator
+        ↓
+    WorkflowPublisher
+It also explicitly tests several assurance invariants.
+WHAT THIS TEST DOES NOT PROVE
+-----------------------------
+It does NOT prove that:
+    - an LLM reliably performs X1;
+    - generated tests are sufficiently diverse;
+    - the Evidence Diversity Mapper improves detection;
+    - production gate thresholds are calibrated;
+    - Azure Container Apps provides the required enterprise isolation;
+    - Azure DevOps integration works;
+    - the false-release rate is acceptable;
+    - synthetic benchmark performance transfers to real L1 work.
+Those questions belong to:
+    integration tests
+    +
+    Component 5 evaluation campaigns
+    +
+    enterprise security/platform validation.
+This separation prevents a green pytest result from being mistaken for
+evidence that the AI capability itself is qualified.
+"""
+from __future__ import annotations
+from dataclasses import replace
+from hashlib import sha256
+import pytest
+from l1_automation.bootstrap.settings import (
+    PlatformSettings,
+    RuntimeMode,
+)
+from l1_automation.bootstrap.x1_poc import (
+    CandidateArtifact,
+    DeterministicX1EvidenceCollector,
+    DeterministicX1ReleaseGateService,
+    GateOutcome,
+    InMemoryEvidenceRepository,
+    RunState,
+    TaskRequest,
+    X1_SPECIFICATION,
+    build_application,
+    build_azure_x1_poc,
+)
+def sha256_text(value: str) -> str:
+    """Test-side digest helper used to independently verify artifact identity."""
+    return sha256(value.encode("utf-8")).hexdigest()
+@pytest.fixture
+def local_settings() -> PlatformSettings:
+    """
+    Explicit local configuration.
+    Do not let this test inherit developer-machine environment variables.
+    E2E software tests should be deterministic and self-contained.
+    """
+    return PlatformSettings(
+        runtime_mode=RuntimeMode.LOCAL,
+        service_name="l1-engineering-automation-test",
+        environment_name="pytest",
+        evidence_namespace="x1-e2e-test",
+    )
+@pytest.fixture
+def x1_task() -> TaskRequest:
+    """
+    Narrow X1 task used by the first vertical slice.
+    The task is deliberately simple enough to possess a clear deterministic
+    oracle:
+        incorrect baseline:
+            a - b
+        requested behavior:
+            a + b
+    The simplicity is intentional. The first E2E test is testing architecture,
+    not attempting to demonstrate the maximum complexity of an AI coding
+    agent.
+    """
+    return TaskRequest(
+        task_request_id="task-x1-e2e-001",
+        task_type="X1",
+        repository_id="synthetic/x1-calculator",
+        baseline_revision="baseline-x1-v1",
+        instruction=(
+            "Correct the integer addition function in "
+            "src/calculator.py so that it returns a + b rather "
+            "than a - b. Do not modify other files."
+        ),
+    )
+def test_x1_end_to_end_pass_path(
+    local_settings: PlatformSettings,
+    x1_task: TaskRequest,
+) -> None:
+    """
+    Execute the complete deterministic X1 PASS path.
+    This is the central B4 test.
+    """
+    application = build_application(local_settings)
+    result = application.orchestrator.run(x1_task)
+    # -------------------------------------------------------------
+    # ASSERTION 1 — task/run correlation survives orchestration.
+    # -------------------------------------------------------------
+    assert result.task_request_id == x1_task.task_request_id
+    assert result.run_id.startswith("run-")
+    # -------------------------------------------------------------
+    # ASSERTION 2 — a real immutable candidate artifact exists.
+    # -------------------------------------------------------------
+    candidate = result.candidate
+    assert candidate.task_request_id == x1_task.task_request_id
+    assert candidate.baseline_revision == (
+        x1_task.baseline_revision
+    )
+    assert candidate.patch_text
+    # Independently recompute the digest rather than merely checking that
+    # the field is non-empty. This protects the candidate-binding invariant.
+    assert candidate.sha256 == sha256_text(
+        candidate.patch_text
+    )
+    # -------------------------------------------------------------
+    # ASSERTION 3 — gate decision is bound to EXACT candidate.
+    # -------------------------------------------------------------
+    decision = result.gate_decision
+    assert decision.candidate_id == candidate.candidate_id
+    assert decision.candidate_sha256 == candidate.sha256
+    # -------------------------------------------------------------
+    # ASSERTION 4 — required heterogeneous evidence exists.
+    # -------------------------------------------------------------
+    evidence = (
+        application.evidence_repository.evidence_for_candidate(
+            candidate.candidate_id
+        )
+    )
+    evidence_types = {
+        artifact.evidence_type
+        for artifact in evidence
+    }
+    assert evidence_types == set(
+        X1_SPECIFICATION.required_evidence
+    )
+    # Every evidence artifact must refer to the same candidate.
+    #
+    # This guards against a subtle but dangerous implementation defect where
+    # evidence from Candidate C1 could accidentally be reused for Candidate C2.
+    assert all(
+        artifact.candidate_id == candidate.candidate_id
+        for artifact in evidence
+    )
+    # -------------------------------------------------------------
+    # ASSERTION 5 — PASS requires all required evidence to pass.
+    # -------------------------------------------------------------
+    assert all(
+        artifact.passed
+        for artifact in evidence
+    )
+    assert decision.outcome == GateOutcome.PASS
+    assert decision.reason_codes == (
+        "all_required_x1_evidence_passed",
+    )
+    # -------------------------------------------------------------
+    # ASSERTION 6 — deterministic orchestration maps PASS correctly.
+    # -------------------------------------------------------------
+    assert result.final_state == RunState.READY_FOR_RELEASE
+    # IMPORTANT:
+    #
+    # READY_FOR_RELEASE means the technical gate permits progression.
+    #
+    # It does NOT mean "autonomously deployed to production."
+    #
+    # Organizational release approval remains external to this B4 slice.
+    # -------------------------------------------------------------
+    # ASSERTION 7 — decision was persisted.
+    # -------------------------------------------------------------
+    persisted_decision = (
+        application.evidence_repository.get_gate_decision(
+            decision.decision_id
+        )
+    )
+    assert persisted_decision == decision
+    # -------------------------------------------------------------
+    # ASSERTION 8 — workflow receives candidate-bound result.
+    # -------------------------------------------------------------
+    publications = application.workflow_publisher.publications
+    assert len(publications) == 1
+    publication = publications[0]
+    assert publication.run_id == result.run_id
+    assert publication.task_request_id == (
+        x1_task.task_request_id
+    )
+    assert publication.candidate_id == candidate.candidate_id
+    assert publication.gate_outcome == GateOutcome.PASS
+    assert publication.final_state == (
+        RunState.READY_FOR_RELEASE
+    )
+def test_modified_candidate_invalidates_previous_candidate_binding(
+    local_settings: PlatformSettings,
+    x1_task: TaskRequest,
+) -> None:
+    """
+    Protect one of the repository's most important invariants:
+        a gate decision applies to an exact candidate.
+    If candidate bytes change, the old PASS cannot be treated as approval for
+    the modified candidate.
+    """
+    application = build_application(local_settings)
+    result = application.orchestrator.run(x1_task)
+    original = result.candidate
+    original_decision = result.gate_decision
+    modified_patch = (
+        original.patch_text
+        + "\n# unauthorized post-gate modification\n"
+    )
+    modified_digest = sha256_text(modified_patch)
+    modified = CandidateArtifact(
+        candidate_id=f"candidate-{modified_digest[:16]}",
+        task_request_id=original.task_request_id,
+        baseline_revision=original.baseline_revision,
+        patch_text=modified_patch,
+        sha256=modified_digest,
+    )
+    assert modified.sha256 != original.sha256
+    assert modified.candidate_id != original.candidate_id
+    # The old gate decision remains a historical fact about the ORIGINAL
+    # candidate. It must not magically change identity.
+    assert original_decision.candidate_id == (
+        original.candidate_id
+    )
+    assert original_decision.candidate_sha256 == (
+        original.sha256
+    )
+    assert original_decision.candidate_sha256 != (
+        modified.sha256
+    )
+def test_gate_fails_candidate_with_decisive_negative_evidence() -> None:
+    """
+    Demonstrate failure dominance.
+    A candidate containing the original incorrect subtraction implementation
+    should not be rescued by averaging or by an AI confidence score.
+    Required deterministic evidence fails, therefore the gate returns FAIL.
+    """
+    repository = InMemoryEvidenceRepository()
+    gate = DeterministicX1ReleaseGateService(
+        evidence_repository=repository,
+        evidence_collector=DeterministicX1EvidenceCollector(),
+    )
+    incorrect_patch = (
+        "--- a/src/calculator.py\n"
+        "+++ b/src/calculator.py\n"
+        "@@\n"
+        "-    return a - b\n"
+        "+    return a - b\n"
+    )
+    digest = sha256_text(incorrect_patch)
+    candidate = CandidateArtifact(
+        candidate_id=f"candidate-{digest[:16]}",
+        task_request_id="task-negative-x1",
+        baseline_revision="baseline-x1-v1",
+        patch_text=incorrect_patch,
+        sha256=digest,
+    )
+    decision = gate.evaluate(
+        candidate,
+        X1_SPECIFICATION,
+    )
+    assert decision.outcome == GateOutcome.FAIL
+    assert decision.reason_codes
+    assert all(
+        reason.startswith("required_evidence_failed:")
+        for reason in decision.reason_codes
+    )
+def test_candidate_hash_mismatch_fails_closed() -> None:
+    """
+    The gate must not evaluate bytes whose declared identity is incorrect.
+    This is an integrity check, not a correctness check.
+    """
+    repository = InMemoryEvidenceRepository()
+    gate = DeterministicX1ReleaseGateService(
+        evidence_repository=repository,
+        evidence_collector=DeterministicX1EvidenceCollector(),
+    )
+    candidate = CandidateArtifact(
+        candidate_id="candidate-corrupted",
+        task_request_id="task-corrupted",
+        baseline_revision="baseline-x1-v1",
+        patch_text="unexpected bytes",
+        sha256="0" * 64,
+    )
+    with pytest.raises(
+        ValueError,
+        match="Candidate content hash",
+    ):
+        gate.evaluate(
+            candidate,
+            X1_SPECIFICATION,
+        )
+def test_unknown_capability_fails_closed(
+    local_settings: PlatformSettings,
+) -> None:
+    """
+    The orchestrator must not improvise behavior for an unapproved task type.
+    X2 is intentionally not registered in this POC.
+    """
+    application = build_application(local_settings)
+    unknown_task = TaskRequest(
+        task_request_id="task-x2-unapproved",
+        task_type="X2",
+        repository_id="synthetic/unknown",
+        baseline_revision="baseline",
+        instruction="Perform an unregistered task.",
+    )
+    with pytest.raises(
+        ValueError,
+        match="not an approved capability",
+    ):
+        application.orchestrator.run(unknown_task)
+def test_azure_composition_fails_explicitly_until_enterprise_inputs_exist(
+) -> None:
+    """
+    Protect against accidental fake-Azure execution.
+    B4 must not silently return local adapters when AZURE_POC was requested.
+    When the enterprise-approved Azure adapters are implemented, this test
+    should be replaced by genuine Azure integration tests rather than simply
+    deleted.
+    """
+    settings = PlatformSettings(
+        runtime_mode=RuntimeMode.AZURE_POC,
+        service_name="l1-engineering-automation",
+        environment_name="azure-poc",
+        evidence_namespace="x1-poc",
+    )
+    with pytest.raises(
+        NotImplementedError,
+        match="enterprise-approved Azure",
+    ):
+        build_azure_x1_poc(settings)
+=======================================================================
+FILE: tests/test_e2e/__init__.py
+=======================================================================
+"""
+End-to-end software tests.
+These tests exercise complete application paths.
+They must remain conceptually separate from AI evaluation campaigns.
+A green E2E test means:
+    "the software path behaves as designed."
+It does NOT mean:
+    "the AI capability is qualified for production."
+"""
+=======================================================================
+FILE: pyproject-b4-test-fragment.toml
+=======================================================================
+# B4 dependency/test fragment.
+#
+# Merge these settings into the repository's canonical pyproject.toml rather
+# than creating a second permanent project configuration file.
+#
+# No AI SDK is required for the deterministic B4 E2E test.
+[project]
+requires-python = ">=3.11"
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0,<9.0",
+]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+=======================================================================
+HOW TO RUN B4
+=======================================================================
+From the repository root, after installing the project and test dependency:
+    python -m pytest tests/test_e2e/test_x1_end_to_end.py -v
+Expected conceptual result:
+    test_x1_end_to_end_pass_path
+        PASS
+    test_modified_candidate_invalidates_previous_candidate_binding
+        PASS
+    test_gate_fails_candidate_with_decisive_negative_evidence
+        PASS
+    test_candidate_hash_mismatch_fails_closed
+        PASS
+    test_unknown_capability_fails_closed
+        PASS
+    test_azure_composition_fails_explicitly_until_enterprise_inputs_exist
+        PASS
+=======================================================================
+IMPORTANT RECONCILIATION NOTE FOR THE ACTUAL REPOSITORY
+=======================================================================
+B4 deliberately does NOT guess the exact historical Python import paths of
+Components 1–12.
+The previous components were developed independently over a long sequence of
+messages, and B1 was specifically introduced to consolidate their shared
+contracts.
+Therefore, when assembling the physical repository, perform the following
+mechanical reconciliation:
+    B4 local type
+        → canonical B1 contract
+    B4 deterministic change executor
+        → Component 2 interface
+    B4 deterministic release gate
+        → Component 3 interface
+    B4 InMemoryEvidenceRepository
+        → Component 4 EvidenceRepository port
+    B4 capability registry
+        → Component 11 registry interface
+    B4 orchestrator
+        → Component 9 orchestration interface
+    B4 workflow publisher
+        → Component 12 workflow-publication port
+The B4 classes are deliberately narrow enough that this mapping should be
+mechanical.
+DO NOT retain duplicate domain contracts after reconciliation.
+B1 remains authoritative.
+=======================================================================
+WHY B4 DOES NOT USE A REAL LLM
+=======================================================================
+This decision is important enough to state explicitly.
+A test such as:
+    model.generate_patch(...)
+    assert gate == PASS
+would mix at least four questions:
+    1. Is the repository wired correctly?
+    2. Is the model available today?
+    3. Did this stochastic model invocation happen to solve X1?
+    4. Is the release gate reliable?
+Those should not be collapsed.
+B4 therefore uses deterministic substitutes to establish the software
+vertical slice.
+The real AI implementation should be exercised through:
+    adapter/integration tests
+and:
+    EvaluationCampaignRunner
+        ×
+    validated hidden benchmark
+        ×
+    repeated runs where appropriate.
+That is where:
+    success rate
+    false release
+    false rejection
+    human-review rate
+    uncertainty
+    token consumption
+    cost
+    latency
+belong.
+=======================================================================
+WHY B4 DOES NOT IMPLEMENT AZURE BY PRETENDING
+=======================================================================
+The intended Azure POC remains consistent with the earlier architecture:
+    orchestration/application services
+            │
+            ▼
+    explicit ports
+            │
+            ├── Azure Container Apps Jobs
+            ├── Azure evidence storage
+            ├── Azure Service Bus
+            ├── Azure DevOps
+            └── approved model endpoint
+Finite-duration candidate-generation and gate workloads are a natural fit for
+a job-oriented execution model.
+However, the actual implementation requires enterprise-specific facts that
+cannot responsibly be invented in generic source code:
+    Azure resource identifiers
+    tenant/subscription configuration
+    managed identities
+    RBAC assignments
+    network architecture
+    private endpoints
+    storage retention
+    Azure DevOps organization/project/repository
+    model deployment
+    security approval
+Consequently:
+    build_azure_x1_poc(...)
+raises:
+    NotImplementedError
+until those dependencies are supplied.
+This follows the repository rule established earlier:
+    NEVER IMPLEMENT AN UNKNOWN PRODUCTION DEPENDENCY AS A FAKE SUCCESS PATH.
+=======================================================================
+B4 ARCHITECTURAL RESULT
+=======================================================================
+After B4, the repository has crossed an important boundary.
+Before B4, we primarily had:
+    components.
+After B4, we have:
+    a system.
+The first system-level path is:
+    X1 TaskRequest
+        │
+        ▼
+    approved TaskSpecification
+        │
+        ▼
+    ChangeExecutionService
+        │
+        ▼
+    immutable CandidateArtifact
+        │
+        ▼
+    ReleaseGateService
+        │
+        ├── syntax evidence
+        ├── regression evidence
+        ├── acceptance evidence
+        └── mutation evidence
+        │
+        ▼
+    deterministic GateDecision
+        │
+        ├── PASS
+        ├── FAIL
+        └── HUMAN_REVIEW_REQUIRED
+        │
+        ▼
+    deterministic Orchestrator
+        │
+        ▼
+    workflow publication
+The test also establishes several invariants:
+    UNKNOWN CAPABILITY
+        → fail closed
+    CORRUPTED CANDIDATE IDENTITY
+        → fail closed
+    DECISIVE REQUIRED-EVIDENCE FAILURE
+        → FAIL
+    COMPLETE REQUIRED EVIDENCE
+        → PASS
+    CANDIDATE MODIFICATION
+        → old gate decision does not apply
+    AZURE MODE WITHOUT APPROVED AZURE IMPLEMENTATION
+        → explicit NotImplementedError
+    PASS
+        → READY_FOR_RELEASE
+not:
+    PASS
+        → autonomous production deployment.
+=======================================================================
+WHAT B4 INTENTIONALLY LEAVES FOR THE NEXT STEPS
+=======================================================================
+B4 should NOT expand into the following work.
+Those belong to subsequent reconciliation/qualification work:
+    1. Replacing the compact B4 contracts with the final B1 canonical imports.
+    2. Wiring the actual Component 2 ChangeExecutionService.
+    3. Wiring the complete Component 3 ReleaseGateService, including the
+       Evidence Planner and Evidence Diversity Mapper.
+    4. Wiring Component 4's real evidence repository.
+    5. Running the first Component 5 hidden-oracle evaluation campaign.
+    6. Implementing the enterprise-approved Azure adapters identified in B2.
+    7. Calibrating real gate thresholds.
+    8. Measuring AI token consumption.
+    9. Running evidence-diversity and shared-blind-spot ablations.
+    10. Writing the final master README only after the repository has been
+        reconciled into its final physical structure.
+=======================================================================
+B4 COMPLETION CRITERIA
+=======================================================================
+B4 should be considered complete when all of the following are true:
+    [ ] The composition root is the only location that selects concrete
+        implementations.
+    [ ] Domain/application components do not instantiate Azure SDK clients.
+    [ ] The X1 TaskRequest resolves only through an approved capability.
+    [ ] X1 produces an immutable candidate with verifiable content identity.
+    [ ] The release gate evaluates the exact candidate.
+    [ ] Required evidence is candidate-bound.
+    [ ] PASS is produced deterministically from evidence.
+    [ ] FAIL is distinguishable from HUMAN_REVIEW_REQUIRED.
+    [ ] The orchestrator does not use an LLM to select state transitions.
+    [ ] The workflow result contains candidate identity.
+    [ ] A changed candidate invalidates the applicability of the old PASS.
+    [ ] Unknown task capabilities fail closed.
+    [ ] Candidate-integrity mismatch fails closed.
+    [ ] Azure mode cannot silently fall back to local test adapters.
+    [ ] The complete deterministic X1 E2E test passes.
+    [ ] No one interprets that passing software test as statistical
+        qualification of the AI capability.
+=======================================================================
+END OF B4
+=======================================================================

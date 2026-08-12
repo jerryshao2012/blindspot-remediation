@@ -1,0 +1,3933 @@
+B7 — FINAL CROSS-COMPONENT CONSISTENCY AND ASSURANCE REVIEW
+============================================================
+PURPOSE
+-------
+B1–B6 progressively transformed the project from an architectural idea into
+a coherent, testable repository design.
+B7 has a different purpose.
+B7 does NOT introduce another major runtime component.
+Instead, B7 asks:
+    "If we assemble everything we have designed, does it actually form
+     one internally consistent assurance system?"
+This is important because individually correct components can still create
+an incorrect system.
+For example:
+    ChangeExecutionService may correctly produce a CandidateArtifact.
+    ReleaseGateService may correctly evaluate a CandidateArtifact.
+    EvaluationCampaignRunner may correctly calculate statistics.
+Yet the overall system can still be invalid if:
+        the candidate evaluated offline is not exactly the candidate
+        produced online;
+        the gate policy used during qualification differs from the policy
+        used in production;
+        hidden oracle information leaks into online execution;
+        retries cause the same engineering task to be executed twice;
+        statistical uncertainty is calculated over the wrong unit of
+        observation;
+        AI-generated tests are treated as independent evidence when they
+        are actually correlated;
+        infrastructure failures are counted as candidate failures;
+        benchmark defects are treated as model failures;
+        token usage is measured differently by different components;
+        or a capability is changed after qualification without creating
+        a new capability identity.
+B7 therefore performs a SYSTEM-LEVEL ASSURANCE REVIEW.
+=======================================================================
+B7 CENTRAL QUESTION
+=======================================================================
+The final architecture should allow us to establish the following chain:
+    TASK REQUEST
+        │
+        ▼
+    VERSIONED CAPABILITY
+        │
+        ▼
+    CHANGE EXECUTION
+        │
+        ▼
+    EXACT CANDIDATE
+        │
+        ▼
+    RELEASE-GATE EVIDENCE
+        │
+        ▼
+    GATE DECISION
+        │
+        ▼
+    RELEASE / HUMAN-REVIEW SIGNAL / FAIL
+and separately:
+    FROZEN BENCHMARK
+        │
+        ▼
+    PUBLIC TASK
+        │
+        ▼
+    SAME ONLINE PIPELINE
+        │
+        ▼
+    EXACT CANDIDATE + EXACT GATE DECISION
+        │
+        ▼
+    HIDDEN ORACLE
+        │
+        ▼
+    TRUE OUTCOME
+        │
+        ▼
+    DECISION CLASSIFICATION
+        │
+        ▼
+    CAMPAIGN STATISTICS
+        │
+        ▼
+    QUALIFICATION DECISION
+The most important words in those diagrams are:
+    EXACT
+and:
+    SAME.
+We are not trying to demonstrate that something similar to the production
+system performs well.
+We are trying to obtain evidence about the actual versioned capability that
+will be allowed to operate.
+=======================================================================
+B7 ASSURANCE MODEL
+=======================================================================
+The architecture should now be understood as FIVE assurance layers.
+LAYER 1 — ARTIFACT INTEGRITY
+----------------------------
+Can we establish exactly:
+    what task was requested?
+    what specification applied?
+    what capability configuration was active?
+    what code was generated?
+    what evidence was collected?
+    what gate decision was made?
+    what benchmark/oracle result was obtained?
+LAYER 2 — COMPONENT CORRECTNESS
+-------------------------------
+Do individual components behave according to their contracts?
+Examples:
+    ChangeExecutionService
+    EvidencePlanner
+    EvidenceDiversityMapper
+    deterministic execution environment
+    mutation analysis
+    ReleaseGateService
+    EvaluationCampaignRunner
+LAYER 3 — CROSS-COMPONENT CONSISTENCY
+-------------------------------------
+Do those components agree about:
+    identity
+    semantics
+    failure states
+    evidence lineage
+    versioning
+    resource accounting?
+LAYER 4 — CAPABILITY VALIDITY
+-----------------------------
+Does the complete pipeline actually perform X1 acceptably on a valid,
+representative benchmark?
+LAYER 5 — DEPLOYMENT READINESS
+------------------------------
+Is the qualified capability deployed with:
+    the same relevant configuration;
+    appropriate infrastructure;
+    correct identity boundaries;
+    observable behavior;
+    and no unresolved critical implementation gap?
+A PASS at one layer does not imply PASS at the next.
+=======================================================================
+1. CANONICAL CONTRACT CONSISTENCY
+=======================================================================
+B1 remains authoritative for shared contracts.
+After B6 reconciliation there should be exactly one canonical representation
+for concepts shared between components.
+At minimum review:
+    TaskRequest
+    TaskSpecification
+    CandidateArtifact
+    EvidenceArtifact
+    ExecutionReceipt
+    GateDecision
+    GateOutcome
+    ResourceUsage
+    ModelUsage
+    CapabilityIdentity
+RULE
+----
+If two components exchange an object, they should normally share its canonical
+contract rather than independently reconstructing equivalent dataclasses.
+BAD
+---
+    ChangeExecutionCandidate
+    ReleaseGateCandidate
+    EvaluationCandidate
+all independently representing the same patch.
+GOOD
+----
+    CandidateArtifact
+used throughout.
+WHY THIS MATTERS
+----------------
+Duplicate representations eventually create semantic drift.
+For example:
+    one CandidateArtifact may hash only the patch;
+while:
+    another hashes patch + repository state.
+Both objects may be named:
+    Candidate
+but they no longer identify the same engineering artifact.
+=======================================================================
+2. CANDIDATE IDENTITY
+=======================================================================
+Candidate identity is one of the most important system-level invariants.
+A candidate should not merely mean:
+    "this text diff."
+Its identity should bind enough context to establish what was actually
+evaluated.
+Recommended conceptual identity:
+    CandidateIdentity
+        │
+        ├── candidate_id
+        ├── task_id
+        ├── repository_identity
+        ├── base_revision
+        ├── patch_sha256
+        ├── capability_identity
+        └── execution_image_digest
+The exact fields can vary depending on repository mechanics.
+The principle should not.
+A gate decision must refer to the exact candidate identity.
+An oracle assessment must refer to the exact candidate identity.
+A campaign result must refer to the exact candidate identity.
+The system must make this impossible:
+    Candidate A
+        ↓
+    gate evidence
+        ↓
+    Candidate A modified
+        ↓
+    release using old gate decision.
+=======================================================================
+3. CAPABILITY IDENTITY
+=======================================================================
+B6 introduced capability identity.
+B7 makes it an assurance requirement.
+A capability identity should bind all behaviorally important artifacts.
+Recommended conceptual structure:
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass
+@dataclass(frozen=True, slots=True)
+class CapabilityIdentity:
+    """
+    Immutable identity of the engineering capability being qualified.
+    A benchmark result is meaningful only relative to a specific capability
+    identity.
+    If any behaviorally material member changes, the system should generally
+    create a new capability identity and determine what level of
+    requalification is required.
+    """
+    capability_name: str
+    capability_version: str
+    task_specification_sha256: str
+    skill_sha256: str
+    gate_policy_sha256: str
+    eval_specification_sha256: str
+    model_configuration_id: str
+    evidence_planner_version: str
+    diversity_mapper_version: str
+    mutation_strategy_version: str
+    execution_image_digest: str
+```
+
+This does NOT mean every infrastructure change requires complete
+requalification.
+It means we must be able to distinguish:
+    behavioral configuration
+from:
+    operational deployment configuration.
+=======================================================================
+4. CHANGE EXECUTION SERVICE REVIEW
+=======================================================================
+ChangeExecutionService should have one primary responsibility:
+    transform an authorized TaskRequest + TaskSpecification into a
+    CandidateArtifact.
+It may use AI internally.
+It may use:
+    repository context
+    SKILL.md
+    task YAML
+    compiler/static artifacts
+    approved tools
+    iterative generation
+    deterministic validation
+but it should NOT make the final release decision.
+Its output should contain sufficient provenance to establish:
+    model/configuration used;
+    source revision;
+    task identity;
+    candidate hash;
+    generated patch;
+    model usage;
+    execution trace references;
+    errors encountered.
+B7 INVARIANT:
+    ChangeExecutionService proposes.
+    ReleaseGateService decides.
+Do not merge these merely because the same LLM provider happens to be useful
+to both.
+=======================================================================
+5. RELEASE GATE RESPONSIBILITY REVIEW
+=======================================================================
+ReleaseGateService should answer:
+    "Given this exact candidate and this exact gate policy,
+     is there sufficient evidence to permit automated release?"
+The possible high-level outcomes remain conceptually:
+    PASS
+    FAIL
+    HUMAN_REVIEW_REQUIRED
+HUMAN_REVIEW_REQUIRED is a SIGNAL.
+The human does not enter the internal gate algorithm.
+The gate says:
+    automated assurance is insufficient.
+An external workflow decides how human review occurs.
+The release gate should coordinate evidence rather than behave like one giant
+LLM call.
+Recommended structure:
+    CandidateArtifact
+           │
+           ▼
+      EvidencePlanner
+           │
+           ▼
+    EvidenceDiversityMapper
+           │
+           ▼
+    Evidence Collection
+           │
+     ┌─────┼───────────────────────────────┐
+     │     │             │                 │
+     ▼     ▼             ▼                 ▼
+   static compiler   deterministic      mutation /
+  analysis artifacts    tests          adversarial
+     │     │             │                 │
+     └─────┴─────────────┴─────────────────┘
+                       │
+                       ▼
+                EvidenceBundle
+                       │
+                       ▼
+                 Policy Engine
+                       │
+                       ▼
+              PASS / FAIL / REVIEW
+=======================================================================
+6. DETERMINISTIC VERSUS AI EVIDENCE
+=======================================================================
+The release gate should not classify evidence merely as:
+    AI
+versus:
+    non-AI.
+A more useful classification is:
+    evidence-generation method
+    evidence-execution method
+    evidence-interpretation method.
+For example:
+    AI generates a unit test
+            │
+            ▼
+    deterministic test runner executes it
+            │
+            ▼
+    deterministic assertion produces PASS/FAIL
+Generation is nondeterministic.
+Execution may be deterministic.
+The resulting evidence is therefore not simply:
+    "AI evidence."
+Similarly:
+    compiler AST
+        │
+        ▼
+    LLM reasoning over AST
+        │
+        ▼
+    semantic-risk hypothesis
+The underlying artifact is deterministic.
+The interpretation is nondeterministic.
+This distinction should be retained in EvidenceArtifact metadata.
+=======================================================================
+7. EVIDENCE PROVENANCE
+=======================================================================
+Every EvidenceArtifact should make its provenance inspectable.
+Recommended conceptual metadata:
+
+```python
+@dataclass(frozen=True, slots=True)
+class EvidenceProvenance:
+    """
+    Describes where evidence came from.
+    This is particularly important when AI participates in evidence creation.
+    Two tests produced by the same model from the same prompt should not be
+    treated as obviously independent merely because they are two files.
+    """
+    producer_type: str
+    producer_identity: str
+    generation_method: str
+    execution_method: str
+    interpretation_method: str
+    parent_evidence_ids: tuple[str, ...]
+    random_seed: int | None
+    model_configuration_id: str | None
+    prompt_template_sha256: str | None
+```
+
+The exact schema may evolve.
+The requirement is lineage.
+=======================================================================
+8. EVIDENCE DIVERSITY MAPPER REVIEW
+=======================================================================
+Our earlier Evidence Diversity Mapper remains useful, but B7 adds an important
+warning:
+    DIVERSITY IS NOT THE SAME AS INDEPENDENCE.
+Suppose one model generates 100 tests.
+The mapper transforms those tests into:
+    boundary tests
+    metamorphic tests
+    negative tests
+    mutation-directed tests
+    alternate-input tests.
+This is substantially better than asking:
+    "generate 100 tests."
+However, those tests may still inherit:
+    the same misunderstood requirement;
+    the same missing edge case;
+    the same semantic assumption;
+    the same model-family bias.
+Therefore the mapper should coordinate EVIDENCE COVERAGE.
+It should not claim statistical independence that has not been established.
+=======================================================================
+9. EVIDENCE FAMILY MODEL
+=======================================================================
+B7 recommends explicitly representing evidence families.
+For example:
+    FAMILY A
+        existing repository regression tests
+    FAMILY B
+        deterministic compiler/static-analysis evidence
+    FAMILY C
+        independently synthesized behavioral tests
+    FAMILY D
+        mutation-directed evidence
+    FAMILY E
+        metamorphic/property evidence
+    FAMILY F
+        alternate-model review
+    FAMILY G
+        execution/runtime evidence
+    FAMILY H
+        policy/security evidence
+The planner should reason about:
+    missing families
+rather than simply:
+    number of tests.
+Twenty tests from four meaningfully different evidence families may provide
+better assurance than 2,000 near-duplicate tests from one generation process.
+=======================================================================
+10. TEST COUNT VERSUS EVIDENCE COUNT
+=======================================================================
+This distinction is critical.
+Do NOT assume:
+    1 test = 1 independent statistical observation.
+For example:
+    one AI prompt
+        ↓
+    generate 500 parameterized test cases
+Those may provide substantial behavioral coverage.
+They do NOT necessarily provide 500 independent observations about whether
+the AI understood the requirement correctly.
+B7 therefore distinguishes:
+    execution count
+    test-case count
+    evidence-family count
+    generation lineage count
+    benchmark-case count
+    independent capability trial count.
+These quantities should not be substituted for one another.
+=======================================================================
+11. STATISTICAL UNCERTAINTY REVIEW
+=======================================================================
+The system uses statistics in at least TWO fundamentally different places.
+PLACE A — RELEASE GATE
+----------------------
+Question:
+    Is there sufficient evidence about THIS candidate?
+PLACE B — OFFLINE QUALIFICATION
+-------------------------------
+Question:
+    How reliably does THIS capability perform over a population of tasks?
+These are not the same statistical problem.
+For offline qualification, each benchmark task is usually a much more
+meaningful observational unit than each generated unit test.
+For example:
+    100 benchmark tasks
+each with:
+    300 generated tests
+does NOT automatically mean:
+    n = 30,000
+for capability success-rate confidence intervals.
+For the top-level capability metric the natural first approximation is:
+    n = 100 benchmark tasks.
+The 300 tests belong primarily to the internal evidence process for each
+candidate.
+=======================================================================
+12. CONFIDENCE INTERVAL SEMANTICS
+=======================================================================
+Confidence intervals should be attached to explicitly named quantities.
+GOOD:
+    automated false-release rate
+    task success rate
+    abstention rate
+    gate precision
+    gate recall
+    conditional success rate among automated releases
+BAD:
+    "confidence = 97%"
+without defining:
+    confidence in what?
+For a binary benchmark outcome, a binomial interval such as Wilson may be a
+reasonable starting point.
+But B7 explicitly rejects the assumption that simple binomial mathematics
+automatically solves the problem.
+Why?
+Benchmark cases may be:
+    correlated;
+    clustered by repository;
+    generated from common templates;
+    unequal in difficulty;
+    contaminated;
+    incorrectly labelled;
+    or unrepresentative of production work.
+Therefore:
+    mathematically narrow interval
+does not imply:
+    epistemically strong evidence.
+=======================================================================
+13. RELEASE-GATE STATISTICS
+=======================================================================
+For an individual candidate, deterministic evidence should normally dominate
+where deterministic evidence is available.
+Examples:
+    compilation failure
+    failing mandatory regression test
+    violated schema
+    prohibited dependency
+    critical static-analysis finding
+These should not become probabilistic votes merely because other evidence
+exists.
+For example:
+    mandatory regression test = FAIL
+should not become:
+    99 AI-generated tests PASS
+    1 mandatory test FAIL
+    -------------------------
+    99% PASS
+That is incorrect gate semantics.
+Critical evidence may have VETO behavior.
+=======================================================================
+14. GATE POLICY MODEL
+=======================================================================
+A gate policy should distinguish at least:
+    veto conditions
+    mandatory evidence
+    thresholded evidence
+    uncertainty conditions
+    abstention/review conditions.
+Conceptually:
+
+```yaml
+policy_version: "1.0"
+veto_conditions:
+  - compilation_failure
+  - mandatory_regression_failure
+  - unauthorized_file_change
+mandatory_evidence_families:
+  - repository_regression
+  - static_analysis
+  - independent_behavioral
+  - mutation_analysis
+review_conditions:
+  - insufficient_evidence_diversity
+  - unresolved_requirement_ambiguity
+  - execution_environment_failure
+  - statistical_uncertainty_too_high
+decision_semantics:
+  pass:
+    requires_no_veto: true
+    requires_all_mandatory_families: true
+  fail:
+    dominant_failure_signal: true
+  human_review_required:
+    insufficient_automated_assurance: true
+```
+
+This is illustrative.
+The actual X1 policy should be empirically calibrated and governed.
+=======================================================================
+15. MUTATION TESTING REVIEW
+=======================================================================
+Mutation testing remains useful because it asks:
+    "Would our tests notice plausible defects?"
+That is stronger than merely asking:
+    "Do our tests pass?"
+However:
+    mutation score != probability candidate is correct.
+Mutation operators represent selected fault models.
+They cannot represent every semantic defect.
+Therefore mutation evidence should be one family in the EvidenceBundle,
+not the release gate itself.
+B7 additionally recommends recording:
+    mutation operator family
+    mutants generated
+    mutants executed
+    mutants killed
+    equivalent/invalid mutants
+    surviving mutants
+    timeout/error mutants.
+A single mutation percentage can hide important information.
+=======================================================================
+16. STATIC AND STRUCTURAL EVIDENCE REVIEW
+=======================================================================
+Our earlier decision to give AI more than raw source text remains sound.
+The gate may expose controlled structural artifacts such as:
+    ASTs
+    compiler diagnostics
+    type information
+    call graphs
+    dependency graphs
+    control-flow information
+    changed-symbol maps
+    test-to-code coverage
+    lint/static-analysis findings.
+These artifacts can reduce reliance on an LLM reconstructing structure from
+text alone.
+However:
+    structured artifact
+        +
+    LLM
+        !=
+    deterministic evidence.
+If an LLM interprets a call graph, the interpretation remains model-mediated.
+The evidence metadata should preserve that distinction.
+=======================================================================
+17. AI BLIND-SPOT REVIEW
+=======================================================================
+The central concern remains:
+    if the same model creates the patch and evaluates the patch,
+    correlated blind spots may survive both processes.
+The architecture should therefore prefer diversity across:
+    evidence modality
+    generation method
+    execution mechanism
+    model/prompt where justified
+    existing human-authored repository tests
+    mutation strategies
+    structural artifacts.
+The Evidence Diversity Mapper is therefore best understood as:
+    a COORDINATION mechanism for evidence heterogeneity.
+It is not:
+    proof that blind spots have been eliminated.
+=======================================================================
+18. ALTERNATE MODEL REVIEW
+=======================================================================
+Using another model or model family may provide useful evidence diversity.
+But B7 rejects the simplistic rule:
+    Model A writes code
+        ↓
+    Model B reviews code
+        ↓
+    independent verification.
+Models may share:
+    training data
+    common coding conventions
+    benchmark exposure
+    architectural assumptions
+    similar failure modes.
+Alternate-model review is therefore:
+    additional evidence
+not:
+    an oracle.
+=======================================================================
+19. RELEASE-GATE FAILURE SEMANTICS
+=======================================================================
+The gate must preserve the difference between:
+    evidence of candidate failure
+and:
+    inability to gather evidence.
+Example:
+    Candidate compiles.
+    Test-generation model endpoint is unavailable.
+    Mandatory independent behavioral evidence cannot be produced.
+This should generally NOT become:
+    FAIL
+because we have not established candidate incorrectness.
+It should more naturally become:
+    HUMAN_REVIEW_REQUIRED
+or a typed infrastructure/assurance-unavailable state depending on the
+external workflow design.
+Conversely:
+    mandatory regression test fails reproducibly
+is actual failure evidence.
+That may produce:
+    FAIL.
+=======================================================================
+20. HUMAN REVIEW SIGNAL
+=======================================================================
+Our earlier decision remains:
+    the human does not operate inside ReleaseGateService.
+ReleaseGateService returns:
+    HUMAN_REVIEW_REQUIRED
+with machine-readable reasons.
+For example:
+
+```python
+@dataclass(frozen=True, slots=True)
+class ReviewReason:
+    code: str
+    message: str
+    evidence_ids: tuple[str, ...]
+@dataclass(frozen=True, slots=True)
+class GateDecision:
+    outcome: GateOutcome
+    candidate_id: str
+    policy_id: str
+    evidence_ids: tuple[str, ...]
+    review_reasons: tuple[ReviewReason, ...]
+    decision_timestamp_utc: str
+```
+
+The workflow layer can then:
+    create work item
+    request reviewer
+    hold release
+    notify operator
+without putting human workflow into gate logic.
+=======================================================================
+21. EVALUATION CAMPAIGN REVIEW
+=======================================================================
+The offline EvaluationCampaignRunner should invoke the same logical online
+pipeline being qualified.
+Conceptually:
+    BenchmarkCase
+         │
+         ├──────────── PUBLIC ────────────────┐
+         │                                    │
+         │                                    ▼
+         │                          ChangeExecutionService
+         │                                    │
+         │                                    ▼
+         │                            CandidateArtifact
+         │                                    │
+         │                                    ▼
+         │                           ReleaseGateService
+         │                                    │
+         │                                    ▼
+         │                              GateDecision
+         │                                    │
+         │                                    │
+         └──────────── HIDDEN ───────────┐     │
+                                        │     │
+                                        ▼     ▼
+                                   HiddenOracle
+                                        │
+                                        ▼
+                                OracleAssessment
+                                        │
+                                        ▼
+                              DecisionClassification
+The online pipeline must never receive:
+    reference patch
+    hidden expected output
+    hidden test result
+    oracle verdict.
+=======================================================================
+22. HIDDEN ORACLE REVIEW
+=======================================================================
+The hidden oracle should establish:
+    whether the candidate actually satisfies the benchmark task.
+It should NOT merely ask another LLM:
+    "Does this patch look correct?"
+A stronger oracle can combine:
+    hidden deterministic tests
+    expected behavior
+    reference artifacts
+    deterministic execution
+    carefully controlled adjudication
+    human validation during benchmark construction.
+AI may help CREATE benchmark material.
+AI may help ANALYZE benchmark material.
+But synthetic ground truth should become:
+    VALIDATED ground truth
+before qualification depends upon it.
+=======================================================================
+23. SYNTHETIC BENCHMARK FACTORY REVIEW
+=======================================================================
+Our POC assumption remains:
+    AI can help construct golden codebases containing known problems,
+    requested changes, and expected behavior.
+That is practical for creating evaluation material quickly.
+But B7 strengthens the validation sequence:
+    AI creates benchmark candidate
+             │
+             ▼
+    deterministic environment builds baseline
+             │
+             ▼
+    demonstrate known failure
+             │
+             ▼
+    apply reference correction
+             │
+             ▼
+    demonstrate expected success
+             │
+             ▼
+    run hidden tests
+             │
+             ▼
+    perturb / mutation checks
+             │
+             ▼
+    independent validation
+             │
+             ▼
+    freeze benchmark case
+The output is not:
+    AI-generated golden benchmark.
+It is:
+    AI-assisted,
+    empirically validated,
+    frozen benchmark.
+=======================================================================
+24. BENCHMARK QUALITY IS ITSELF AN EVAL PROBLEM
+=======================================================================
+B7 introduces this explicitly because it has become increasingly important
+in coding-agent evaluation.
+A benchmark case can be defective even when its tests execute perfectly.
+Possible benchmark defects include:
+    underspecified task request
+    hidden requirement not inferable from task
+    tests enforcing one implementation rather than behavior
+    low test coverage
+    ambiguous expected behavior
+    impossible task
+    incorrect reference patch
+    environment instability
+    contaminated task
+    trivial task
+    duplicate/near-duplicate task.
+Therefore benchmark construction requires its own quality gates.
+Do NOT treat:
+    hidden
+as synonymous with:
+    correct.
+=======================================================================
+25. BENCHMARK CASE VALIDATION CONTRACT
+=======================================================================
+Recommended conceptual object:
+
+```python
+@dataclass(frozen=True, slots=True)
+class BenchmarkValidation:
+    """
+    Records why a benchmark case is trusted enough for a qualification
+    campaign.
+    A hidden oracle without benchmark validation is merely hidden;
+    it is not automatically ground truth.
+    """
+    case_id: str
+    benchmark_version: str
+    baseline_failure_reproduced: bool
+    reference_fix_passes: bool
+    hidden_tests_pass_reference: bool
+    environment_reproducible: bool
+    prompt_requirement_alignment_verified: bool
+    implementation_independence_reviewed: bool
+    contamination_review_status: str
+    validator_ids: tuple[str, ...]
+    validation_notes: tuple[str, ...]
+```
+
+For the POC some fields may initially be manual.
+That is acceptable.
+Fabricating them automatically is not.
+=======================================================================
+26. BENCHMARK LEAKAGE
+=======================================================================
+The system must consider TWO different leakage problems.
+LEAKAGE TYPE A
+--------------
+Online execution receives hidden benchmark information directly.
+This is an architectural security failure.
+LEAKAGE TYPE B
+--------------
+The underlying model may already have encountered benchmark material during
+training or prior evaluation exposure.
+This is much harder to establish.
+For an internal BMO-style POC, newly generated private benchmark cases can
+reduce public benchmark contamination risk.
+But private does not automatically mean:
+    representative
+or:
+    unbiased.
+=======================================================================
+27. DECISION CONFUSION MATRIX
+=======================================================================
+For each benchmark case, compare:
+    gate decision
+against:
+    hidden oracle truth.
+Conceptually:
+                          ORACLE
+                    CORRECT      INCORRECT
+                 ┌────────────┬─────────────┐
+    GATE PASS    │ true       │ FALSE       │
+                 │ release    │ RELEASE     │
+                 ├────────────┼─────────────┤
+    GATE FAIL    │ false      │ true        │
+                 │ rejection  │ rejection   │
+                 ├────────────┼─────────────┤
+    GATE REVIEW  │ correct    │ incorrect   │
+                 │ abstention │ abstention  │
+                 └────────────┴─────────────┘
+For our use case:
+    FALSE RELEASE
+is especially important.
+This means:
+    gate = PASS
+while:
+    oracle = INCORRECT.
+A high overall accuracy can still hide an unacceptable false-release rate.
+=======================================================================
+28. CORE PIPELINE METRICS
+=======================================================================
+Recommended top-level metrics include:
+CAPABILITY SUCCESS RATE
+-----------------------
+How often does ChangeExecution produce a correct candidate?
+AUTOMATED RELEASE RATE
+----------------------
+How often does the gate permit automated release?
+FALSE RELEASE RATE
+------------------
+How often does the system automatically release an incorrect candidate?
+FALSE REJECTION RATE
+--------------------
+How often does the system reject a correct candidate?
+REVIEW / ABSTENTION RATE
+------------------------
+How often does automated assurance defer?
+CONDITIONAL RELEASE PRECISION
+-----------------------------
+Among candidates the system automatically releases:
+    how many are actually correct?
+END-TO-END AUTOMATION SUCCESS
+-----------------------------
+How often does the system:
+    generate correct code
+    AND
+    correctly permit automated release
+without human intervention?
+These metrics answer different questions.
+Do not collapse them into one "AI score."
+=======================================================================
+29. CONDITIONAL RELEASE PRECISION
+=======================================================================
+For this POC, one particularly intuitive metric is:
+    correct automated releases
+    ---------------------------
+      all automated releases
+This asks:
+    "When the platform says it is safe enough to release automatically,
+     how often is it right?"
+But this metric alone can be gamed by abstention.
+For example:
+    release only one extremely easy case
+    review the other 999
+could produce:
+    release precision = 100%
+while providing almost no automation value.
+Therefore always pair it with:
+    automated release rate.
+=======================================================================
+30. RISK-COVERAGE CURVE
+=======================================================================
+A useful system-level view is:
+    automation coverage
+versus:
+    residual error / false-release risk.
+Conceptually:
+    very conservative gate
+           │
+           ├── low automation
+           └── low false-release exposure
+    aggressive gate
+           │
+           ├── high automation
+           └── potentially higher false-release exposure
+This is more informative than searching for one magical threshold.
+The eventual business decision becomes:
+    what automation coverage is acceptable
+at:
+    what empirically demonstrated residual risk?
+That threshold is a governance/business decision informed by evaluation.
+It should not be invented by the code author.
+=======================================================================
+31. REPEATED MODEL RUNS
+=======================================================================
+Because ChangeExecutionService may be nondeterministic, one run per benchmark
+case may underestimate variability.
+For qualification, the campaign configuration should support:
+    multiple independent runs per benchmark task.
+For example:
+    X1-001
+        run 1
+        run 2
+        run 3
+    X1-002
+        run 1
+        run 2
+        run 3
+This allows measurement of:
+    task-level instability
+    success variance
+    gate variance
+    token variance.
+However:
+    three runs of one task
+do not become:
+    three independent benchmark tasks.
+Hierarchical structure should be retained.
+=======================================================================
+32. RANDOMNESS AND REPRODUCIBILITY
+=======================================================================
+Where supported and meaningful, capture:
+    model configuration
+    temperature
+    seed
+    prompt/template hash
+    tool configuration
+    repository revision
+    container image digest
+    execution environment identity.
+Even with identical values, hosted LLM behavior may not be perfectly
+reproducible.
+Therefore:
+    provenance
+is achievable more reliably than:
+    exact replay.
+The system should promise the former.
+It should not casually promise the latter.
+=======================================================================
+33. TOKEN ACCOUNTING REVIEW
+=======================================================================
+B7 confirms the earlier conclusion:
+    release gating may consume substantial tokens.
+The gate can require:
+    evidence planning
+    test synthesis
+    diversity analysis
+    code reasoning
+    mutation-directed generation
+    alternate review
+    evidence interpretation.
+Therefore we should NOT architecturally assume:
+    gate tokens < generation tokens.
+Instead measure token consumption empirically by PURPOSE.
+Recommended labels:
+    change_execution.context
+    change_execution.reasoning
+    change_execution.patch_generation
+    gate.planning
+    gate.test_generation
+    gate.diversity
+    gate.semantic_review
+    gate.mutation_generation
+    gate.evidence_interpretation
+    evaluation.benchmark_generation
+    evaluation.oracle_assistance
+=======================================================================
+34. TOKEN COUNT VERSUS TEST COUNT
+=======================================================================
+A crucial correction from our earlier discussion:
+Once an AI-generated test exists:
+    executing it repeatedly
+usually consumes:
+    compute
+not:
+    additional LLM tokens.
+Therefore narrow statistical uncertainty obtained by rerunning deterministic
+tests primarily increases:
+    sandbox CPU
+    wall time
+    infrastructure cost.
+It does not necessarily increase LLM token use.
+Token cost rises when the system repeatedly asks the model to produce:
+    new tests
+    new interpretations
+    new evidence families
+    new reviews
+    new candidate changes.
+B7 therefore requires separate accounting for:
+    LLM usage
+and:
+    deterministic execution usage.
+=======================================================================
+35. RESOURCE ACCOUNTING
+=======================================================================
+The canonical ResourceUsage should eventually include more than tokens.
+Conceptually:
+
+```python
+@dataclass(frozen=True, slots=True)
+class ResourceUsage:
+    model_usage: tuple[ModelUsage, ...]
+    sandbox_cpu_seconds: float
+    sandbox_wall_seconds: float
+    test_executions: int
+    mutation_executions: int
+    bytes_read: int = 0
+    bytes_written: int = 0
+```
+
+Component 5 aggregates.
+Component 8 performs economics/cost interpretation.
+Do not make EvaluationCampaignRunner responsible for cloud pricing.
+=======================================================================
+36. RETRY SEMANTICS
+=======================================================================
+Retries are unavoidable.
+They are also dangerous for evaluation validity.
+Suppose:
+    task message delivered
+        ↓
+    candidate generated
+        ↓
+    process crashes before acknowledgement
+        ↓
+    message redelivered
+        ↓
+    new candidate generated
+Did we perform:
+    one task with retry
+or:
+    two independent trials?
+The answer must be explicit.
+Online workflow should use idempotency semantics.
+Offline evaluation should separately represent intentional repeated trials.
+Do not let infrastructure retries accidentally inflate evaluation sample
+size.
+=======================================================================
+37. IDEMPOTENCY REVIEW
+=======================================================================
+The workflow layer should use a stable idempotency key derived from an
+external task/event identity.
+Conceptually:
+    provider
+      +
+    external_event_id
+      +
+    capability identity
+            │
+            ▼
+       idempotency key
+The consumer should atomically claim that key before beginning work.
+This remains necessary even if Service Bus duplicate detection is enabled.
+Transport duplicate suppression and business-operation idempotency solve
+related but different problems.
+=======================================================================
+38. CORRELATION IDENTIFIERS
+=======================================================================
+Every end-to-end execution should carry a stable correlation identifier.
+Recommended hierarchy:
+    correlation_id
+        │
+        ├── task_id
+        │
+        ├── run_id
+        │
+        ├── candidate_id
+        │
+        ├── evidence_ids...
+        │
+        ├── gate_decision_id
+        │
+        └── evaluation_case_id [offline only]
+This allows reconstruction of:
+    what happened
+without coupling services through shared mutable state.
+=======================================================================
+39. EVIDENCE IMMUTABILITY
+=======================================================================
+Assurance evidence should ideally be append-oriented/immutable after creation.
+If evidence can be overwritten:
+    gate decision
+        ↓
+    evidence changed
+        ↓
+    historical decision becomes unreconstructable.
+Preferred model:
+    EvidenceArtifact
+        immutable identity
+        immutable content/hash
+        timestamp
+        producer identity
+Corrections should create:
+    new evidence
+rather than silently mutate historical evidence.
+=======================================================================
+40. GATE DECISION IMMUTABILITY
+=======================================================================
+The same principle applies to GateDecision.
+A decision should identify:
+    exact candidate
+    exact policy
+    exact evidence bundle
+    exact capability identity.
+If new evidence appears later:
+    create a new gate evaluation
+rather than editing the old decision.
+This gives us an audit trail:
+    GateEvaluation 001
+        REVIEW
+    new evidence collected
+    GateEvaluation 002
+        PASS
+rather than pretending the first evaluation never occurred.
+=======================================================================
+41. EVIDENCE BUNDLE HASH
+=======================================================================
+A useful extension is to hash the canonical evidence manifest.
+Conceptually:
+    EvidenceBundleManifest
+        │
+        ├── evidence_id A
+        ├── evidence_id B
+        ├── evidence_id C
+        └── ...
+               │
+               ▼
+             SHA256
+GateDecision can then reference:
+    evidence_bundle_sha256.
+This is not a substitute for secure storage.
+It provides a compact integrity link between:
+    decision
+and:
+    evidence set.
+=======================================================================
+42. OBSERVABILITY REVIEW
+=======================================================================
+Observability must not be confused with evaluation.
+Operational telemetry can tell us:
+    latency
+    failures
+    retries
+    queue depth
+    resource consumption
+    execution errors
+    deployment health.
+These are important.
+But:
+    healthy service
+does not mean:
+    correct code generation.
+Likewise:
+    good benchmark score
+does not mean:
+    healthy production infrastructure.
+Keep:
+    capability evaluation
+and:
+    operational observability
+distinct but linkable.
+=======================================================================
+43. THE THREE-LAYER MODEL
+=======================================================================
+Our earlier model was:
+    EVALS
+      ↓
+    OPERATIONAL METRICS
+      ↓
+    BUSINESS KPIs
+B7 preserves the intuition but makes one correction.
+These are not necessarily a simple causal ladder.
+A better representation is:
+                CAPABILITY / EVAL METRICS
+                         │
+                         ▼
+                  RELEASED BEHAVIOR
+                         │
+                         ▼
+                OPERATIONAL OUTCOMES
+                         │
+                         ▼
+                  PROCESS OUTCOMES
+                         │
+                         ▼
+                    BUSINESS KPIs
+with many confounders between layers.
+For example:
+    correct mortgage-processing code
+may contribute to:
+    reduced processing latency
+which may contribute to:
+    faster mortgage completion.
+But business KPI movement can also depend on:
+    volume
+    staffing
+    market conditions
+    policy
+    customer behavior
+    upstream systems
+    downstream systems.
+Therefore do not attribute business KPI movement directly to an eval score
+without causal evidence.
+=======================================================================
+44. PROCESS OUTCOME LAYER
+=======================================================================
+B7 recommends adding the intermediate:
+    PROCESS OUTCOME
+between operational metrics and business KPIs.
+Example:
+    EVAL
+    ----
+    generated change correct
+        ↓
+    OPERATIONAL
+    -----------
+    service executes successfully
+    latency acceptable
+    no runtime error
+        ↓
+    PROCESS OUTCOME
+    ---------------
+    mortgage application completed
+    fewer manual interventions
+    reduced rework
+    shorter cycle time
+        ↓
+    BUSINESS KPI
+    ------------
+    processing cost
+    customer completion
+    revenue-related outcome
+    service-level performance
+This makes the measurement framework substantially more defensible.
+=======================================================================
+45. RELEASE VERSUS BUSINESS VALUE
+=======================================================================
+The release gate should NOT gate directly on business KPIs.
+Why?
+Business KPIs:
+    arrive later;
+    are confounded;
+    may have low sample size;
+    may be influenced by unrelated systems.
+Release gating should primarily answer:
+    technical/assurance readiness of candidate.
+Business KPIs belong downstream in:
+    value measurement
+    operational governance
+    portfolio prioritization.
+=======================================================================
+46. PIPELINE-LEVEL EVAL VERSUS RELEASE GATE
+=======================================================================
+This distinction remains fundamental.
+RELEASE GATE
+------------
+Unit of concern:
+    one candidate.
+Question:
+    should this candidate proceed automatically?
+PIPELINE-LEVEL EVALUATION
+-------------------------
+Unit of concern:
+    capability across many tasks/runs.
+Question:
+    is this automation system sufficiently reliable to be deployed for X1?
+Therefore:
+    passing one release gate
+does not qualify the pipeline.
+And:
+    qualified pipeline
+does not mean every candidate passes its gate.
+=======================================================================
+47. QUALIFICATION GATE
+=======================================================================
+B7 recommends explicitly naming a second gate:
+    CANDIDATE RELEASE GATE
+versus:
+    CAPABILITY QUALIFICATION GATE.
+Conceptually:
+    Candidate Release Gate
+    ----------------------
+    operates online
+    candidate-specific
+    high frequency
+    Capability Qualification Gate
+    -----------------------------
+    operates offline
+    campaign-specific
+    decides whether a capability/version may enter or remain in production.
+This naming prevents a great deal of conceptual confusion.
+=======================================================================
+48. QUALIFICATION POLICY
+=======================================================================
+Qualification policy may eventually specify constraints such as:
+    maximum false-release upper confidence bound
+    minimum automated-release coverage
+    minimum task success
+    maximum infrastructure failure rate
+    maximum unresolved benchmark defects
+    maximum cost per successful automated task.
+IMPORTANT:
+B7 does NOT invent numerical values.
+Those values require:
+    empirical POC results
+    task risk classification
+    engineering leadership
+    risk/governance input
+    economic analysis.
+Hard-coding arbitrary values would create fake rigor.
+=======================================================================
+49. BENCHMARK SAMPLE SIZE
+=======================================================================
+B7 explicitly rejects the idea that a small benchmark can establish extremely
+small failure probabilities merely because thousands of tests run inside
+each case.
+Suppose:
+    20 benchmark tasks
+    1,000 tests each
+    zero false releases.
+We have learned a great deal about those 20 candidates.
+We have NOT demonstrated a false-release probability of:
+    < 1 / 20,000
+for the population of future engineering tasks.
+The unit of generalization matters.
+=======================================================================
+50. STRATIFIED BENCHMARKING
+=======================================================================
+X1 itself may contain meaningful subtypes.
+For example:
+    configuration changes
+    API changes
+    validation logic
+    simple defect repair
+    dependency update
+    schema modification.
+If so, benchmark composition should record strata.
+Otherwise:
+    95% success
+could conceal:
+    100% on easy configuration changes
+and:
+    50% on schema changes.
+Qualification should eventually examine:
+    aggregate performance
+AND:
+    relevant slices.
+=======================================================================
+51. DIFFICULTY DISTRIBUTION
+=======================================================================
+Benchmark cases should also capture difficulty or complexity indicators.
+Possible descriptors:
+    changed files
+    changed symbols
+    dependency depth
+    expected patch size
+    test surface
+    repository size
+    task ambiguity
+    context required.
+These should initially be treated as descriptive covariates.
+Do not prematurely convert them into a mathematically precise universal
+"difficulty score."
+=======================================================================
+52. BENCHMARK REPRESENTATIVENESS
+=======================================================================
+A synthetic benchmark may be internally valid but externally unrepresentative.
+Example:
+    500 beautifully validated Python bug fixes
+does not necessarily represent:
+    actual L1 engineering work.
+Therefore benchmark design should ultimately compare synthetic task
+distribution against real historical X1 work characteristics.
+For the POC this can initially be a manual review.
+Later it can become a formal dataset comparison.
+=======================================================================
+53. DATA LEAKAGE BETWEEN BENCHMARK FACTORY AND PIPELINE
+=======================================================================
+If the same model generates:
+    benchmark problem
+and later:
+    candidate solution
+there may be subtle structural shortcuts even when the exact hidden solution
+is withheld.
+For example, generated tasks may share:
+    wording patterns
+    code templates
+    bug templates
+    preferred solution structures.
+B7 therefore recommends diversity in benchmark construction and validation.
+At minimum:
+    separate generation prompts/processes;
+    freeze benchmark before qualification;
+    hide oracle artifacts;
+    validate behavior deterministically;
+    inspect task diversity.
+=======================================================================
+54. EVALUATION CAMPAIGN FAILURE TAXONOMY
+=======================================================================
+Every failed campaign case should be classifiable.
+Recommended categories:
+    CHANGE_EXECUTION_FAILURE
+    INVALID_CANDIDATE
+    RELEASE_GATE_FAIL
+    RELEASE_GATE_REVIEW
+    RELEASE_GATE_INFRASTRUCTURE_FAILURE
+    ORACLE_CORRECT
+    ORACLE_INCORRECT
+    ORACLE_UNRESOLVED
+    BENCHMARK_INVALID
+    ENVIRONMENT_FAILURE
+    TIMEOUT
+Do not collapse all non-successes into:
+    failed.
+The distinctions matter for both engineering and statistics.
+=======================================================================
+55. BENCHMARK INVALIDATION
+=======================================================================
+Suppose qualification discovers:
+    benchmark task X17 is underspecified.
+Do NOT simply change the expected result and continue the same campaign
+silently.
+Instead:
+    mark X17 invalid
+    record reason
+    version benchmark if corrected
+    determine whether campaign metrics require recomputation.
+The benchmark is itself a versioned artifact.
+=======================================================================
+56. INFRASTRUCTURE FAILURES IN CAMPAIGNS
+=======================================================================
+Suppose:
+    100 tasks
+    80 valid completed runs
+    20 Azure outages.
+Reporting:
+    success = 80%
+would incorrectly treat infrastructure failures as candidate failures.
+Reporting:
+    success = 100%
+would hide severe operational unreliability.
+Therefore report separately:
+    capability outcome among valid trials
+and:
+    campaign execution reliability.
+Both matter.
+=======================================================================
+57. TIMEOUT SEMANTICS
+=======================================================================
+Timeout can mean several things:
+    model timeout
+    deterministic test timeout
+    whole candidate-generation timeout
+    release-gate evidence-budget exhaustion
+    infrastructure timeout.
+These should have distinct typed outcomes.
+A deterministic test timeout may itself be candidate evidence.
+A model endpoint timeout is generally infrastructure failure.
+An evidence-budget exhaustion may lead to review.
+Do not use one generic:
+    TIMEOUT = FAIL.
+=======================================================================
+58. EVIDENCE BUDGET
+=======================================================================
+Release gating cannot collect evidence indefinitely.
+The planner should therefore operate under a budget.
+Possible budget dimensions:
+    LLM tokens
+    model calls
+    deterministic executions
+    mutation executions
+    wall time
+    CPU time
+    monetary estimate.
+The gate must distinguish:
+    enough evidence to PASS
+    enough evidence to FAIL
+    budget exhausted without resolution.
+The third naturally supports:
+    HUMAN_REVIEW_REQUIRED.
+=======================================================================
+59. ADAPTIVE EVIDENCE COLLECTION
+=======================================================================
+The gate need not always generate the maximum evidence set.
+A reasonable future strategy is:
+    cheap deterministic evidence
+            │
+            ▼
+    obvious veto?
+       │         │
+      YES        NO
+       │         │
+       ▼         ▼
+     FAIL     structural evidence
+                    │
+                    ▼
+             sufficient confidence?
+                │         │
+               YES        NO
+                │         │
+                ▼         ▼
+             DECIDE    AI-generated /
+                       mutation evidence
+                            │
+                            ▼
+                         DECIDE /
+                          REVIEW
+This can reduce cost while retaining strong assurance.
+However, adaptive stopping changes statistical behavior and should itself be
+evaluated.
+=======================================================================
+60. EVIDENCE PLANNER VERSIONING
+=======================================================================
+Because adaptive evidence planning affects gate behavior:
+    planner version
+is part of capability identity.
+Changing:
+    evidence ordering
+    stopping rules
+    evidence budget
+    evidence-family requirements
+can materially alter:
+    release rate
+    false-release rate
+    token consumption.
+Therefore planner changes may require requalification.
+=======================================================================
+61. DIVERSITY MAPPER VERSIONING
+=======================================================================
+The same applies to Evidence Diversity Mapper.
+If mapper version 2 substantially changes:
+    test transformation
+    evidence taxonomy
+    blind-spot expansion
+    mutation selection
+then:
+    mapper v1 benchmark results
+do not automatically qualify:
+    mapper v2.
+Version it.
+=======================================================================
+62. POLICY ENGINE DETERMINISM
+=======================================================================
+Where practical, the final transformation:
+    EvidenceBundle
+         ↓
+    GateDecision
+should be deterministic given:
+    exact evidence
+    exact gate policy.
+AI can contribute evidence.
+AI can contribute interpretations that become evidence.
+But the final policy application should preferably be:
+    explicit
+    inspectable
+    reproducible.
+This makes the gate substantially easier to audit.
+=======================================================================
+63. AI SHOULD NOT SECRETLY BE THE POLICY ENGINE
+=======================================================================
+Avoid:
+
+```python
+decision = llm.ask(
+    "Here is all the evidence. Should we release?"
+)
+```
+
+as the final gate.
+That architecture hides:
+    weighting
+    veto rules
+    abstention behavior
+    policy interpretation
+inside model behavior.
+A stronger pattern is:
+    LLM
+      ↓
+    typed evidence
+    deterministic tools
+      ↓
+    typed evidence
+    mutation
+      ↓
+    typed evidence
+    typed evidence
+      ↓
+    explicit GatePolicy
+      ↓
+    GateDecision
+=======================================================================
+64. AI INTERPRETATION SHOULD BE STRUCTURED
+=======================================================================
+Where AI interpretation is necessary, require structured outputs.
+For example:
+
+```python
+@dataclass(frozen=True, slots=True)
+class SemanticRiskFinding:
+    finding_id: str
+    category: str
+    claim: str
+    severity: int
+    supporting_artifact_ids: tuple[str, ...]
+    uncertainty: str
+    model_configuration_id: str
+```
+
+This does not make the LLM correct.
+It makes its contribution:
+    inspectable
+    attributable
+    aggregatable
+    testable.
+=======================================================================
+65. PROMPT VERSIONING
+=======================================================================
+Prompt templates that materially affect:
+    code generation
+    evidence planning
+    test synthesis
+    semantic review
+should be versioned or content-hashed.
+Do not rely solely on:
+    model deployment name.
+A model with a materially changed prompt is a materially changed capability.
+=======================================================================
+66. MODEL VERSIONING
+=======================================================================
+Hosted model endpoints can introduce complications.
+The repository should capture whatever provider/deployment/model identity is
+available.
+If exact immutable model identity cannot be guaranteed, document that
+limitation.
+Do not claim:
+    exact capability reproducibility
+if the underlying hosted model may change independently.
+=======================================================================
+67. SOURCE REPOSITORY STATE
+=======================================================================
+Every candidate evaluation should bind to:
+    repository
+    base commit/revision
+    relevant dependency lock state
+    build environment.
+Otherwise a candidate may pass against:
+    revision A
+and later be released against:
+    revision B.
+That is not the same candidate context.
+=======================================================================
+68. EXECUTION ENVIRONMENT
+=======================================================================
+Deterministic execution requires a controlled environment.
+Capture at least:
+    image digest
+    runtime version
+    dependency lock identity
+    relevant environment configuration.
+Prefer:
+    immutable image digest
+over merely:
+    image tag.
+For example:
+    x1-runner:latest
+is weak evidence identity.
+=======================================================================
+69. NETWORK ACCESS DURING EXECUTION
+=======================================================================
+For a POC, deterministic test environments should preferably have restricted
+network behavior where practical.
+Why?
+External services introduce:
+    nondeterminism
+    security risk
+    data leakage
+    test instability
+    irreproducibility.
+If network access is required, it should be explicit in task policy.
+=======================================================================
+70. SECRET HANDLING
+=======================================================================
+Generated code and test execution should not receive broad production secrets.
+The sandbox should use:
+    synthetic data
+    test credentials
+    scoped identity
+    least privilege.
+Release gating should never need broad production credentials merely to
+determine candidate quality.
+=======================================================================
+71. HIDDEN ORACLE IDENTITY BOUNDARY
+=======================================================================
+B6 required separate Azure execution identities.
+B7 makes the assurance reasoning explicit:
+    CHANGE IDENTITY
+        cannot read hidden oracle
+    GATE IDENTITY
+        cannot read hidden oracle
+    ORACLE IDENTITY
+        can read hidden oracle
+This boundary should be verified at:
+    source dependency level
+AND:
+    Azure RBAC / workload identity level.
+One without the other is insufficient.
+=======================================================================
+72. SERVICE BUS CONSISTENCY
+=======================================================================
+Current Azure messaging semantics reinforce the design:
+    Peek-lock
+        provides at-least-once delivery behavior.
+Therefore:
+    duplicate processing remains possible.
+Duplicate detection can suppress repeated sends with the same MessageId
+within its configured window.
+It does not eliminate the need for:
+    idempotent consumers.
+Therefore the workflow architecture remains:
+    stable external event identity
+              │
+              ▼
+         MessageId
+              │
+              ▼
+        Service Bus
+              │
+              ▼
+       idempotent claim
+              │
+              ▼
+        orchestration run
+=======================================================================
+73. DEAD-LETTER HANDLING
+=======================================================================
+Poison or repeatedly failing workflow messages should not retry forever.
+The Azure workflow adapter should eventually support:
+    delivery count
+    explicit abandon
+    explicit completion
+    dead-letter
+    diagnostic evidence.
+A dead-lettered task is:
+    workflow/infrastructure outcome.
+It is not automatically:
+    candidate FAIL.
+=======================================================================
+74. AUDIT EVENT MODEL
+=======================================================================
+B7 recommends a common audit-event envelope.
+Conceptually:
+
+```python
+@dataclass(frozen=True, slots=True)
+class AuditEvent:
+    event_id: str
+    event_type: str
+    correlation_id: str
+    task_id: str | None
+    run_id: str | None
+    candidate_id: str | None
+    component: str
+    component_version: str
+    occurred_at_utc: str
+    payload_sha256: str
+```
+
+The actual event payload can remain component-specific.
+The envelope creates a consistent trace across the platform.
+=======================================================================
+75. LOGGING VERSUS EVIDENCE
+=======================================================================
+Logs are not automatically assurance evidence.
+Logs are optimized for:
+    diagnosis
+    operations
+    observability.
+Evidence artifacts are optimized for:
+    gate reasoning
+    evaluation
+    auditability.
+A log entry may support evidence.
+But the gate should not scrape arbitrary log text and treat it as a stable
+assurance contract.
+=======================================================================
+76. EVIDENCE RETENTION
+=======================================================================
+B7 does not choose a BMO retention period.
+That is an enterprise decision.
+However, the design should permit retention policy to distinguish:
+    source/task artifacts
+    generated candidate
+    generated tests
+    execution logs
+    gate evidence
+    gate decisions
+    benchmark artifacts
+    hidden oracle artifacts.
+Hidden benchmark material may require stronger access controls than ordinary
+gate evidence.
+=======================================================================
+77. PII AND SENSITIVE DATA
+=======================================================================
+The POC should avoid real customer information.
+Synthetic benchmark repositories and tasks should contain:
+    synthetic data
+or:
+    appropriately sanitized enterprise-safe data.
+LLM prompts, evidence artifacts, and telemetry should be designed assuming
+they may contain source-code context.
+Data classification therefore matters even when customer PII is absent.
+=======================================================================
+78. COMPONENT DEPENDENCY DIRECTION
+=======================================================================
+The desired dependency direction remains:
+    CONTRACTS
+        ▲
+        │
+    DOMAIN / APPLICATION
+        ▲
+        │
+    PORTS
+        ▲
+        │
+    INFRASTRUCTURE ADAPTERS
+        ▲
+        │
+    COMPOSITION ROOT
+Not:
+    ReleaseGateService
+        imports Azure Blob SDK
+or:
+    ChangeExecutionService
+        constructs ServiceBusClient.
+Infrastructure should depend inward through implemented ports.
+Core assurance logic should not depend outward on Azure details.
+=======================================================================
+79. CROSS-COMPONENT IMPORT REVIEW
+=======================================================================
+Before B7 is considered complete, inspect the repository import graph for:
+    circular dependencies
+    infrastructure imports in domain modules
+    evaluation imports in online modules
+    hidden-oracle imports in online modules
+    duplicate contract definitions
+    duplicate ports
+    duplicate enums
+    duplicate error taxonomies.
+Circular imports are often symptoms of responsibilities that have not been
+cleanly separated.
+=======================================================================
+80. EXCEPTION TAXONOMY REVIEW
+=======================================================================
+At minimum distinguish:
+    ConfigurationError
+    InfrastructureUnavailableError
+    ContractValidationError
+    CandidateGenerationError
+    CandidateValidationError
+    EvidencePlanningError
+    EvidenceCollectionError
+    ExecutionEnvironmentError
+    GatePolicyError
+    OracleError
+    BenchmarkValidationError
+    CampaignExecutionError
+Typed exceptions should retain:
+    cause
+    component
+    correlation identity
+where useful.
+Do not convert all exceptions into:
+    RuntimeError("failed").
+=======================================================================
+81. FAIL-CLOSED VERSUS FAIL-SAFE
+=======================================================================
+"Fail closed" requires careful semantics.
+For release authorization:
+    uncertainty should not silently produce PASS.
+That is correct.
+But uncertainty also should not automatically mean:
+    candidate technically incorrect.
+Therefore the system can be conservative about release while still preserving
+truthful classification.
+Example:
+    gate evidence unavailable
+        ↓
+    NO AUTOMATED RELEASE
+        ↓
+    HUMAN_REVIEW_REQUIRED
+rather than:
+    FAIL
+unless failure evidence actually exists.
+=======================================================================
+82. TEST PYRAMID FOR THIS REPOSITORY
+=======================================================================
+The repository requires several different test categories.
+LEVEL 1
+-------
+ordinary deterministic unit tests.
+LEVEL 2
+-------
+contract/schema tests.
+LEVEL 3
+-------
+component integration tests.
+LEVEL 4
+-------
+architecture-boundary tests.
+LEVEL 5
+-------
+local deterministic end-to-end X1 tests.
+LEVEL 6
+-------
+Azure integration tests.
+LEVEL 7
+-------
+offline AI capability/evaluation campaigns.
+These should not all run as ordinary CI unit tests.
+=======================================================================
+83. WHAT ORDINARY CI SHOULD TEST
+=======================================================================
+Every pull request can reasonably test:
+    syntax
+    typing where configured
+    deterministic unit tests
+    contract tests
+    architecture tests
+    local E2E fixture
+    policy parser
+    deterministic gate semantics
+    statistics implementation
+    serialization
+    hashing
+    idempotency logic.
+This should be relatively fast and deterministic.
+=======================================================================
+84. WHAT SHOULD NOT RUN ON EVERY COMMIT
+=======================================================================
+Large AI evaluation campaigns may involve:
+    substantial token consumption
+    many deterministic executions
+    nondeterminism
+    long runtime.
+Therefore they should normally run:
+    on qualification
+    on material capability changes
+    on scheduled regression campaigns
+    or when explicitly requested.
+Do not disguise a qualification campaign as a unit test.
+=======================================================================
+85. GOLDEN TEST FOR GATE SEMANTICS
+=======================================================================
+B7 recommends a deterministic table-driven gate test.
+Example cases:
+    compilation failure
+        => FAIL
+    mandatory regression failure
+        => FAIL
+    all mandatory evidence present and passing
+        => PASS
+    required evidence unavailable
+        => HUMAN_REVIEW_REQUIRED
+    conflicting non-veto evidence
+        => HUMAN_REVIEW_REQUIRED
+    insufficient diversity
+        => HUMAN_REVIEW_REQUIRED
+These tests should require:
+    zero LLM calls.
+They verify policy semantics rather than AI capability.
+=======================================================================
+86. METAMORPHIC TESTS FOR THE GATE
+=======================================================================
+Useful deterministic properties include:
+PROPERTY 1
+----------
+Adding irrelevant positive evidence should not override a veto.
+PROPERTY 2
+----------
+Removing required evidence should never convert REVIEW into PASS.
+PROPERTY 3
+----------
+Changing candidate identity should invalidate reuse of prior gate decision.
+PROPERTY 4
+----------
+Changing gate-policy identity should require a new gate evaluation.
+PROPERTY 5
+----------
+Reordering evidence should not change deterministic policy outcome.
+PROPERTY 6
+----------
+Duplicate evidence should not increase confidence merely because it appears
+twice.
+These are powerful system tests.
+=======================================================================
+87. DUPLICATE EVIDENCE HANDLING
+=======================================================================
+Evidence should have stable IDs/hashes.
+The gate should not count:
+    same test result
+submitted 50 times as:
+    50 pieces of evidence.
+Deduplicate at least exact duplicates.
+Near-duplicate/correlated evidence is harder and belongs partly to the
+Evidence Diversity Mapper.
+=======================================================================
+88. NEGATIVE TESTS
+=======================================================================
+The POC should deliberately verify that bad candidates are rejected.
+Examples:
+    syntax-breaking patch
+    mandatory test regression
+    unauthorized-file modification
+    incomplete implementation
+    obvious semantic reversal
+    patch that merely changes tests to hide failure.
+These cases are important because a gate evaluated only on good candidates
+cannot establish false-release behavior.
+=======================================================================
+89. ADVERSARIAL CANDIDATES
+=======================================================================
+A useful later benchmark extension is to construct candidates that:
+    superficially satisfy visible tests
+but:
+    violate hidden behavior.
+This directly tests whether the gate is vulnerable to:
+    test overfitting.
+Mutation machinery can help create some of these cases.
+AI can help generate others.
+They must still be validated before becoming benchmark ground truth.
+=======================================================================
+90. TEST-TAMPERING DETECTION
+=======================================================================
+For many X1 task types, candidate changes to tests may require special policy.
+Example:
+    requested task modifies production code
+but candidate:
+    deletes failing regression test.
+The gate should detect:
+    changed test artifacts
+    changed build configuration
+    disabled checks
+    modified assertions
+where those are outside authorized task scope.
+This is a strong candidate for deterministic policy evidence.
+=======================================================================
+91. SCOPE ENFORCEMENT
+=======================================================================
+TaskSpecification should define allowed scope where feasible.
+For example:
+    allowed paths
+    prohibited paths
+    permitted dependency changes
+    maximum file count
+    maximum patch size
+    required validation commands.
+These are task-type policy decisions.
+They should not be hidden inside ChangeExecutionService prompts.
+=======================================================================
+92. X1 SHOULD REMAIN BOUNDED
+=======================================================================
+The POC should resist expanding X1 while the architecture is being validated.
+The objective is not:
+    demonstrate autonomous software engineering generally.
+The objective is:
+    demonstrate that a bounded L1 task type can be:
+        specified
+        executed
+        independently gated
+        evaluated
+        measured
+        and audited.
+A narrow credible result is more useful than a broad ambiguous demo.
+=======================================================================
+93. ONE END-TO-END X1 PATH
+=======================================================================
+The minimum credible demonstration remains:
+    TaskRequest
+        ↓
+    CapabilityRegistry
+        ↓
+    TaskSpecification + Skill + GatePolicy
+        ↓
+    ChangeExecutionService
+        ↓
+    CandidateArtifact
+        ↓
+    ReleaseGateService
+        ↓
+    GateDecision
+        ↓
+    Workflow result
+and offline:
+    BenchmarkCase
+        ↓
+    SAME PATH
+        ↓
+    Candidate + GateDecision
+        ↓
+    HiddenOracle
+        ↓
+    CampaignMetrics
+Everything else can initially be mocked/manual where explicitly documented.
+=======================================================================
+94. MINIMUM POC EVIDENCE FAMILIES
+=======================================================================
+For the bounded X1 POC, a reasonable architecture should at least be able to
+represent:
+    existing regression tests
+    generated behavioral tests
+    static/compiler evidence
+    mutation evidence
+    scope/policy evidence.
+This does NOT mean every X1 candidate must use exactly these five families.
+The final policy should be empirically informed.
+The purpose is to demonstrate heterogeneous evidence orchestration.
+=======================================================================
+95. MINIMUM POC CAMPAIGN
+=======================================================================
+A credible POC campaign should include:
+    correctable benchmark tasks
+    deliberately difficult tasks
+    candidates that should pass
+    candidates that should fail
+    situations that should cause review
+    repeated AI runs
+    benchmark validation records
+    token/resource accounting.
+B7 intentionally does not specify a magic number of benchmark cases.
+Sample size should follow the precision required for the decision.
+=======================================================================
+96. STATISTICAL PLANNING BEFORE CAMPAIGN
+=======================================================================
+Do not run a benchmark and only afterward ask:
+    "Is this enough data?"
+Before qualification define:
+    primary metric
+    unacceptable failure event
+    desired uncertainty
+    intended benchmark population
+    planned number of cases/runs
+    stopping rule
+    handling of invalid cases.
+This reduces post-hoc metric selection.
+=======================================================================
+97. MULTIPLE METRICS
+=======================================================================
+Because we will measure many metrics, avoid selecting whichever result looks
+best after the campaign.
+Identify:
+    PRIMARY qualification metrics
+and:
+    SECONDARY diagnostic metrics.
+For example, false-release behavior may deserve primary status.
+Token consumption may be secondary for assurance but primary for economics.
+The exact hierarchy is a project/governance decision.
+=======================================================================
+98. CONFIDENCE INTERVAL IMPLEMENTATION
+=======================================================================
+B7 recommends implementing statistical intervals in a small deterministic
+statistics module rather than relying on LLM calculation.
+Example:
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass
+from math import sqrt
+from statistics import NormalDist
+@dataclass(frozen=True, slots=True)
+class ProportionInterval:
+    """
+    Confidence interval for a binomial proportion.
+    IMPORTANT:
+    This mathematical interval assumes the supplied observations are suitable
+    for the binomial model.
+    The function cannot determine whether benchmark cases are independent,
+    representative, uncontaminated, or correctly labelled.
+    Those are evaluation-design questions.
+    """
+    successes: int
+    trials: int
+    estimate: float
+    lower: float
+    upper: float
+    confidence_level: float
+def wilson_interval(
+    *,
+    successes: int,
+    trials: int,
+    confidence_level: float = 0.95,
+) -> ProportionInterval:
+    """
+    Compute a two-sided Wilson score interval.
+    Wilson is preferable to the naive Wald interval for many finite-sample
+    binomial settings, particularly near probabilities 0 and 1.
+    This implementation is deterministic and has no LLM dependency.
+    """
+    if trials <= 0:
+        raise ValueError(
+            "trials must be greater than zero."
+        )
+    if not 0 <= successes <= trials:
+        raise ValueError(
+            "successes must satisfy 0 <= successes <= trials."
+        )
+    if not 0.0 < confidence_level < 1.0:
+        raise ValueError(
+            "confidence_level must lie strictly between 0 and 1."
+        )
+    alpha = 1.0 - confidence_level
+    z = NormalDist().inv_cdf(
+        1.0 - alpha / 2.0
+    )
+    n = float(trials)
+    p_hat = successes / n
+    z_squared = z * z
+    denominator = (
+        1.0
+        + z_squared / n
+    )
+    center = (
+        p_hat
+        + z_squared / (2.0 * n)
+    ) / denominator
+    half_width = (
+        z
+        * sqrt(
+            (
+                p_hat * (1.0 - p_hat) / n
+            )
+            + (
+                z_squared
+                / (4.0 * n * n)
+            )
+        )
+        / denominator
+    )
+    return ProportionInterval(
+        successes=successes,
+        trials=trials,
+        estimate=p_hat,
+        lower=max(
+            0.0,
+            center - half_width,
+        ),
+        upper=min(
+            1.0,
+            center + half_width,
+        ),
+        confidence_level=confidence_level,
+    )
+```
+
+This function should be unit-tested against known values.
+Do not ask an LLM to calculate campaign confidence intervals.
+=======================================================================
+99. ZERO-FAILURE INTERPRETATION
+=======================================================================
+A campaign with:
+    zero false releases
+does NOT establish:
+    false-release probability = 0.
+It establishes:
+    zero observed false releases
+over:
+    N applicable observations.
+The upper uncertainty bound remains non-zero.
+This is precisely why small campaigns cannot support extremely strong safety
+claims.
+=======================================================================
+100. CLUSTERED DATA
+=======================================================================
+If benchmark cases are clustered within repositories or task families,
+ordinary binomial intervals may understate uncertainty.
+For the initial POC:
+    report cluster structure
+    slice results by repository/task type
+    avoid exaggerated precision.
+A later mature evaluation framework may use:
+    hierarchical models
+    cluster bootstrap
+    mixed-effects approaches
+depending on dataset structure.
+B7 does NOT require that sophistication for the first POC.
+=======================================================================
+101. RELEASE-GATE CALIBRATION
+=======================================================================
+The gate should be calibrated OFFLINE.
+Do not tune thresholds repeatedly against the same final qualification set.
+Preferred conceptual split:
+    DEVELOPMENT / CALIBRATION SET
+             │
+             ▼
+       tune gate policy
+    QUALIFICATION SET
+             │
+             ▼
+       estimate performance
+If sample size is initially limited, document that the same data was reused
+and reduce the strength of conclusions accordingly.
+=======================================================================
+102. HIDDEN QUALIFICATION SET
+=======================================================================
+Where feasible, keep a final subset hidden from:
+    prompt tuning
+    planner tuning
+    gate-threshold tuning
+    evidence-mapper tuning.
+Otherwise repeated iteration can overfit the benchmark itself.
+This is ordinary evaluation discipline applied to engineering agents.
+=======================================================================
+103. CAMPAIGN MANIFEST
+=======================================================================
+Every qualification campaign should produce an immutable manifest containing
+at least:
+    campaign_id
+    benchmark_version
+    capability_identity
+    software_commit
+    execution_image_digest
+    model configuration
+    gate policy identity
+    planner version
+    diversity mapper version
+    campaign configuration
+    start/end timestamps
+    case IDs.
+This allows later reconstruction of what was actually qualified.
+=======================================================================
+104. CAMPAIGN REPORT
+=======================================================================
+The report should separate:
+    EXECUTION SUMMARY
+    CAPABILITY PERFORMANCE
+    GATE PERFORMANCE
+    ABSTENTION / REVIEW
+    FALSE RELEASES
+    FALSE REJECTIONS
+    UNCERTAINTY
+    RESOURCE USAGE
+    BENCHMARK QUALITY ISSUES
+    INFRASTRUCTURE FAILURES
+    SLICE RESULTS
+    LIMITATIONS.
+Do not report only:
+    overall score.
+=======================================================================
+105. FALSE-RELEASE CASE REVIEW
+=======================================================================
+Every false release should become a first-class investigation artifact.
+For each:
+    what was the task?
+    what candidate was generated?
+    what evidence was collected?
+    why did the gate pass?
+    what did the oracle detect?
+    which evidence family was missing?
+    did the mapper fail?
+    did the policy fail?
+    was the benchmark itself valid?
+This is more useful than merely decrementing a metric.
+=======================================================================
+106. FAILURE ATTRIBUTION
+=======================================================================
+A pipeline failure can originate from:
+    model capability
+    task specification
+    context retrieval
+    change executor
+    evidence planner
+    diversity mapper
+    test generation
+    deterministic runner
+    gate policy
+    benchmark
+    oracle
+    infrastructure.
+Evaluation should preserve enough evidence to investigate these possibilities.
+Do not assume every incorrect candidate means:
+    "LLM failed."
+=======================================================================
+107. RELEASE-GATE EVALS
+=======================================================================
+The gate itself should have dedicated evaluation cases independent of
+end-to-end ChangeExecution performance.
+For example, feed the gate:
+    known-good candidate
+    known-bad candidate
+    ambiguous candidate
+    insufficient-evidence candidate
+    test-tampering candidate
+    mutation-surviving candidate.
+This measures:
+    gate discrimination
+without confounding it with candidate generation.
+=======================================================================
+108. CHANGE-EXECUTION EVALS
+=======================================================================
+Likewise ChangeExecutionService can be evaluated independently using:
+    known tasks
+    oracle assessment of resulting patch.
+This helps distinguish:
+    poor generation
+from:
+    poor gating.
+But final qualification still requires end-to-end evaluation.
+=======================================================================
+109. COMPONENT EVALS VERSUS SYSTEM EVALS
+=======================================================================
+The relationship is:
+    COMPONENT EVALS
+         │
+         ├── diagnose
+         ├── tune
+         └── localize failures
+    SYSTEM EVALS
+         │
+         └── establish end-to-end capability
+Strong component metrics cannot substitute for system evaluation.
+Strong system metrics without component metrics make failures difficult to
+diagnose.
+We need both.
+=======================================================================
+110. CONTRACT TESTS
+=======================================================================
+Every adapter implementing a shared port should satisfy common contract tests.
+For example:
+    EvidenceRepository contract test
+should run against:
+    InMemoryEvidenceRepository
+and later:
+    AzureBlobEvidenceRepository.
+This prevents adapters from implementing subtly different semantics.
+=======================================================================
+111. SERIALIZATION TESTS
+=======================================================================
+Canonical artifacts should support round-trip serialization where they cross
+process boundaries.
+Test:
+    object
+      ↓
+    serialize
+      ↓
+    deserialize
+      ↓
+    equivalent object
+especially for:
+    TaskRequest
+    CandidateArtifact
+    EvidenceArtifact
+    GateDecision
+    CampaignManifest.
+Schema version should be explicit where long-lived persistence is expected.
+=======================================================================
+112. SCHEMA EVOLUTION
+=======================================================================
+Once artifacts are persisted, schema evolution becomes real.
+Do not assume:
+    Python dataclass changed
+therefore:
+    historical JSON remains readable.
+Persisted contracts should eventually include:
+    schema_version.
+Migration policy can remain simple for the POC.
+But silent incompatibility should be avoided.
+=======================================================================
+113. CLOCKS AND TIMESTAMPS
+=======================================================================
+Use UTC timestamps for persisted events/evidence.
+Do not use local workstation time as canonical audit time.
+Where timing matters for duration, use a monotonic clock internally.
+Wall-clock timestamp and elapsed duration solve different problems.
+=======================================================================
+114. HASHING
+=======================================================================
+Use a deterministic canonical serialization before hashing structured
+artifacts.
+Avoid:
+    hash(str(python_object))
+because representation may not be stable.
+For JSON-like artifacts:
+    sorted keys
+    stable separators
+    UTF-8
+    explicit schema
+should be used before SHA-256.
+=======================================================================
+115. HASHING DOES NOT CREATE TRUST
+=======================================================================
+A hash establishes:
+    content identity/integrity relationship.
+It does NOT establish:
+    content correctness
+    trustworthy origin
+    authorization.
+Those require:
+    validation
+    identity
+    access control
+    potentially signatures/attestation in a mature system.
+Do not overstate what SHA-256 achieves.
+=======================================================================
+116. SECURITY REVIEW BOUNDARY
+=======================================================================
+B7 is an assurance architecture review.
+It is NOT a complete enterprise security architecture.
+Before production, separate security work would still be needed for:
+    threat modeling
+    network architecture
+    IAM
+    secrets
+    software supply chain
+    container scanning
+    dependency governance
+    audit policy
+    data classification
+    incident response.
+The POC architecture should make those integrations possible.
+It should not claim to have completed them.
+=======================================================================
+117. SUPPLY-CHAIN EVIDENCE
+=======================================================================
+A mature gate may eventually consume deterministic supply-chain evidence such
+as:
+    dependency vulnerability scan
+    approved package source
+    container scan
+    SBOM
+    signing/attestation
+    provenance.
+These are valuable evidence families.
+They are not required to demonstrate the core POC unless X1 specifically
+requires them.
+Do not expand scope unnecessarily.
+=======================================================================
+118. WHAT MUST REMAIN OUTSIDE RELEASEGATESERVICE
+=======================================================================
+ReleaseGateService should NOT own:
+    Jira integration
+    human-review UI
+    business KPI calculation
+    benchmark generation
+    benchmark hidden oracle
+    cloud pricing
+    production deployment
+    organization-wide policy administration.
+It should own:
+    candidate-specific automated assurance decision.
+Keeping this boundary narrow makes the component understandable and testable.
+=======================================================================
+119. WHAT MUST REMAIN OUTSIDE CHANGEEXECUTIONSERVICE
+=======================================================================
+ChangeExecutionService should NOT own:
+    final release authorization
+    hidden oracle
+    benchmark scoring
+    business KPIs
+    human workflow
+    qualification decision.
+It should own:
+    candidate generation/execution according to authorized task specification.
+=======================================================================
+120. WHAT MUST REMAIN OUTSIDE EVALUATIONCAMPAIGNRUNNER
+=======================================================================
+EvaluationCampaignRunner should NOT:
+    change production code
+    silently tune gate thresholds
+    modify benchmark truth
+    calculate business ROI
+    approve production deployment.
+It should:
+    run frozen evaluation configuration
+    collect results
+    compare with hidden oracle
+    compute metrics/uncertainty
+    produce evidence for qualification.
+=======================================================================
+121. COMPOSITION ROOT REVIEW
+=======================================================================
+B6 correctly centralized infrastructure selection.
+B7 requires:
+    one composition root
+or:
+    explicitly separated online/offline composition roots sharing the same
+    canonical online components.
+Avoid hidden construction such as:
+
+```python
+class ReleaseGateService:
+    def __init__(self):
+        self.model = AzureOpenAIClient(...)
+```
+
+Prefer:
+
+```python
+class ReleaseGateService:
+    def __init__(
+        self,
+        *,
+        evidence_planner,
+        evidence_collectors,
+        policy_engine,
+        evidence_repository,
+    ):
+        ...
+```
+
+The composition root decides concrete implementations.
+=======================================================================
+122. OFFLINE COMPOSITION
+=======================================================================
+Offline evaluation may require additional privileged components:
+    online composition
+        +
+    benchmark repository
+        +
+    hidden oracle
+        +
+    campaign result repository.
+Conceptually:
+    OnlineApplicationComposition
+               │
+               ▼
+    EvaluationApplicationComposition
+        ├── online_pipeline
+        ├── benchmark_repository
+        ├── hidden_oracle
+        └── campaign_runner
+This reinforces:
+    evaluation wraps online pipeline.
+It does not create a separate imitation of it.
+=======================================================================
+123. DEPLOYMENT QUALIFICATION LINK
+=======================================================================
+A deployment should eventually be able to answer:
+    "Which qualification evidence authorizes this capability identity?"
+Conceptually:
+    Deployment
+       │
+       ├── capability_identity
+       ├── software_commit
+       ├── image_digest
+       └── qualification_campaign_id
+This does not require a sophisticated release-management platform for the
+POC.
+The data relationship should nevertheless exist.
+=======================================================================
+124. MATERIAL CHANGE POLICY
+=======================================================================
+Not every change should trigger the same requalification burden.
+A future policy can classify changes:
+    NON-BEHAVIORAL
+        logging change
+        documentation
+        telemetry destination
+    POTENTIALLY BEHAVIORAL
+        dependency update
+        execution image change
+    BEHAVIORAL
+        model change
+        prompt change
+        skill change
+        gate policy change
+        planner change
+        diversity mapper change
+The required requalification level can then depend on classification.
+B7 defines the concept.
+It does not invent BMO governance thresholds.
+=======================================================================
+125. NOT-IMPLEMENTED REVIEW
+=======================================================================
+B2 remains the authoritative unresolved-capability register.
+B7 requires checking every entry against source code.
+For each NI item:
+    Does code exist?
+    Does it raise NotImplementedError?
+    Is the NI identifier referenced?
+    Is a local adapter available?
+    Is the missing piece infrastructure-specific?
+    Is there a test proving failure is explicit?
+    Would accidental invocation appear successful?
+Any discrepancy is a B7 defect.
+=======================================================================
+126. NO FAKE PRODUCTION IMPLEMENTATIONS
+=======================================================================
+This remains a strict rule.
+BAD:
+
+```python
+class AzureHiddenOracle:
+    def evaluate(self, candidate):
+        return OracleAssessment(correct=True)
+```
+
+GOOD:
+
+```python
+class AzureHiddenOracle:
+    def evaluate(self, candidate):
+        raise NotImplementedError(
+            "NI-07: Azure hidden-oracle execution requires the "
+            "enterprise-approved isolated execution implementation."
+        )
+```
+
+A demo that fails explicitly is more trustworthy than a demo containing
+plausible fake production behavior.
+=======================================================================
+127. PLACEHOLDER REVIEW
+=======================================================================
+Search repository for:
+    TODO
+    FIXME
+    pass
+    ...
+    NotImplementedError
+    placeholder
+    mock
+    fake
+    temporary
+    hardcoded
+Not every occurrence is wrong.
+Every occurrence should be intentional and explainable.
+Particularly investigate:
+    `pass`
+inside production-shaped classes.
+=======================================================================
+128. COMMENT QUALITY REVIEW
+=======================================================================
+The code was intentionally written to be accessible to junior scientists and
+engineers.
+B7 should preserve comments that explain:
+    WHY a boundary exists
+    WHY AI is or is not used
+    WHY a failure becomes REVIEW rather than FAIL
+    WHY benchmark truth is hidden
+    WHY confidence intervals use benchmark cases rather than test count
+    WHY token usage and deterministic compute are separated.
+Avoid comments that merely restate syntax.
+BAD:
+    # Increment counter.
+    counter += 1
+GOOD:
+    # Count intentional capability trials rather than infrastructure retries.
+    # Otherwise Service Bus redelivery could artificially increase the
+    # evaluation sample size.
+    trial_count += 1
+=======================================================================
+129. TYPE HINT REVIEW
+=======================================================================
+Public interfaces should have complete type annotations.
+Prefer:
+    immutable dataclasses
+    enums
+    protocols/ABCs
+    typed result objects
+over:
+    dict[str, Any]
+for assurance-critical boundaries.
+Flexible dictionaries may remain appropriate for:
+    provider-specific raw metadata
+provided they are not the sole representation of critical semantics.
+=======================================================================
+130. ENUM REVIEW
+=======================================================================
+Important finite states should be enums rather than arbitrary strings.
+Examples:
+    GateOutcome
+    DecisionClassification
+    EvidenceStatus
+    CampaignCaseStatus
+    RuntimeMode.
+This reduces:
+    "human_review"
+versus:
+    "review"
+versus:
+    "needs_human"
+semantic drift.
+=======================================================================
+131. OPTIONAL VALUE REVIEW
+=======================================================================
+`None` should mean something explicit.
+For example:
+    oracle_assessment=None
+could mean:
+    oracle not run
+    oracle failed
+    oracle unresolved
+    online mode
+Those are different.
+Where ambiguity matters, prefer explicit status enums.
+=======================================================================
+132. DETERMINISM REVIEW
+=======================================================================
+Every component should document whether it is expected to be:
+    deterministic
+    nondeterministic
+    conditionally deterministic.
+Examples:
+    SHA-256 hashing
+        deterministic
+    policy evaluation
+        should be deterministic
+    compiler
+        deterministic within controlled environment
+    LLM test generation
+        nondeterministic
+    hosted model generation
+        nondeterministic even with strong replay controls
+    benchmark oracle
+        ideally deterministic where possible.
+This classification helps interpret reruns.
+=======================================================================
+133. TIME-OF-CHECK / TIME-OF-USE
+=======================================================================
+The system must avoid:
+    gate candidate A
+        ↓
+    repository changes
+        ↓
+    release something different.
+The released artifact should be tied to the exact gated candidate.
+This can be implemented later through:
+    commit SHA
+    artifact digest
+    signed provenance
+depending on deployment architecture.
+The POC should at minimum preserve identity.
+=======================================================================
+134. CONCURRENCY
+=======================================================================
+Two tasks may target the same repository/base revision concurrently.
+Potential conflict:
+    Task A generates patch from revision R
+    Task B generates patch from revision R
+    A merges
+    B's assumptions may now be stale.
+This is not primarily an AI problem.
+The workflow/repository integration eventually needs:
+    optimistic concurrency
+    branch isolation
+    merge/rebase policy
+    stale-base detection.
+For the first POC, serial execution is acceptable if explicitly documented.
+=======================================================================
+135. CACHING
+=======================================================================
+Caching can reduce:
+    token cost
+    compilation cost
+    repeated analysis.
+But cached evidence must be keyed to all relevant identities.
+Unsafe cache key:
+    task_type = X1
+Safer conceptual key:
+    candidate hash
+    +
+    evidence generator version
+    +
+    execution environment
+    +
+    policy-relevant configuration.
+Never reuse evidence merely because two tasks look similar.
+=======================================================================
+136. MODEL RESPONSE CACHING
+=======================================================================
+If model outputs are cached for reproducibility/cost:
+    cache hit
+must still record:
+    original model identity
+    prompt identity
+    cached artifact identity.
+Evaluation reports should distinguish:
+    fresh model call
+from:
+    replayed cached result
+if that distinction matters to the campaign.
+=======================================================================
+137. COST MODEL REVIEW
+=======================================================================
+Component 8 should receive measured resource usage.
+It should not infer usage from:
+    number of benchmark cases
+or:
+    number of tests.
+Cost model inputs should include measured:
+    input tokens
+    output tokens
+    model calls
+    execution time
+    mutation runs
+    storage
+    relevant infrastructure utilization.
+This allows later scenario modeling without contaminating assurance logic.
+=======================================================================
+138. BUSINESS VALUE REVIEW
+=======================================================================
+Value assessment should remain outside the gate.
+For L1 automation, eventual business metrics may include:
+    contractor effort displaced
+    cycle-time reduction
+    review effort
+    rework
+    incident impact
+    cost per successful automated task
+    automation coverage.
+But the POC should first establish:
+    can the system perform and gate X1 credibly?
+ROI calculated on an unreliable automation rate is not meaningful.
+=======================================================================
+139. OPERATING METRICS
+=======================================================================
+Once deployed, useful operational metrics may include:
+    tasks received
+    tasks completed
+    task latency
+    candidate-generation latency
+    gate latency
+    infrastructure error rate
+    review rate
+    token usage
+    deterministic compute
+    queue depth
+    retry rate
+    dead-letter rate.
+These describe system operation.
+They should not automatically be interpreted as quality metrics.
+=======================================================================
+140. POST-RELEASE QUALITY SIGNALS
+=======================================================================
+Although feedback loops are intentionally outside our current scope, B7 notes
+that production outcomes may eventually provide signals such as:
+    rollback
+    incident
+    regression
+    downstream test failure
+    human correction.
+Those may later inform evaluation.
+They should not be added to the current POC until the forward assurance path
+is stable.
+=======================================================================
+141. ARCHITECTURE TEST EXTENSIONS
+=======================================================================
+B6 created repository architecture checks.
+B7 recommends extending them with:
+    no duplicate canonical enums
+    no hidden-oracle imports from online packages
+    no Azure SDK imports from domain/application packages
+    no assurance thresholds in environment variables
+    no benchmark repository imports from ChangeExecutionService
+    no benchmark repository imports from ReleaseGateService
+    no direct workflow/Jira dependency inside ReleaseGateService.
+These tests encode architectural intent.
+=======================================================================
+142. CROSS-COMPONENT CONTRACT TEST
+=======================================================================
+A particularly valuable deterministic test should verify:
+    ChangeExecutionService output
+            │
+            ▼
+    can be consumed directly by ReleaseGateService
+            │
+            ▼
+    GateDecision references same candidate ID
+            │
+            ▼
+    Evaluation adapter receives same candidate and decision
+            │
+            ▼
+    HiddenOracle assessment references same candidate ID.
+No conversion layer should silently change identity.
+=======================================================================
+143. END-TO-END TRACE TEST
+=======================================================================
+A local deterministic X1 fixture should verify:
+    correlation_id
+persists across:
+    task
+    candidate
+    evidence
+    gate decision
+    evaluation observation.
+This test requires no AI.
+Its purpose is auditability.
+=======================================================================
+144. GATE EVIDENCE LINEAGE TEST
+=======================================================================
+Construct:
+    seed tests
+        ↓
+    diversity mapper
+        ↓
+    derived tests
+        ↓
+    execution results.
+Verify every derived artifact retains:
+    parent evidence ID.
+This allows later analysis of correlated evidence.
+=======================================================================
+145. ORACLE ISOLATION TEST
+=======================================================================
+At source level:
+    importing online composition
+must not import hidden-oracle implementation.
+At Azure integration level:
+    change identity
+and:
+    gate identity
+should be tested to confirm they cannot access hidden oracle storage.
+A denied access attempt is useful evidence that the boundary actually exists.
+=======================================================================
+146. STATISTICS UNIT TESTS
+=======================================================================
+The deterministic statistics module should test:
+    zero successes
+    all successes
+    small n
+    large n
+    invalid successes
+    invalid trials
+    invalid confidence level.
+It should also compare known results against a trusted statistical
+implementation during development.
+The production module itself should not require an LLM.
+=======================================================================
+147. CAMPAIGN REPRODUCIBILITY TEST
+=======================================================================
+For a fully deterministic fixture campaign:
+    same benchmark
+    +
+    same deterministic adapters
+    +
+    same configuration
+should produce:
+    identical campaign metrics
+    identical decision classifications
+    identical artifact hashes where timestamps are excluded from content
+    identity.
+This verifies the campaign machinery independently of LLM nondeterminism.
+=======================================================================
+148. AI CAMPAIGN REPEATABILITY TEST
+=======================================================================
+For AI-backed campaigns, exact equality should NOT be expected.
+Instead verify:
+    all provenance recorded
+    all runs uniquely identified
+    metrics aggregate correctly
+    failures are classified
+    resource usage captured.
+The evaluation system should accommodate nondeterminism rather than pretending
+it does not exist.
+=======================================================================
+149. QUALIFICATION REPORT LIMITATIONS
+=======================================================================
+Every qualification report should contain a limitations section.
+At minimum discuss:
+    benchmark size
+    benchmark representativeness
+    synthetic-data dependence
+    model nondeterminism
+    benchmark validation quality
+    possible correlated evidence
+    confidence interval assumptions
+    unresolved NI items
+    infrastructure differences between POC and production.
+This is part of high-quality assurance work.
+It is not a weakness in the report.
+=======================================================================
+150. CURRENT ARCHITECTURAL STRENGTHS
+=======================================================================
+After B1–B7, the strongest aspects of the design are:
+    1. Change generation and release authorization are separated.
+    2. Release gating combines deterministic and AI-assisted evidence.
+    3. Evidence Diversity Mapper addresses evidence monoculture.
+    4. Final gate policy can remain deterministic.
+    5. Human review is an external workflow outcome rather than hidden
+       inside the gate.
+    6. Pipeline-level evaluation is separate from candidate release gating.
+    7. Offline evaluation wraps the same online pipeline.
+    8. Hidden oracle is architecturally separated.
+    9. Synthetic benchmarks are validated rather than automatically trusted.
+    10. Statistical uncertainty is explicit.
+    11. Test count is not confused with independent sample size.
+    12. Token cost is separated from deterministic compute cost.
+    13. Capability identity binds behaviorally important configuration.
+    14. Azure composition is separated from domain logic.
+    15. Missing production adapters fail explicitly.
+These are strong foundations for the POC.
+=======================================================================
+151. CURRENT ARCHITECTURAL WEAKNESSES
+=======================================================================
+The main remaining weaknesses are not primarily software-class-design
+problems.
+They are empirical.
+We do not yet know:
+    how well X1 can actually be automated;
+    how frequently correlated LLM blind spots survive the gate;
+    how much Evidence Diversity Mapper improves false-release behavior;
+    what evidence families are sufficient;
+    what mutation strategies are useful for X1;
+    what release coverage can be achieved at acceptable risk;
+    how large the benchmark must be;
+    how representative synthetic tasks will be;
+    how much gate token consumption will be;
+    how frequently the gate will abstain;
+    whether alternate-model evidence materially improves performance;
+    how expensive qualification campaigns become.
+These questions require experiments.
+More architecture alone cannot answer them.
+=======================================================================
+152. CURRENT MARKET / RESEARCH UNCERTAINTY
+=======================================================================
+Coding-agent benchmarks continue to expose an uncomfortable reality:
+    benchmark construction itself is difficult.
+Even widely used software-engineering benchmarks can contain:
+    broken tasks
+    overly restrictive tests
+    underspecified requirements
+    inadequate coverage
+    contamination.
+Therefore our hidden synthetic oracle must not be granted automatic authority
+simply because it is hidden and deterministic.
+This strengthens, rather than weakens, the case for:
+    benchmark validation
+    versioning
+    human inspection of benchmark construction
+    transparent limitations.
+=======================================================================
+153. WHAT B7 DOES NOT CLAIM
+=======================================================================
+B7 does NOT establish that:
+    autonomous L1 replacement is safe;
+    X1 is economically attractive;
+    the gate can achieve a specific false-release rate;
+    AI-generated tests eliminate blind spots;
+    mutation testing proves correctness;
+    synthetic benchmarks perfectly represent real work;
+    confidence intervals solve benchmark bias;
+    alternate models provide independent verification;
+    Azure architecture alone provides assurance;
+    the Evidence Diversity Mapper is empirically superior.
+Those are hypotheses to test.
+=======================================================================
+154. B7 CRITICAL INVARIANTS
+=======================================================================
+Before calling the architecture coherent, verify all of the following:
+[ ] ONE canonical TaskRequest.
+[ ] ONE canonical TaskSpecification.
+[ ] ONE canonical CandidateArtifact.
+[ ] ONE canonical GateDecision.
+[ ] ONE canonical GateOutcome.
+[ ] ONE canonical ResourceUsage representation.
+[ ] Candidate identity binds repository/base revision and patch.
+[ ] GateDecision references exact CandidateArtifact identity.
+[ ] Evidence references exact candidate identity.
+[ ] OracleAssessment references exact candidate identity.
+[ ] Campaign result references exact capability identity.
+[ ] ChangeExecutionService cannot make final release authorization.
+[ ] ReleaseGateService cannot access hidden oracle.
+[ ] ReleaseGateService does not contain human workflow.
+[ ] ReleaseGateService does not contain business KPI logic.
+[ ] Final policy evaluation is deterministic where practical.
+[ ] AI-generated evidence records provenance.
+[ ] Derived evidence records lineage.
+[ ] Duplicate evidence cannot inflate evidence count.
+[ ] Evidence diversity is not labelled statistical independence.
+[ ] Critical deterministic failures can veto.
+[ ] Missing mandatory evidence cannot produce PASS.
+[ ] Infrastructure failure is distinguishable from candidate failure.
+[ ] HUMAN_REVIEW_REQUIRED is a first-class gate outcome.
+[ ] Offline evaluation invokes the same online pipeline.
+[ ] Hidden oracle receives the exact candidate generated online.
+[ ] Online pipeline cannot receive hidden oracle artifacts.
+[ ] Synthetic benchmark cases are validated before qualification.
+[ ] Benchmark invalidity is a first-class outcome.
+[ ] Benchmark version is immutable within a campaign.
+[ ] Capability version is immutable within a campaign.
+[ ] Model/prompt/policy identities are recorded.
+[ ] Repeated model runs are distinguished from benchmark sample count.
+[ ] Infrastructure retries do not increase trial count.
+[ ] Token usage is measured by component/purpose.
+[ ] Deterministic compute is measured separately from LLM tokens.
+[ ] Confidence intervals identify their statistical unit.
+[ ] False-release rate is explicitly measured.
+[ ] Automated-release coverage is explicitly measured.
+[ ] Release precision is paired with release coverage.
+[ ] Invalid benchmark cases are not silently counted as model failures.
+[ ] Azure Service Bus consumers are idempotent.
+[ ] Dead-letter outcomes are operational outcomes, not candidate failures.
+[ ] Change/gate/oracle identities are separated.
+[ ] Hidden-oracle access denial is tested.
+[ ] Azure SDK dependencies remain outside domain/application logic.
+[ ] Assurance policy is versioned rather than hidden in environment variables.
+[ ] NOT-IMPLEMENTED.md matches actual source state.
+[ ] Every production-relevant NotImplementedError has a tracked NI identifier.
+[ ] No fake production implementation silently returns success.
+[ ] Local deterministic E2E X1 test passes.
+[ ] Deterministic gate-policy tests pass.
+[ ] Architecture-boundary tests pass.
+[ ] Evaluation-campaign machinery passes deterministic fixture tests.
+[ ] Qualification report contains limitations.
+=======================================================================
+155. B7 MACHINE-ENFORCED REPOSITORY REVIEW
+=======================================================================
+A small repository audit command is worthwhile.
+It should aggregate the B6 architecture checks and fail CI when critical
+architectural invariants are violated.
+FILE:
+    src/l1_automation/architecture/b7_review.py
+
+```python
+"""
+B7 repository-level architecture review.
+This module intentionally performs STATIC checks only.
+It does not claim to prove:
+    Azure RBAC isolation,
+    benchmark validity,
+    model quality,
+    gate accuracy,
+    or statistical representativeness.
+Those require runtime/integration/evaluation evidence.
+The purpose of this module is narrower:
+    catch architectural drift cheaply and continuously.
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+from pathlib import Path
+from l1_automation.architecture.repository_check import (
+    ArchitectureViolation,
+    run_repository_architecture_checks,
+)
+@dataclass(frozen=True, slots=True)
+class B7ReviewReport:
+    """
+    Machine-readable result of the static B7 repository review.
+    """
+    passed: bool
+    package_root: Path
+    violations: tuple[ArchitectureViolation, ...]
+def run_b7_static_review(
+    *,
+    package_root: Path,
+) -> B7ReviewReport:
+    """
+    Execute all currently implemented static architecture checks.
+    IMPORTANT:
+    `passed=True` means:
+        no known STATIC repository-boundary violations were found.
+    It does NOT mean:
+        the capability is qualified for production.
+    Keeping that distinction explicit prevents CI architecture checks from
+    being mistaken for AI capability assurance.
+    """
+    if not package_root.exists():
+        raise FileNotFoundError(
+            f"Package root does not exist: {package_root}"
+        )
+    if not package_root.is_dir():
+        raise NotADirectoryError(
+            f"Package root is not a directory: {package_root}"
+        )
+    violations = (
+        run_repository_architecture_checks(
+            package_root
+        )
+    )
+    return B7ReviewReport(
+        passed=not violations,
+        package_root=package_root,
+        violations=violations,
+    )
+def format_b7_review(
+    report: B7ReviewReport,
+) -> str:
+    """
+    Produce a human-readable CI/developer report.
+    """
+    if report.passed:
+        return (
+            "B7 STATIC ARCHITECTURE REVIEW: PASS\n"
+            f"Package root: {report.package_root}\n"
+            "No configured static architecture violations were found.\n"
+            "\n"
+            "NOTE: This is not a capability qualification result."
+        )
+    lines = [
+        "B7 STATIC ARCHITECTURE REVIEW: FAIL",
+        f"Package root: {report.package_root}",
+        "",
+        "Violations:",
+    ]
+    for violation in report.violations:
+        lines.append(
+            f"- {violation.path}:{violation.line} "
+            f"[{violation.rule}] "
+            f"{violation.details}"
+        )
+    lines.extend(
+        [
+            "",
+            "Resolve these architecture violations before treating the",
+            "repository as B7-consistent.",
+        ]
+    )
+    return "\n".join(
+        lines
+    )
+```
+
+=======================================================================
+156. B7 COMMAND-LINE ENTRYPOINT
+=======================================================================
+FILE:
+    tools/run_b7_review.py
+
+```python
+"""
+Developer/CI entrypoint for the B7 static architecture review.
+Usage:
+    python tools/run_b7_review.py
+Exit codes:
+    0
+        static B7 review passed
+    1
+        static B7 violations found
+    2
+        review could not be executed
+This command deliberately does NOT run an AI evaluation campaign.
+"""
+from __future__ import annotations
+from pathlib import Path
+from l1_automation.architecture.b7_review import (
+    format_b7_review,
+    run_b7_static_review,
+)
+def main() -> int:
+    repository_root = (
+        Path(__file__)
+        .resolve()
+        .parents[1]
+    )
+    package_root = (
+        repository_root
+        / "src"
+        / "l1_automation"
+    )
+    try:
+        report = run_b7_static_review(
+            package_root=package_root
+        )
+    except (
+        FileNotFoundError,
+        NotADirectoryError,
+        RuntimeError,
+    ) as exc:
+        print(
+            "B7 STATIC ARCHITECTURE REVIEW: ERROR"
+        )
+        print(
+            str(exc)
+        )
+        return 2
+    print(
+        format_b7_review(
+            report
+        )
+    )
+    return (
+        0
+        if report.passed
+        else 1
+    )
+if __name__ == "__main__":
+    raise SystemExit(
+        main()
+    )
+```
+
+=======================================================================
+157. B7 CI TEST
+=======================================================================
+FILE:
+    tests/architecture/test_b7_repository_review.py
+
+```python
+"""
+Ensure repository changes preserve the B7 static architecture invariants.
+This test is intentionally inexpensive and deterministic.
+It should be suitable for ordinary pull-request CI.
+"""
+from __future__ import annotations
+from pathlib import Path
+from l1_automation.architecture.b7_review import (
+    format_b7_review,
+    run_b7_static_review,
+)
+def test_repository_passes_b7_static_review() -> None:
+    package_root = (
+        Path(__file__)
+        .resolve()
+        .parents[2]
+        / "src"
+        / "l1_automation"
+    )
+    report = run_b7_static_review(
+        package_root=package_root
+    )
+    assert report.passed, (
+        format_b7_review(
+            report
+        )
+    )
+```
+
+=======================================================================
+158. RECOMMENDED B7 TEST COMMANDS
+=======================================================================
+Ordinary deterministic repository verification:
+    python tools/run_b7_review.py
+then:
+    pytest tests/architecture -q
+then:
+    pytest tests/configuration -q
+then:
+    pytest tests/bootstrap -q
+then:
+    pytest -m "not azure and not evaluation"
+Then run the deterministic B4 X1 end-to-end fixture.
+Then run deterministic B5 campaign fixtures.
+Only after those are clean should the Azure integration and AI-backed
+qualification campaigns be interpreted.
+=======================================================================
+159. B7 REVIEW RECORD
+=======================================================================
+For meaningful repository milestones, retain a small review record:
+    software commit
+    date/time
+    reviewer
+    B7 static result
+    unit-test result
+    deterministic E2E result
+    Azure integration status
+    evaluation campaign ID
+    unresolved NI items.
+This can eventually be generated automatically.
+For the POC, a version-controlled Markdown record is sufficient.
+=======================================================================
+160. B7 DEFINITION OF "READY FOR QUALIFICATION"
+=======================================================================
+The repository is READY FOR QUALIFICATION when:
+    contracts are reconciled;
+    local deterministic tests pass;
+    gate semantics are tested;
+    architecture boundaries pass;
+    benchmark is frozen and validated;
+    hidden oracle is isolated;
+    capability identity is frozen;
+    qualification configuration is frozen;
+    unresolved NI items do not invalidate the intended experiment;
+    resource accounting is functioning;
+    campaign runner is functioning.
+This is NOT the same as:
+    READY FOR PRODUCTION.
+=======================================================================
+161. B7 DEFINITION OF "READY FOR PRODUCTION"
+=======================================================================
+B7 deliberately does not attempt to declare production readiness.
+Production readiness would additionally require evidence concerning:
+    enterprise Azure implementation
+    security review
+    IAM
+    networking
+    resilience
+    operational support
+    deployment controls
+    observability
+    data governance
+    qualification results
+    accepted risk thresholds
+    business ownership
+    incident/rollback procedures.
+Those depend on BMO-specific implementation and governance.
+=======================================================================
+162. WHAT SHOULD HAPPEN IF THE POC PERFORMS POORLY
+=======================================================================
+Do not immediately respond by adding more agents.
+Use the evidence to determine whether the limiting factor is:
+    task ambiguity
+    generation
+    context
+    test quality
+    evidence diversity
+    mutation quality
+    gate policy
+    benchmark quality
+    model capability.
+The correct answer may be:
+    narrow X1 further.
+Or:
+    require human review for certain strata.
+Or:
+    automate only part of the task.
+The architecture should support these conclusions rather than presupposing
+full L1 automation.
+=======================================================================
+163. WHAT SHOULD HAPPEN IF THE POC PERFORMS WELL
+=======================================================================
+A strong POC still does not establish:
+    all L1 work can be replaced.
+It establishes something narrower and more valuable:
+    a defined X1 capability,
+    under a defined configuration,
+    achieved measured performance,
+    on a defined validated benchmark,
+    with a defined automated release policy.
+Then expansion can occur:
+    X1
+      ↓
+    X2
+      ↓
+    X3
+with separate qualification evidence.
+=======================================================================
+164. THE UNIT OF AUTOMATION
+=======================================================================
+This leads to an important architectural conclusion.
+The unit of automation should not be:
+    "L1 developer."
+It should be:
+    qualified task capability.
+For example:
+    X1 — qualified
+    X2 — qualified with review
+    X3 — not qualified
+    X4 — unsupported
+This is substantially more defensible than declaring:
+    "L1 is automated."
+People occupy roles.
+The platform automates bounded task capabilities.
+=======================================================================
+165. WHY THIS MATTERS ORGANIZATIONALLY
+=======================================================================
+The technical architecture naturally supports progressive automation.
+Instead of:
+    HUMAN ROLE
+        ↓
+    REPLACE
+the architecture supports:
+    WORK INVENTORY
+        ↓
+    TASK TAXONOMY
+        ↓
+    QUALIFIED TASK CAPABILITIES
+        ↓
+    AUTOMATION COVERAGE
+        ↓
+    RESIDUAL HUMAN WORK
+That is a much more measurable transformation model.
+It also aligns the engineering evidence with the organizational decision.
+=======================================================================
+166. B7 FINAL ARCHITECTURE
+=======================================================================
+                           TASK / JIRA
+                               │
+                               ▼
+                      Workflow Adapter
+                               │
+                               ▼
+                     Capability Registry
+                               │
+                               ▼
+                    Versioned X1 Capability
+                               │
+                 ┌─────────────┴──────────────┐
+                 │                            │
+                 ▼                            │
+        ChangeExecutionService                │
+                 │                            │
+                 ▼                            │
+          CandidateArtifact                   │
+                 │                            │
+                 ▼                            │
+           ReleaseGateService                 │
+                 │                            │
+          Evidence Planner                    │
+                 │                            │
+       Evidence Diversity Mapper              │
+                 │                            │
+       ┌─────────┼──────────┬─────────┐        │
+       │         │          │         │        │
+       ▼         ▼          ▼         ▼        │
+    Static   Existing    Generated  Mutation   │
+    Evidence   Tests       Tests    Evidence   │
+       │         │          │         │        │
+       └─────────┴──────────┴─────────┘        │
+                 │                            │
+                 ▼                            │
+           Evidence Bundle                    │
+                 │                            │
+                 ▼                            │
+      Deterministic Policy Engine             │
+                 │                            │
+       ┌─────────┼──────────┐                 │
+       │         │          │                 │
+       ▼         ▼          ▼                 │
+      PASS      FAIL      REVIEW              │
+       │                    │                 │
+       ▼                    ▼                 │
+    Release           Workflow Signal         │
+
+
+              OFFLINE QUALIFICATION
+              =====================
+
+               BenchmarkFactory
+                      │
+                      ▼
+              BenchmarkValidation
+                      │
+                      ▼
+               Frozen Benchmark
+                      │
+                      ▼
+              EvaluationCampaign
+                      │
+                      │ invokes SAME
+                      │ online capability
+                      ▼
+              Candidate + GateDecision
+                      │
+                      ▼
+                 HiddenOracle
+                      │
+                      ▼
+               OracleAssessment
+                      │
+                      ▼
+             DecisionClassification
+                      │
+                      ▼
+                CampaignMetrics
+                      │
+          ┌───────────┼────────────┐
+          │           │            │
+          ▼           ▼            ▼
+       Quality     Uncertainty    Resources
+          │           │            │
+          └───────────┼────────────┘
+                      │
+                      ▼
+              Qualification Evidence
+=======================================================================
+167. B7 ASSURANCE CHAIN
+=======================================================================
+The final assurance argument can be stated succinctly:
+    We know what task was requested.
+        ↓
+    We know which exact capability attempted it.
+        ↓
+    We know which exact candidate was produced.
+        ↓
+    We know which evidence was gathered.
+        ↓
+    We know how the deterministic policy interpreted that evidence.
+        ↓
+    We know whether the gate passed, failed, or abstained.
+        ↓
+    Offline, we can compare those decisions against independently hidden,
+    validated task truth.
+        ↓
+    We can measure false releases, false rejections, automation coverage,
+    success, uncertainty, and resource consumption.
+        ↓
+    We can bind those measurements to the exact capability version that
+    produced them.
+That is the central assurance story of the POC.
+=======================================================================
+168. B7 OUTSTANDING DOUBTS
+=======================================================================
+Even after this architecture is implemented correctly, several fundamental
+questions remain empirical rather than architectural.
+FIRST
+-----
+We do not know whether AI-generated test diversity will be sufficiently
+different from AI-generated code-generation reasoning to materially reduce
+correlated blind spots.
+SECOND
+------
+We do not know whether the Evidence Diversity Mapper creates meaningful
+semantic diversity or merely superficial test diversity.
+THIRD
+-----
+We do not know how much mutation analysis will predict real production
+defects for the selected X1 task.
+FOURTH
+------
+We do not know what benchmark size will be economically feasible while still
+supporting useful uncertainty bounds.
+FIFTH
+-----
+We do not know whether synthetic benchmark distributions will resemble actual
+L1 engineering work sufficiently well.
+SIXTH
+-----
+We do not know how stable hosted coding-model behavior will be over time.
+SEVENTH
+-------
+We do not know the achievable tradeoff between:
+    automated release coverage
+and:
+    false-release risk.
+EIGHTH
+------
+We do not know whether the release gate will consume:
+    less,
+    similar,
+or:
+    substantially more
+LLM resources than ChangeExecutionService.
+The architecture deliberately measures these questions rather than pretending
+to answer them.
+=======================================================================
+169. B7 OVERALL CONCLUSION
+=======================================================================
+The architecture is now conceptually complete enough for a serious POC.
+The largest remaining risks are no longer:
+    "What class should we create?"
+or:
+    "Where should this Azure adapter live?"
+The largest remaining risks are:
+    benchmark validity;
+    correlated AI blind spots;
+    evidence sufficiency;
+    gate calibration;
+    statistical uncertainty;
+    representativeness;
+    and actual end-to-end performance.
+That is a healthy transition.
+It means the next major source of knowledge should come from:
+    RUNNING EXPERIMENTS
+rather than:
+    adding architecture.
+=======================================================================
+170. B7 RELATIONSHIP TO THE ORIGINAL L1 AUTOMATION QUESTION
+=======================================================================
+The original organizational hypothesis was approximately:
+    bounded L1 engineering work
+        ↓
+    AI in the driver's seat
+        ↓
+    smaller number of humans supervising exceptions.
+The architecture does not assume that hypothesis is true.
+Instead it gives us a disciplined way to test a narrower proposition:
+    "For task capability X1, can an AI-led change-execution system,
+     combined with an independent evidence-based release gate,
+     achieve sufficient correctness and automation coverage to justify
+     production use?"
+If X1 succeeds:
+    qualify X1.
+Then evaluate X2.
+Then X3.
+The evidence should determine how much L1 work can eventually be automated.
+=======================================================================
+171. B7 COMPLETION CHECK
+=======================================================================
+B7 is complete when:
+    [ ] B1 canonical contracts have been physically reconciled.
+    [ ] B2 NOT-IMPLEMENTED register matches source reality.
+    [ ] B3 design rationale remains consistent with implemented architecture.
+    [ ] B4 deterministic X1 path uses canonical contracts.
+    [ ] B5 evaluation path invokes the same online pipeline.
+    [ ] B6 configuration/composition boundaries are enforced.
+    [ ] B7 static architecture review passes.
+    [ ] Candidate identity is preserved end-to-end.
+    [ ] Capability identity is preserved end-to-end.
+    [ ] Evidence lineage is preserved.
+    [ ] Hidden oracle remains isolated.
+    [ ] Gate policy semantics are deterministically tested.
+    [ ] Benchmark validation is represented explicitly.
+    [ ] Campaign statistics use the correct observational units.
+    [ ] Resource usage distinguishes LLM tokens from deterministic compute.
+    [ ] Infrastructure retries cannot inflate evaluation sample size.
+    [ ] Limitations are documented.
+    [ ] No unresolved critical architecture contradiction remains.
+At that point:
+    STOP ADDING MAJOR ARCHITECTURAL COMPONENTS.
+Proceed to:
+    final repository documentation
+and:
+    implementation / experimentation.
+=======================================================================
+172. NEXT AND FINAL DOCUMENTATION COMPONENT
+=======================================================================
+The next component should be:
+    B8 — MASTER README.md
+B8 should NOT invent new architecture.
+It should explain the repository that now exists.
+The README should cover:
+    project purpose
+    business/engineering context
+    what the POC does
+    what it explicitly does not claim
+    architecture
+    online workflow
+    offline qualification workflow
+    component map
+    repository structure
+    canonical contracts
+    ChangeExecutionService
+    ReleaseGateService
+    EvidencePlanner
+    Evidence Diversity Mapper
+    deterministic execution
+    mutation evidence
+    gate policy
+    human-review semantics
+    benchmark factory
+    hidden oracle
+    campaign runner
+    statistical methodology
+    token/resource accounting
+    Azure architecture
+    configuration
+    local setup
+    testing
+    running X1
+    running qualification campaigns
+    interpreting results
+    NOT-IMPLEMENTED items
+    security/trust boundaries
+    limitations
+    contribution guidance
+    glossary.
+The README should be written LAST against the actual final repository
+structure, exactly as originally requested.
+=======================================================================
+END OF B7
+=======================================================================

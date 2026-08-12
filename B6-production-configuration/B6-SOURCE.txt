@@ -1,0 +1,2913 @@
+B6 — PRODUCTION CONFIGURATION, CONTRACT RECONCILIATION,
+     COMPOSITION HARDENING, AND STARTUP READINESS
+=======================================================
+PURPOSE
+-------
+B1–B5 established the conceptual and executable architecture.
+At this point the repository contains enough independently developed pieces
+that a different risk becomes important:
+    architectural drift.
+The danger is no longer only that an AI-generated candidate might be wrong.
+The repository itself can become internally inconsistent if:
+    B4 defines a local GateOutcome
+    while
+    B1 defines the canonical GateOutcome
+or:
+    Component 3 expects CandidateArtifact A
+    while
+    Component 5 constructs CandidateArtifact B
+or:
+    local execution silently substitutes for Azure execution
+or:
+    assurance thresholds become environment variables
+or:
+    a developer accidentally gives the online pipeline access to
+    the hidden benchmark store.
+B6 addresses these problems.
+Its job is to move the repository from:
+    individually sensible components
+toward:
+    one internally consistent, production-shaped codebase.
+B6 DOES FOUR IMPORTANT THINGS
+-----------------------------
+1. Establishes ONE canonical import boundary for B1 shared contracts.
+2. Establishes ONE validated runtime-configuration model.
+3. Establishes ONE composition root responsible for choosing adapters.
+4. Adds machine-enforced architectural/readiness checks so that:
+       LOCAL
+   cannot be confused with:
+       AZURE_POC
+   and:
+       NOT IMPLEMENTED
+   cannot silently become:
+       SUCCESS.
+=======================================================================
+B6 ARCHITECTURAL PRINCIPLE
+=======================================================================
+Configuration is divided into THREE categories.
+CATEGORY A
+----------
+RUNTIME / INFRASTRUCTURE CONFIGURATION
+Examples:
+    runtime mode
+    Azure subscription ID
+    resource group
+    Container Apps Job resource names
+    Service Bus namespace
+    evidence-storage account
+    App Configuration endpoint
+    model endpoint
+    Azure DevOps organization/project/repository
+These values may vary by environment.
+CATEGORY B
+----------
+SECRETS / CREDENTIALS
+Examples:
+    API keys
+    connection strings
+    access tokens
+    client secrets
+These MUST NOT be committed to source code.
+For the Azure implementation, managed identity / keyless authentication
+should be preferred where the service and enterprise architecture permit it.
+Key Vault remains the appropriate secret-management system where an actual
+secret is required.
+CATEGORY C
+----------
+ASSURANCE POLICY
+Examples:
+    required evidence categories
+    mutation thresholds
+    critical veto rules
+    evidence budgets
+    release-gate thresholds
+    task scope
+    allowed paths
+    qualification thresholds
+These are NOT ordinary runtime settings.
+They are versioned governance / capability artifacts.
+They must not be converted casually into environment variables such as:
+    MIN_MUTATION_SCORE=0.73
+because doing so would allow the assurance behavior of the system to change
+without creating a new policy/capability identity.
+That separation is one of the most important things B6 enforces.
+=======================================================================
+TARGET REPOSITORY STRUCTURE AFTER B6
+=======================================================================
+src/
+└── l1_automation/
+    │
+    ├── contracts/
+    │   └── ...
+    │
+    │       CANONICAL B1 CONTRACTS ONLY
+    │
+    ├── configuration/
+    │   ├── __init__.py
+    │   ├── errors.py
+    │   ├── models.py
+    │   ├── loader.py
+    │   └── readiness.py
+    │
+    ├── bootstrap/
+    │   ├── __init__.py
+    │   └── composition.py
+    │
+    ├── change_execution/
+    │   └── ...
+    │
+    ├── release_gate/
+    │   └── ...
+    │
+    ├── evidence/
+    │   └── ...
+    │
+    ├── evaluation/
+    │   └── ...
+    │
+    ├── orchestration/
+    │   └── ...
+    │
+    ├── execution/
+    │   └── ...
+    │
+    ├── capabilities/
+    │   └── ...
+    │
+    ├── workflow/
+    │   └── ...
+    │
+    └── architecture/
+        ├── __init__.py
+        └── repository_check.py
+config/
+├── local.example.env
+└── azure-poc.example.env
+tests/
+├── architecture/
+│   ├── test_contract_reconciliation.py
+│   └── test_dependency_boundaries.py
+│
+├── configuration/
+│   ├── test_loader.py
+│   └── test_readiness.py
+│
+└── bootstrap/
+    └── test_composition.py
+=======================================================================
+CRITICAL RECONCILIATION RULE
+=======================================================================
+B1 IS AUTHORITATIVE.
+The temporary compatibility contracts introduced in B4 and B5 must now be
+removed.
+For example, B4 previously contained local definitions equivalent to:
+    class GateOutcome(...)
+    class TaskRequest(...)
+    class CandidateArtifact(...)
+    class GateDecision(...)
+Those were acceptable for demonstrating the vertical slice while the physical
+repository was still being assembled.
+After B6 they are NOT acceptable.
+There must be only one definition of each shared concept.
+WRONG
+-----
+    bootstrap/x1_poc.py
+        class CandidateArtifact
+    contracts/candidate.py
+        class CandidateArtifact
+RIGHT
+-----
+    contracts/candidate.py
+        class CandidateArtifact
+    change_execution/service.py
+        from l1_automation.contracts import CandidateArtifact
+    release_gate/service.py
+        from l1_automation.contracts import CandidateArtifact
+    evaluation/adapter.py
+        from l1_automation.contracts import CandidateArtifact
+=======================================================================
+FILE: src/l1_automation/configuration/__init__.py
+=======================================================================
+"""
+Runtime configuration package.
+This package owns infrastructure/runtime configuration only.
+It must not become the home of release-gate assurance policy.
+Examples of values that belong here:
+    runtime mode
+    Azure resource names
+    Azure endpoints
+    evidence-storage location
+    workflow-system identifiers
+Examples of values that DO NOT belong here:
+    minimum mutation score
+    required evidence categories
+    gate PASS threshold
+    allowed source paths for X1
+    qualification false-release tolerance
+Those belong to versioned capability / assurance-policy artifacts.
+"""
+from .errors import ConfigurationError
+from .loader import load_platform_settings
+from .models import (
+    AzurePocSettings,
+    PlatformSettings,
+    RuntimeMode,
+)
+__all__ = [
+    "AzurePocSettings",
+    "ConfigurationError",
+    "PlatformSettings",
+    "RuntimeMode",
+    "load_platform_settings",
+]
+=======================================================================
+FILE: src/l1_automation/configuration/errors.py
+=======================================================================
+"""
+Typed configuration errors.
+Configuration failure is an infrastructure/startup concern.
+It should not be converted into:
+    GateOutcome.FAIL
+because a missing Azure resource name says nothing about whether a candidate
+patch is technically correct.
+"""
+class ConfigurationError(RuntimeError):
+    """
+    Raised when runtime configuration is missing, malformed, contradictory,
+    or inappropriate for the selected runtime mode.
+    """
+=======================================================================
+FILE: src/l1_automation/configuration/models.py
+=======================================================================
+"""
+Validated immutable runtime configuration models.
+DESIGN CHOICES
+--------------
+1. Standard-library dataclasses are used.
+   B6 does not require an additional validation framework merely to represent
+   configuration.
+2. Objects are frozen.
+   Runtime configuration is constructed once at startup and should not be
+   mutated underneath an active campaign or gate execution.
+3. Secrets are deliberately absent.
+   The Azure production path should use managed identity / Azure Identity
+   where possible. If a future adapter genuinely requires a secret, that
+   adapter should obtain it through the enterprise-approved secret mechanism.
+4. Gate thresholds are deliberately absent.
+   Assurance policy is not ordinary runtime configuration.
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+from enum import StrEnum
+from urllib.parse import urlparse
+class RuntimeMode(StrEnum):
+    """
+    Supported composition modes.
+    LOCAL
+        Deterministic/local development adapters.
+    AZURE_POC
+        Real Azure POC infrastructure.
+    No implicit fallback exists from AZURE_POC to LOCAL.
+    """
+    LOCAL = "local"
+    AZURE_POC = "azure_poc"
+def _require_non_empty(
+    *,
+    name: str,
+    value: str,
+) -> str:
+    """
+    Validate and normalize a required string.
+    """
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(
+            f"{name} must be non-empty."
+        )
+    return normalized
+def _require_https_url(
+    *,
+    name: str,
+    value: str,
+) -> str:
+    """
+    Require an absolute HTTPS endpoint.
+    Azure service endpoints should not silently accept malformed or plaintext
+    HTTP URLs in production-shaped configuration.
+    """
+    normalized = _require_non_empty(
+        name=name,
+        value=value,
+    )
+    parsed = urlparse(normalized)
+    if parsed.scheme.lower() != "https":
+        raise ValueError(
+            f"{name} must use HTTPS."
+        )
+    if not parsed.netloc:
+        raise ValueError(
+            f"{name} must be an absolute URL."
+        )
+    return normalized.rstrip("/")
+@dataclass(frozen=True, slots=True)
+class AzurePocSettings:
+    """
+    Azure-specific infrastructure settings.
+    IMPORTANT:
+    None of these fields is an assurance threshold.
+    None contains a secret.
+    """
+    subscription_id: str
+    resource_group: str
+    app_configuration_endpoint: str
+    evidence_storage_account: str
+    evidence_container: str
+    service_bus_namespace: str
+    task_queue_name: str
+    change_execution_job_name: str
+    release_gate_job_name: str
+    hidden_oracle_job_name: str
+    azure_openai_endpoint: str
+    azure_openai_deployment: str
+    azure_devops_organization: str
+    azure_devops_project: str
+    azure_devops_repository: str
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "subscription_id",
+            _require_non_empty(
+                name="subscription_id",
+                value=self.subscription_id,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "resource_group",
+            _require_non_empty(
+                name="resource_group",
+                value=self.resource_group,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "app_configuration_endpoint",
+            _require_https_url(
+                name="app_configuration_endpoint",
+                value=self.app_configuration_endpoint,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "azure_openai_endpoint",
+            _require_https_url(
+                name="azure_openai_endpoint",
+                value=self.azure_openai_endpoint,
+            ),
+        )
+        # These values are names/identifiers rather than URLs.
+        for field_name in (
+            "evidence_storage_account",
+            "evidence_container",
+            "service_bus_namespace",
+            "task_queue_name",
+            "change_execution_job_name",
+            "release_gate_job_name",
+            "hidden_oracle_job_name",
+            "azure_openai_deployment",
+            "azure_devops_organization",
+            "azure_devops_project",
+            "azure_devops_repository",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _require_non_empty(
+                    name=field_name,
+                    value=getattr(
+                        self,
+                        field_name,
+                    ),
+                ),
+            )
+        # The three execution responsibilities intentionally require different
+        # job names.
+        #
+        # Reusing one job definition for all three could accidentally give the
+        # online gate the same credentials/mounts as the hidden oracle.
+        job_names = {
+            self.change_execution_job_name,
+            self.release_gate_job_name,
+            self.hidden_oracle_job_name,
+        }
+        if len(job_names) != 3:
+            raise ValueError(
+                "Change execution, release gate, and hidden oracle must "
+                "use three distinct Azure Container Apps Job names."
+            )
+@dataclass(frozen=True, slots=True)
+class PlatformSettings:
+    """
+    Complete runtime settings.
+    Azure settings are:
+        forbidden in LOCAL mode;
+        required in AZURE_POC mode.
+    This prevents ambiguous partially-Azure configurations.
+    """
+    runtime_mode: RuntimeMode
+    environment_name: str
+    service_name: str
+    azure: AzurePocSettings | None = None
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "environment_name",
+            _require_non_empty(
+                name="environment_name",
+                value=self.environment_name,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "service_name",
+            _require_non_empty(
+                name="service_name",
+                value=self.service_name,
+            ),
+        )
+        if (
+            self.runtime_mode == RuntimeMode.LOCAL
+            and self.azure is not None
+        ):
+            raise ValueError(
+                "LOCAL runtime must not contain Azure POC settings."
+            )
+        if (
+            self.runtime_mode == RuntimeMode.AZURE_POC
+            and self.azure is None
+        ):
+            raise ValueError(
+                "AZURE_POC runtime requires Azure settings."
+            )
+=======================================================================
+FILE: src/l1_automation/configuration/loader.py
+=======================================================================
+"""
+Environment-based configuration loader.
+WHY ENVIRONMENT VARIABLES HERE?
+-------------------------------
+Environment variables are suitable for locating infrastructure resources and
+selecting runtime mode.
+They are NOT used for assurance-policy thresholds.
+The loader never reads:
+    L1_GATE_MIN_MUTATION_SCORE
+    L1_FALSE_RELEASE_TOLERANCE
+    L1_REQUIRED_EVIDENCE
+because those values belong in versioned policy artifacts.
+SECURITY
+--------
+This module deliberately has no:
+    AZURE_OPENAI_API_KEY
+    STORAGE_CONNECTION_STRING
+    SERVICE_BUS_CONNECTION_STRING
+settings.
+Azure adapters should prefer managed identity/keyless access.
+If enterprise architecture later requires a secret, it should be introduced
+through a dedicated secret abstraction and documented explicitly rather than
+quietly added to this configuration object.
+"""
+from __future__ import annotations
+import os
+from collections.abc import Mapping
+from .errors import ConfigurationError
+from .models import (
+    AzurePocSettings,
+    PlatformSettings,
+    RuntimeMode,
+)
+def _required(
+    environment: Mapping[str, str],
+    key: str,
+) -> str:
+    """
+    Read one required environment variable.
+    """
+    value = environment.get(
+        key,
+        "",
+    ).strip()
+    if not value:
+        raise ConfigurationError(
+            f"Required environment variable {key!r} is missing."
+        )
+    return value
+def _optional(
+    environment: Mapping[str, str],
+    key: str,
+    default: str,
+) -> str:
+    """
+    Read one optional environment variable with a non-secret default.
+    """
+    return environment.get(
+        key,
+        default,
+    ).strip()
+def load_platform_settings(
+    environment: Mapping[str, str] | None = None,
+) -> PlatformSettings:
+    """
+    Load and validate startup configuration.
+    Passing an explicit mapping makes this function deterministic in tests and
+    prevents unit tests from depending on a developer workstation's process
+    environment.
+    """
+    env: Mapping[str, str] = (
+        os.environ
+        if environment is None
+        else environment
+    )
+    raw_mode = _optional(
+        env,
+        "L1_RUNTIME_MODE",
+        RuntimeMode.LOCAL.value,
+    ).lower()
+    try:
+        runtime_mode = RuntimeMode(
+            raw_mode
+        )
+    except ValueError as exc:
+        allowed = ", ".join(
+            mode.value
+            for mode in RuntimeMode
+        )
+        raise ConfigurationError(
+            f"Unsupported L1_RUNTIME_MODE={raw_mode!r}. "
+            f"Allowed values: {allowed}."
+        ) from exc
+    environment_name = _optional(
+        env,
+        "L1_ENVIRONMENT_NAME",
+        "local",
+    )
+    service_name = _optional(
+        env,
+        "L1_SERVICE_NAME",
+        "l1-engineering-automation",
+    )
+    if runtime_mode == RuntimeMode.LOCAL:
+        try:
+            return PlatformSettings(
+                runtime_mode=runtime_mode,
+                environment_name=environment_name,
+                service_name=service_name,
+                azure=None,
+            )
+        except ValueError as exc:
+            raise ConfigurationError(
+                str(exc)
+            ) from exc
+    # -------------------------------------------------------------
+    # AZURE_POC
+    # -------------------------------------------------------------
+    #
+    # Every important resource identifier is explicit.
+    #
+    # We do not infer:
+    #
+    #     resource group from subscription
+    #     queue name from environment
+    #     model deployment from endpoint
+    #
+    # because convention-based guessing creates difficult-to-debug and
+    # potentially unsafe deployment behavior.
+    try:
+        azure = AzurePocSettings(
+            subscription_id=_required(
+                env,
+                "L1_AZURE_SUBSCRIPTION_ID",
+            ),
+            resource_group=_required(
+                env,
+                "L1_AZURE_RESOURCE_GROUP",
+            ),
+            app_configuration_endpoint=_required(
+                env,
+                "L1_APP_CONFIGURATION_ENDPOINT",
+            ),
+            evidence_storage_account=_required(
+                env,
+                "L1_EVIDENCE_STORAGE_ACCOUNT",
+            ),
+            evidence_container=_required(
+                env,
+                "L1_EVIDENCE_CONTAINER",
+            ),
+            service_bus_namespace=_required(
+                env,
+                "L1_SERVICE_BUS_NAMESPACE",
+            ),
+            task_queue_name=_required(
+                env,
+                "L1_TASK_QUEUE_NAME",
+            ),
+            change_execution_job_name=_required(
+                env,
+                "L1_CHANGE_EXECUTION_JOB_NAME",
+            ),
+            release_gate_job_name=_required(
+                env,
+                "L1_RELEASE_GATE_JOB_NAME",
+            ),
+            hidden_oracle_job_name=_required(
+                env,
+                "L1_HIDDEN_ORACLE_JOB_NAME",
+            ),
+            azure_openai_endpoint=_required(
+                env,
+                "L1_AZURE_OPENAI_ENDPOINT",
+            ),
+            azure_openai_deployment=_required(
+                env,
+                "L1_AZURE_OPENAI_DEPLOYMENT",
+            ),
+            azure_devops_organization=_required(
+                env,
+                "L1_AZURE_DEVOPS_ORGANIZATION",
+            ),
+            azure_devops_project=_required(
+                env,
+                "L1_AZURE_DEVOPS_PROJECT",
+            ),
+            azure_devops_repository=_required(
+                env,
+                "L1_AZURE_DEVOPS_REPOSITORY",
+            ),
+        )
+        return PlatformSettings(
+            runtime_mode=runtime_mode,
+            environment_name=environment_name,
+            service_name=service_name,
+            azure=azure,
+        )
+    except ValueError as exc:
+        raise ConfigurationError(
+            str(exc)
+        ) from exc
+=======================================================================
+FILE: src/l1_automation/configuration/readiness.py
+=======================================================================
+"""
+Startup readiness validation.
+CONFIGURATION VALIDITY IS NOT THE SAME AS PRODUCTION READINESS.
+For example:
+    L1_HIDDEN_ORACLE_JOB_NAME=x1-oracle
+is syntactically valid.
+That does NOT prove:
+    - the resource exists;
+    - RBAC is correct;
+    - the online gate cannot read hidden storage;
+    - the container image is approved;
+    - networking is correctly restricted.
+B6 therefore represents readiness checks explicitly.
+Local checks can run without Azure.
+Azure-resource checks are provided through a port so the real adapter can be
+implemented without putting Azure SDK dependencies into domain/configuration
+code.
+"""
+from __future__ import annotations
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from enum import StrEnum
+from .models import (
+    PlatformSettings,
+    RuntimeMode,
+)
+class ReadinessStatus(StrEnum):
+    READY = "ready"
+    NOT_READY = "not_ready"
+@dataclass(frozen=True, slots=True)
+class ReadinessCheck:
+    """
+    Result of one explicit startup/readiness assertion.
+    """
+    name: str
+    passed: bool
+    details: str
+@dataclass(frozen=True, slots=True)
+class ReadinessReport:
+    """
+    Complete readiness result.
+    A report is READY only when every required check passes.
+    """
+    status: ReadinessStatus
+    checks: tuple[ReadinessCheck, ...]
+    @property
+    def failures(
+        self,
+    ) -> tuple[ReadinessCheck, ...]:
+        return tuple(
+            check
+            for check in self.checks
+            if not check.passed
+        )
+class AzureResourceVerifierPort(ABC):
+    """
+    Infrastructure adapter used to verify Azure POC prerequisites.
+    This interface intentionally describes capabilities rather than exposing
+    Azure SDK clients throughout the application.
+    """
+    @abstractmethod
+    def verify_container_job(
+        self,
+        *,
+        job_name: str,
+    ) -> bool:
+        raise NotImplementedError
+    @abstractmethod
+    def verify_evidence_store(
+        self,
+        *,
+        account_name: str,
+        container_name: str,
+    ) -> bool:
+        raise NotImplementedError
+    @abstractmethod
+    def verify_service_bus_queue(
+        self,
+        *,
+        namespace: str,
+        queue_name: str,
+    ) -> bool:
+        raise NotImplementedError
+    @abstractmethod
+    def verify_model_endpoint(
+        self,
+        *,
+        endpoint: str,
+        deployment: str,
+    ) -> bool:
+        raise NotImplementedError
+    @abstractmethod
+    def verify_hidden_oracle_isolation(
+        self,
+        *,
+        change_job_name: str,
+        gate_job_name: str,
+        oracle_job_name: str,
+    ) -> bool:
+        """
+        Verify the infrastructure-level trust boundary.
+        A strong implementation should verify that change execution and
+        release gating do NOT possess the identity/permissions required to
+        read hidden oracle artifacts.
+        """
+        raise NotImplementedError
+def evaluate_readiness(
+    *,
+    settings: PlatformSettings,
+    azure_verifier: AzureResourceVerifierPort | None = None,
+) -> ReadinessReport:
+    """
+    Evaluate startup readiness.
+    LOCAL mode requires no Azure verifier.
+    AZURE_POC fails explicitly if no real Azure verifier is provided.
+    This prevents code such as:
+        if verifier is None:
+            return READY
+    which would create false assurance.
+    """
+    checks: list[ReadinessCheck] = []
+    checks.append(
+        ReadinessCheck(
+            name="runtime_configuration_valid",
+            passed=True,
+            details=(
+                "PlatformSettings was successfully constructed."
+            ),
+        )
+    )
+    if settings.runtime_mode == RuntimeMode.LOCAL:
+        checks.append(
+            ReadinessCheck(
+                name="azure_resources_not_required",
+                passed=True,
+                details=(
+                    "LOCAL mode intentionally uses no Azure POC resources."
+                ),
+            )
+        )
+        return ReadinessReport(
+            status=ReadinessStatus.READY,
+            checks=tuple(checks),
+        )
+    assert settings.azure is not None
+    if azure_verifier is None:
+        checks.append(
+            ReadinessCheck(
+                name="azure_resource_verifier",
+                passed=False,
+                details=(
+                    "AZURE_POC requires a real AzureResourceVerifierPort "
+                    "implementation. No local/fake fallback is permitted."
+                ),
+            )
+        )
+        return ReadinessReport(
+            status=ReadinessStatus.NOT_READY,
+            checks=tuple(checks),
+        )
+    azure = settings.azure
+    checks.extend(
+        (
+            ReadinessCheck(
+                name="change_execution_job",
+                passed=azure_verifier.verify_container_job(
+                    job_name=azure.change_execution_job_name,
+                ),
+                details=azure.change_execution_job_name,
+            ),
+            ReadinessCheck(
+                name="release_gate_job",
+                passed=azure_verifier.verify_container_job(
+                    job_name=azure.release_gate_job_name,
+                ),
+                details=azure.release_gate_job_name,
+            ),
+            ReadinessCheck(
+                name="hidden_oracle_job",
+                passed=azure_verifier.verify_container_job(
+                    job_name=azure.hidden_oracle_job_name,
+                ),
+                details=azure.hidden_oracle_job_name,
+            ),
+            ReadinessCheck(
+                name="evidence_store",
+                passed=azure_verifier.verify_evidence_store(
+                    account_name=azure.evidence_storage_account,
+                    container_name=azure.evidence_container,
+                ),
+                details=(
+                    f"{azure.evidence_storage_account}/"
+                    f"{azure.evidence_container}"
+                ),
+            ),
+            ReadinessCheck(
+                name="service_bus_queue",
+                passed=azure_verifier.verify_service_bus_queue(
+                    namespace=azure.service_bus_namespace,
+                    queue_name=azure.task_queue_name,
+                ),
+                details=(
+                    f"{azure.service_bus_namespace}/"
+                    f"{azure.task_queue_name}"
+                ),
+            ),
+            ReadinessCheck(
+                name="model_endpoint",
+                passed=azure_verifier.verify_model_endpoint(
+                    endpoint=azure.azure_openai_endpoint,
+                    deployment=azure.azure_openai_deployment,
+                ),
+                details=azure.azure_openai_deployment,
+            ),
+            ReadinessCheck(
+                name="hidden_oracle_isolation",
+                passed=(
+                    azure_verifier.verify_hidden_oracle_isolation(
+                        change_job_name=(
+                            azure.change_execution_job_name
+                        ),
+                        gate_job_name=(
+                            azure.release_gate_job_name
+                        ),
+                        oracle_job_name=(
+                            azure.hidden_oracle_job_name
+                        ),
+                    )
+                ),
+                details=(
+                    "Online change/gate identities must not be able to "
+                    "read hidden-oracle resources."
+                ),
+            ),
+        )
+    )
+    status = (
+        ReadinessStatus.READY
+        if all(
+            check.passed
+            for check in checks
+        )
+        else ReadinessStatus.NOT_READY
+    )
+    return ReadinessReport(
+        status=status,
+        checks=tuple(checks),
+    )
+=======================================================================
+FILE: src/l1_automation/bootstrap/__init__.py
+=======================================================================
+"""
+Application composition package.
+Only bootstrap/composition code should decide which concrete infrastructure
+adapters satisfy application/domain ports.
+Domain services must not call:
+    PlatformSettings.from_environment()
+or:
+    DefaultAzureCredential()
+or:
+    BlobServiceClient(...)
+inside their constructors.
+Those are composition/infrastructure responsibilities.
+"""
+=======================================================================
+FILE: src/l1_automation/bootstrap/composition.py
+=======================================================================
+"""
+Canonical B6 composition root.
+THIS REPLACES THE TEMPORARY B4 COMPOSITION MODEL.
+By B6, the repository should use the actual Components 1–12 rather than
+maintaining simplified B4/B5 duplicates.
+IMPORTANT
+---------
+The imports shown below establish the TARGET canonical structure.
+If the physical files created in Components 1–12 currently use different
+package names, move/re-export them into these canonical locations during B6.
+Do NOT solve import disagreement by keeping two competing contract classes.
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Protocol
+from l1_automation.configuration import (
+    PlatformSettings,
+    RuntimeMode,
+)
+# ---------------------------------------------------------------------
+# PORTS USED BY THE COMPOSITION ROOT
+# ---------------------------------------------------------------------
+#
+# If these protocols already exist in Components 2–12, import those canonical
+# interfaces instead.
+#
+# The key rule is one authoritative interface per responsibility.
+# ---------------------------------------------------------------------
+class ChangeExecutionPort(Protocol):
+    def execute(
+        self,
+        task,
+        specification,
+    ):
+        ...
+class ReleaseGatePort(Protocol):
+    def evaluate(
+        self,
+        *,
+        task,
+        specification,
+        candidate,
+    ):
+        ...
+class CapabilityRegistryPort(Protocol):
+    def resolve(
+        self,
+        task_type: str,
+    ):
+        ...
+class EvidenceRepositoryPort(Protocol):
+    def save(
+        self,
+        artifact,
+    ) -> None:
+        ...
+class WorkflowPublisherPort(Protocol):
+    def publish(
+        self,
+        event,
+    ) -> None:
+        ...
+class OrchestratorPort(Protocol):
+    def run(
+        self,
+        task,
+    ):
+        ...
+@dataclass(frozen=True, slots=True)
+class ApplicationComposition:
+    """
+    Fully constructed object graph.
+    Keeping important services visible is useful for:
+        tests
+        diagnostics
+        explicit startup
+        evaluation adapters
+    It avoids a global service-locator pattern.
+    """
+    settings: PlatformSettings
+    capability_registry: CapabilityRegistryPort
+    change_execution_service: ChangeExecutionPort
+    release_gate_service: ReleaseGatePort
+    evidence_repository: EvidenceRepositoryPort
+    workflow_publisher: WorkflowPublisherPort
+    orchestrator: OrchestratorPort
+def build_application(
+    settings: PlatformSettings,
+) -> ApplicationComposition:
+    """
+    Build the application for the selected runtime.
+    Runtime branching occurs ONLY at composition time.
+    Domain services should not contain repeated code like:
+        if azure:
+            ...
+        else:
+            ...
+    because infrastructure selection is not domain logic.
+    """
+    if settings.runtime_mode == RuntimeMode.LOCAL:
+        return _build_local_application(
+            settings
+        )
+    if settings.runtime_mode == RuntimeMode.AZURE_POC:
+        return _build_azure_application(
+            settings
+        )
+    raise RuntimeError(
+        f"Unsupported runtime mode: "
+        f"{settings.runtime_mode!r}"
+    )
+def _build_local_application(
+    settings: PlatformSettings,
+) -> ApplicationComposition:
+    """
+    Construct local deterministic/test adapters.
+    IMPORTANT:
+    The concrete imports should point to the existing Components 2–12 after
+    physical repository reconciliation.
+    They are imported inside the function so merely importing this module does
+    not initialize infrastructure.
+    """
+    # Replace these module paths only if the earlier components use different
+    # physical locations. Do not duplicate their implementations.
+    from l1_automation.capabilities.local_registry import (
+        LocalCapabilityRegistry,
+    )
+    from l1_automation.change_execution.local_service import (
+        LocalChangeExecutionService,
+    )
+    from l1_automation.evidence.in_memory_repository import (
+        InMemoryEvidenceRepository,
+    )
+    from l1_automation.release_gate.local_service import (
+        LocalReleaseGateService,
+    )
+    from l1_automation.workflow.in_memory_publisher import (
+        InMemoryWorkflowPublisher,
+    )
+    from l1_automation.orchestration.service import (
+        OrchestrationService,
+    )
+    evidence_repository = (
+        InMemoryEvidenceRepository()
+    )
+    capability_registry = (
+        LocalCapabilityRegistry()
+    )
+    change_execution = (
+        LocalChangeExecutionService(
+            evidence_repository=(
+                evidence_repository
+            )
+        )
+    )
+    release_gate = (
+        LocalReleaseGateService(
+            evidence_repository=(
+                evidence_repository
+            )
+        )
+    )
+    workflow_publisher = (
+        InMemoryWorkflowPublisher()
+    )
+    orchestrator = OrchestrationService(
+        capability_registry=(
+            capability_registry
+        ),
+        change_execution_service=(
+            change_execution
+        ),
+        release_gate_service=(
+            release_gate
+        ),
+        evidence_repository=(
+            evidence_repository
+        ),
+        workflow_publisher=(
+            workflow_publisher
+        ),
+    )
+    return ApplicationComposition(
+        settings=settings,
+        capability_registry=(
+            capability_registry
+        ),
+        change_execution_service=(
+            change_execution
+        ),
+        release_gate_service=(
+            release_gate
+        ),
+        evidence_repository=(
+            evidence_repository
+        ),
+        workflow_publisher=(
+            workflow_publisher
+        ),
+        orchestrator=orchestrator,
+    )
+def _build_azure_application(
+    settings: PlatformSettings,
+) -> ApplicationComposition:
+    """
+    Construct the real Azure POC object graph.
+    B6 intentionally refuses to pretend that Azure adapters exist when the
+    enterprise-specific implementations are still outstanding.
+    Once the Azure adapters documented in NOT-IMPLEMENTED.md are completed,
+    this function should be implemented using those real classes.
+    Until then it raises NotImplementedError.
+    """
+    if settings.azure is None:
+        raise RuntimeError(
+            "AZURE_POC composition requires Azure settings."
+        )
+    raise NotImplementedError(
+        "Azure POC composition is not complete. "
+        "Implement the enterprise-approved Azure adapters for "
+        "Container Apps Jobs, evidence storage, Service Bus, "
+        "Azure OpenAI authentication, Azure DevOps workflow, and "
+        "hidden-oracle isolation before enabling AZURE_POC."
+    )
+=======================================================================
+IMPORTANT COMMENT ABOUT THE B6 COMPOSITION ROOT
+=======================================================================
+The `Protocol` definitions above are intentionally small.
+If Components 2–12 already define equivalent ports, those existing ports must
+be used instead.
+B6 should NOT leave:
+    Component3ReleaseGatePort
+and:
+    B6ReleaseGatePort
+as two permanent competing interfaces.
+The B6 reconciliation activity is:
+    identify duplicates
+        ↓
+    select canonical earlier interface
+        ↓
+    update imports
+        ↓
+    delete compatibility definition.
+The code above therefore establishes target composition semantics, not a
+license to proliferate interfaces.
+=======================================================================
+FILE: src/l1_automation/architecture/__init__.py
+=======================================================================
+"""
+Architecture enforcement utilities.
+These checks turn important design intentions into executable repository
+tests.
+They are intentionally conservative.
+A failed architecture check should cause a developer to inspect whether a
+trust boundary has accidentally moved.
+"""
+=======================================================================
+FILE: src/l1_automation/architecture/repository_check.py
+=======================================================================
+"""
+Static repository architecture checks.
+These checks catch several high-value classes of architectural drift:
+    - duplicate shared-contract definitions;
+    - Azure SDK leakage into domain/application components;
+    - hidden-oracle imports from online release-gate code;
+    - assurance thresholds accidentally encoded as environment variables.
+This is not a complete static-analysis system.
+It is a small set of repository-specific invariants valuable enough to encode
+directly.
+"""
+from __future__ import annotations
+import ast
+from dataclasses import dataclass
+from pathlib import Path
+CANONICAL_SHARED_CONTRACT_NAMES = frozenset(
+    {
+        "TaskRequest",
+        "TaskSpecification",
+        "CandidateArtifact",
+        "GateDecision",
+        "GateOutcome",
+        "EvidenceArtifact",
+        "ExecutionReceipt",
+    }
+)
+ONLINE_PACKAGES = frozenset(
+    {
+        "change_execution",
+        "release_gate",
+        "orchestration",
+        "workflow",
+        "capabilities",
+    }
+)
+AZURE_IMPORT_PREFIXES = (
+    "azure.",
+)
+FORBIDDEN_ONLINE_IMPORT_FRAGMENTS = (
+    "evaluation.oracle",
+    "hidden_oracle",
+    "benchmark.hidden",
+)
+FORBIDDEN_ASSURANCE_ENVIRONMENT_NAMES = (
+    "MUTATION_SCORE",
+    "FALSE_RELEASE_TOLERANCE",
+    "GATE_THRESHOLD",
+    "REQUIRED_EVIDENCE",
+    "PASS_THRESHOLD",
+)
+@dataclass(frozen=True, slots=True)
+class ArchitectureViolation:
+    path: Path
+    line: int
+    rule: str
+    details: str
+def _python_files(
+    package_root: Path,
+) -> tuple[Path, ...]:
+    return tuple(
+        sorted(
+            path
+            for path in package_root.rglob(
+                "*.py"
+            )
+            if "__pycache__" not in path.parts
+        )
+    )
+def _parse(
+    path: Path,
+) -> ast.Module:
+    try:
+        return ast.parse(
+            path.read_text(
+                encoding="utf-8"
+            ),
+            filename=str(path),
+        )
+    except SyntaxError as exc:
+        raise RuntimeError(
+            f"Cannot architecture-check syntactically invalid file "
+            f"{path}: {exc}"
+        ) from exc
+def find_duplicate_contract_definitions(
+    package_root: Path,
+) -> tuple[ArchitectureViolation, ...]:
+    """
+    Shared contracts may be DEFINED only under:
+        l1_automation/contracts/
+    Other modules may import/re-export them.
+    """
+    violations: list[
+        ArchitectureViolation
+    ] = []
+    for path in _python_files(
+        package_root
+    ):
+        relative = path.relative_to(
+            package_root
+        )
+        if (
+            relative.parts
+            and relative.parts[0] == "contracts"
+        ):
+            continue
+        tree = _parse(
+            path
+        )
+        for node in tree.body:
+            if (
+                isinstance(
+                    node,
+                    ast.ClassDef,
+                )
+                and node.name
+                in CANONICAL_SHARED_CONTRACT_NAMES
+            ):
+                violations.append(
+                    ArchitectureViolation(
+                        path=path,
+                        line=node.lineno,
+                        rule=(
+                            "canonical_contract_defined_outside_contracts"
+                        ),
+                        details=(
+                            f"{node.name} must be imported from the "
+                            "canonical B1 contracts package."
+                        ),
+                    )
+                )
+    return tuple(
+        violations
+    )
+def find_azure_sdk_leakage(
+    package_root: Path,
+) -> tuple[ArchitectureViolation, ...]:
+    """
+    Detect direct Azure SDK imports in online/domain packages.
+    Azure adapters may use Azure SDKs.
+    Core domain/application services should depend on ports instead.
+    """
+    violations: list[
+        ArchitectureViolation
+    ] = []
+    for path in _python_files(
+        package_root
+    ):
+        relative = path.relative_to(
+            package_root
+        )
+        if not relative.parts:
+            continue
+        top_package = (
+            relative.parts[0]
+        )
+        if top_package not in ONLINE_PACKAGES:
+            continue
+        tree = _parse(
+            path
+        )
+        for node in ast.walk(
+            tree
+        ):
+            module_name: str | None = None
+            if isinstance(
+                node,
+                ast.Import,
+            ):
+                for alias in node.names:
+                    if alias.name.startswith(
+                        AZURE_IMPORT_PREFIXES
+                    ):
+                        violations.append(
+                            ArchitectureViolation(
+                                path=path,
+                                line=node.lineno,
+                                rule="azure_sdk_leakage",
+                                details=(
+                                    f"Direct Azure import {alias.name!r} "
+                                    "belongs behind an infrastructure adapter."
+                                ),
+                            )
+                        )
+            elif isinstance(
+                node,
+                ast.ImportFrom,
+            ):
+                module_name = (
+                    node.module
+                    or ""
+                )
+                if module_name.startswith(
+                    AZURE_IMPORT_PREFIXES
+                ):
+                    violations.append(
+                        ArchitectureViolation(
+                            path=path,
+                            line=node.lineno,
+                            rule="azure_sdk_leakage",
+                            details=(
+                                f"Direct Azure import {module_name!r} "
+                                "belongs behind an infrastructure adapter."
+                            ),
+                        )
+                    )
+    return tuple(
+        violations
+    )
+def find_hidden_oracle_leakage(
+    package_root: Path,
+) -> tuple[ArchitectureViolation, ...]:
+    """
+    Detect obvious imports of hidden-evaluation logic from ONLINE packages.
+    Infrastructure IAM checks remain necessary.
+    Python imports alone cannot prove credential isolation.
+    """
+    violations: list[
+        ArchitectureViolation
+    ] = []
+    for path in _python_files(
+        package_root
+    ):
+        relative = path.relative_to(
+            package_root
+        )
+        if (
+            not relative.parts
+            or relative.parts[0]
+            not in ONLINE_PACKAGES
+        ):
+            continue
+        tree = _parse(
+            path
+        )
+        for node in ast.walk(
+            tree
+        ):
+            candidates: list[
+                str
+            ] = []
+            if isinstance(
+                node,
+                ast.Import,
+            ):
+                candidates.extend(
+                    alias.name
+                    for alias in node.names
+                )
+            elif isinstance(
+                node,
+                ast.ImportFrom,
+            ):
+                candidates.append(
+                    node.module
+                    or ""
+                )
+            for imported_name in candidates:
+                normalized = (
+                    imported_name.lower()
+                )
+                if any(
+                    fragment
+                    in normalized
+                    for fragment
+                    in FORBIDDEN_ONLINE_IMPORT_FRAGMENTS
+                ):
+                    violations.append(
+                        ArchitectureViolation(
+                            path=path,
+                            line=node.lineno,
+                            rule=(
+                                "hidden_oracle_leakage"
+                            ),
+                            details=(
+                                "Online components must not import hidden "
+                                f"oracle material: {imported_name!r}."
+                            ),
+                        )
+                    )
+    return tuple(
+        violations
+    )
+def find_assurance_policy_environment_variables(
+    package_root: Path,
+) -> tuple[ArchitectureViolation, ...]:
+    """
+    Detect suspicious environment-variable names that appear to move
+    assurance policy into ordinary runtime configuration.
+    This check intentionally uses a small explicit vocabulary.
+    It is meant to catch architectural mistakes, not replace code review.
+    """
+    violations: list[
+        ArchitectureViolation
+    ] = []
+    for path in _python_files(
+        package_root
+    ):
+        tree = _parse(
+            path
+        )
+        for node in ast.walk(
+            tree
+        ):
+            if not isinstance(
+                node,
+                ast.Constant,
+            ):
+                continue
+            if not isinstance(
+                node.value,
+                str,
+            ):
+                continue
+            text = (
+                node.value.upper()
+            )
+            if not text.startswith(
+                "L1_"
+            ):
+                continue
+            if any(
+                marker in text
+                for marker
+                in FORBIDDEN_ASSURANCE_ENVIRONMENT_NAMES
+            ):
+                violations.append(
+                    ArchitectureViolation(
+                        path=path,
+                        line=getattr(
+                            node,
+                            "lineno",
+                            0,
+                        ),
+                        rule=(
+                            "assurance_policy_in_environment"
+                        ),
+                        details=(
+                            f"Suspicious runtime setting {node.value!r}. "
+                            "Assurance thresholds should be versioned "
+                            "policy artifacts."
+                        ),
+                    )
+                )
+    return tuple(
+        violations
+    )
+def run_repository_architecture_checks(
+    package_root: Path,
+) -> tuple[ArchitectureViolation, ...]:
+    """
+    Execute all B6 architecture checks.
+    """
+    return (
+        find_duplicate_contract_definitions(
+            package_root
+        )
+        + find_azure_sdk_leakage(
+            package_root
+        )
+        + find_hidden_oracle_leakage(
+            package_root
+        )
+        + find_assurance_policy_environment_variables(
+            package_root
+        )
+    )
+=======================================================================
+FILE: tests/configuration/test_loader.py
+=======================================================================
+from __future__ import annotations
+import pytest
+from l1_automation.configuration import (
+    ConfigurationError,
+    RuntimeMode,
+    load_platform_settings,
+)
+def test_local_configuration_requires_no_azure_settings() -> None:
+    settings = load_platform_settings(
+        {
+            "L1_RUNTIME_MODE": "local",
+            "L1_ENVIRONMENT_NAME": "pytest",
+        }
+    )
+    assert (
+        settings.runtime_mode
+        == RuntimeMode.LOCAL
+    )
+    assert settings.azure is None
+def test_azure_mode_requires_all_required_resources() -> None:
+    with pytest.raises(
+        ConfigurationError,
+        match="L1_AZURE_SUBSCRIPTION_ID",
+    ):
+        load_platform_settings(
+            {
+                "L1_RUNTIME_MODE": "azure_poc",
+            }
+        )
+def test_unknown_runtime_mode_fails_closed() -> None:
+    with pytest.raises(
+        ConfigurationError,
+        match="Unsupported",
+    ):
+        load_platform_settings(
+            {
+                "L1_RUNTIME_MODE": "magic",
+            }
+        )
+def test_azure_configuration_requires_three_distinct_jobs() -> None:
+    common = {
+        "L1_RUNTIME_MODE": "azure_poc",
+        "L1_ENVIRONMENT_NAME": "pytest",
+        "L1_AZURE_SUBSCRIPTION_ID": "subscription",
+        "L1_AZURE_RESOURCE_GROUP": "rg",
+        "L1_APP_CONFIGURATION_ENDPOINT": (
+            "https://urldefense.com/v3/__https://example.azconfig.io__;!!O9lNpA!jPVJb1hbB1YJTEJqxOc0QA3ekQaSLKlTpNVRkyIyc5-Z6ymOV-3MiqRVWpVdHsIePBXYiPVzdswpYwoPTTf30LYKCaM$ "
+        ),
+        "L1_EVIDENCE_STORAGE_ACCOUNT": "evidenceaccount",
+        "L1_EVIDENCE_CONTAINER": "evidence",
+        "L1_SERVICE_BUS_NAMESPACE": "namespace",
+        "L1_TASK_QUEUE_NAME": "taskqueue",
+        # Deliberately incorrect:
+        # same execution boundary for all three responsibilities.
+        "L1_CHANGE_EXECUTION_JOB_NAME": "shared-job",
+        "L1_RELEASE_GATE_JOB_NAME": "shared-job",
+        "L1_HIDDEN_ORACLE_JOB_NAME": "shared-job",
+        "L1_AZURE_OPENAI_ENDPOINT": (
+            "https://urldefense.com/v3/__https://example.openai.azure.com__;!!O9lNpA!jPVJb1hbB1YJTEJqxOc0QA3ekQaSLKlTpNVRkyIyc5-Z6ymOV-3MiqRVWpVdHsIePBXYiPVzdswpYwoPTTf3-Dc63jM$ "
+        ),
+        "L1_AZURE_OPENAI_DEPLOYMENT": "model",
+        "L1_AZURE_DEVOPS_ORGANIZATION": "organization",
+        "L1_AZURE_DEVOPS_PROJECT": "project",
+        "L1_AZURE_DEVOPS_REPOSITORY": "repository",
+    }
+    with pytest.raises(
+        ConfigurationError,
+        match="three distinct",
+    ):
+        load_platform_settings(
+            common
+        )
+def test_plain_http_service_endpoint_is_rejected() -> None:
+    env = {
+        "L1_RUNTIME_MODE": "azure_poc",
+        "L1_AZURE_SUBSCRIPTION_ID": "subscription",
+        "L1_AZURE_RESOURCE_GROUP": "rg",
+        "L1_APP_CONFIGURATION_ENDPOINT": (
+            "https://urldefense.com/v3/__http://example.azconfig.io__;!!O9lNpA!jPVJb1hbB1YJTEJqxOc0QA3ekQaSLKlTpNVRkyIyc5-Z6ymOV-3MiqRVWpVdHsIePBXYiPVzdswpYwoPTTf3rvDFpys$ "
+        ),
+        "L1_EVIDENCE_STORAGE_ACCOUNT": "evidenceaccount",
+        "L1_EVIDENCE_CONTAINER": "evidence",
+        "L1_SERVICE_BUS_NAMESPACE": "namespace",
+        "L1_TASK_QUEUE_NAME": "taskqueue",
+        "L1_CHANGE_EXECUTION_JOB_NAME": "change-job",
+        "L1_RELEASE_GATE_JOB_NAME": "gate-job",
+        "L1_HIDDEN_ORACLE_JOB_NAME": "oracle-job",
+        "L1_AZURE_OPENAI_ENDPOINT": (
+            "https://urldefense.com/v3/__https://example.openai.azure.com__;!!O9lNpA!jPVJb1hbB1YJTEJqxOc0QA3ekQaSLKlTpNVRkyIyc5-Z6ymOV-3MiqRVWpVdHsIePBXYiPVzdswpYwoPTTf3-Dc63jM$ "
+        ),
+        "L1_AZURE_OPENAI_DEPLOYMENT": "model",
+        "L1_AZURE_DEVOPS_ORGANIZATION": "organization",
+        "L1_AZURE_DEVOPS_PROJECT": "project",
+        "L1_AZURE_DEVOPS_REPOSITORY": "repository",
+    }
+    with pytest.raises(
+        ConfigurationError,
+        match="HTTPS",
+    ):
+        load_platform_settings(
+            env
+        )
+=======================================================================
+FILE: tests/configuration/test_readiness.py
+=======================================================================
+from __future__ import annotations
+from l1_automation.configuration.models import (
+    PlatformSettings,
+    RuntimeMode,
+)
+from l1_automation.configuration.readiness import (
+    ReadinessStatus,
+    evaluate_readiness,
+)
+def test_local_runtime_is_ready_without_azure_verifier() -> None:
+    settings = PlatformSettings(
+        runtime_mode=RuntimeMode.LOCAL,
+        environment_name="pytest",
+        service_name="l1-test",
+    )
+    report = evaluate_readiness(
+        settings=settings
+    )
+    assert (
+        report.status
+        == ReadinessStatus.READY
+    )
+def test_azure_runtime_is_not_ready_without_real_verifier(
+    azure_settings,
+) -> None:
+    """
+    `azure_settings` should be the complete validated test fixture used by
+    the configuration tests.
+    The important assertion is architectural:
+        AZURE_POC
+        +
+        no real verifier
+        !=
+        READY
+    """
+    report = evaluate_readiness(
+        settings=azure_settings,
+        azure_verifier=None,
+    )
+    assert (
+        report.status
+        == ReadinessStatus.NOT_READY
+    )
+    assert any(
+        failure.name
+        == "azure_resource_verifier"
+        for failure in report.failures
+    )
+=======================================================================
+FILE: tests/architecture/test_contract_reconciliation.py
+=======================================================================
+"""
+Protect B1 canonical contract ownership.
+B4/B5 compatibility types must disappear after reconciliation.
+"""
+from pathlib import Path
+from l1_automation.architecture.repository_check import (
+    find_duplicate_contract_definitions,
+)
+def test_shared_contracts_are_defined_only_in_contract_package() -> None:
+    package_root = (
+        Path(__file__)
+        .resolve()
+        .parents[2]
+        / "src"
+        / "l1_automation"
+    )
+    violations = (
+        find_duplicate_contract_definitions(
+            package_root
+        )
+    )
+    assert violations == (), (
+        "Duplicate shared contract definitions found:\n"
+        + "\n".join(
+            f"{item.path}:{item.line}: "
+            f"{item.details}"
+            for item in violations
+        )
+    )
+=======================================================================
+FILE: tests/architecture/test_dependency_boundaries.py
+=======================================================================
+"""
+Executable architectural-boundary tests.
+These tests do not replace enterprise IAM verification.
+They prevent obvious source-level boundary regressions.
+"""
+from pathlib import Path
+from l1_automation.architecture.repository_check import (
+    find_assurance_policy_environment_variables,
+    find_azure_sdk_leakage,
+    find_hidden_oracle_leakage,
+)
+PACKAGE_ROOT = (
+    Path(__file__)
+    .resolve()
+    .parents[2]
+    / "src"
+    / "l1_automation"
+)
+def _render(
+    violations,
+) -> str:
+    return "\n".join(
+        f"{item.path}:{item.line}: "
+        f"[{item.rule}] "
+        f"{item.details}"
+        for item in violations
+    )
+def test_online_domain_does_not_import_azure_sdk_directly() -> None:
+    violations = find_azure_sdk_leakage(
+        PACKAGE_ROOT
+    )
+    assert violations == (), _render(
+        violations
+    )
+def test_online_domain_does_not_import_hidden_oracle() -> None:
+    violations = find_hidden_oracle_leakage(
+        PACKAGE_ROOT
+    )
+    assert violations == (), _render(
+        violations
+    )
+def test_assurance_policy_is_not_moved_into_environment_variables() -> None:
+    violations = (
+        find_assurance_policy_environment_variables(
+            PACKAGE_ROOT
+        )
+    )
+    assert violations == (), _render(
+        violations
+    )
+=======================================================================
+FILE: tests/bootstrap/test_composition.py
+=======================================================================
+from __future__ import annotations
+import pytest
+from l1_automation.bootstrap.composition import (
+    build_application,
+)
+from l1_automation.configuration.models import (
+    PlatformSettings,
+    RuntimeMode,
+)
+def test_local_runtime_builds_local_application() -> None:
+    settings = PlatformSettings(
+        runtime_mode=RuntimeMode.LOCAL,
+        environment_name="pytest",
+        service_name="l1-test",
+    )
+    composition = build_application(
+        settings
+    )
+    assert (
+        composition.settings
+        is settings
+    )
+    assert (
+        composition.orchestrator
+        is not None
+    )
+    assert (
+        composition.release_gate_service
+        is not None
+    )
+def test_azure_runtime_cannot_fall_back_to_local_adapters(
+    complete_azure_settings,
+) -> None:
+    with pytest.raises(
+        NotImplementedError,
+        match="Azure POC composition",
+    ):
+        build_application(
+            complete_azure_settings
+        )
+=======================================================================
+FILE: config/local.example.env
+=======================================================================
+# --------------------------------------------------------------------
+# LOCAL DEVELOPMENT CONFIGURATION
+# --------------------------------------------------------------------
+#
+# This file contains no secret.
+#
+# It is safe to commit as an example.
+#
+# Copy values into the mechanism used by the developer's environment.
+# Do not add real credentials to this file.
+L1_RUNTIME_MODE=local
+L1_ENVIRONMENT_NAME=local
+L1_SERVICE_NAME=l1-engineering-automation
+=======================================================================
+FILE: config/azure-poc.example.env
+=======================================================================
+# --------------------------------------------------------------------
+# AZURE POC CONFIGURATION TEMPLATE
+# --------------------------------------------------------------------
+#
+# THESE ARE RESOURCE LOCATORS — NOT SECRETS.
+#
+# Do not put:
+#
+#     Azure OpenAI keys
+#     Service Bus connection strings
+#     storage account keys
+#     Azure DevOps PATs
+#
+# into this file.
+#
+# The preferred Azure design uses managed identity/keyless authentication
+# wherever the selected service and enterprise configuration permit it.
+#
+# Values below are examples showing the required configuration shape.
+# They are NOT deployable enterprise values.
+L1_RUNTIME_MODE=azure_poc
+L1_ENVIRONMENT_NAME=azure-poc
+L1_SERVICE_NAME=l1-engineering-automation
+# Azure subscription/resource group
+L1_AZURE_SUBSCRIPTION_ID=<ENTERPRISE-SUBSCRIPTION-ID>
+L1_AZURE_RESOURCE_GROUP=<ENTERPRISE-RESOURCE-GROUP>
+# Azure App Configuration
+L1_APP_CONFIGURATION_ENDPOINT=https://<STORE>.azconfig.io
+# Evidence storage
+L1_EVIDENCE_STORAGE_ACCOUNT=<STORAGE-ACCOUNT>
+L1_EVIDENCE_CONTAINER=<EVIDENCE-CONTAINER>
+# Azure Service Bus
+L1_SERVICE_BUS_NAMESPACE=<SERVICE-BUS-NAMESPACE>
+L1_TASK_QUEUE_NAME=<TASK-QUEUE>
+# Separate execution boundaries
+L1_CHANGE_EXECUTION_JOB_NAME=<CHANGE-EXECUTION-JOB>
+L1_RELEASE_GATE_JOB_NAME=<RELEASE-GATE-JOB>
+L1_HIDDEN_ORACLE_JOB_NAME=<HIDDEN-ORACLE-JOB>
+# Model endpoint
+#
+# Do not put the API key here.
+L1_AZURE_OPENAI_ENDPOINT=https://<RESOURCE>.openai.azure.com
+L1_AZURE_OPENAI_DEPLOYMENT=<DEPLOYMENT-NAME>
+# Azure DevOps workflow identity
+L1_AZURE_DEVOPS_ORGANIZATION=<ORGANIZATION>
+L1_AZURE_DEVOPS_PROJECT=<PROJECT>
+L1_AZURE_DEVOPS_REPOSITORY=<REPOSITORY>
+=======================================================================
+IMPORTANT CHARACTER-LEVEL NOTE ABOUT THE EXAMPLE ENV FILE
+=======================================================================
+Strings surrounded by:
+    <...>
+above are intentionally NOT executable values.
+They are documentation markers in an example configuration file.
+The application loader does not manufacture enterprise resource names.
+Real deployment configuration must supply those values explicitly.
+=======================================================================
+SERVICE BUS RECONCILIATION
+=======================================================================
+The workflow integration component should retain idempotency even if Azure
+Service Bus duplicate detection is enabled.
+The correct conceptual model is:
+    Producer
+       │
+       ▼
+    stable MessageId
+       │
+       ▼
+    Service Bus
+       │
+       ▼
+    Peek-lock consumer
+       │
+       ▼
+    IDEMPOTENT CLAIM
+       │
+       ├── already processed
+       │       ↓
+       │     no duplicate work
+       │
+       └── new
+               ↓
+            execute
+Do NOT assume:
+    duplicate detection
+        =
+    exactly-once business processing.
+The workflow component should therefore retain a persistent identity such as:
+    external_event_id
+or:
+    provider + event_id
+and atomically claim it before creating a new orchestration run.
+=======================================================================
+MODEL AUTHENTICATION RECONCILIATION
+=======================================================================
+The Azure model adapter should conceptually use:
+    DefaultAzureCredential
+or an explicitly selected managed-identity credential
+at the INFRASTRUCTURE ADAPTER boundary.
+Example production-shaped adapter construction:
+
+```python
+from azure.identity import DefaultAzureCredential
+credential = DefaultAzureCredential()
+model_adapter = AzureOpenAIModelAdapter(
+    endpoint=settings.azure.azure_openai_endpoint,
+    deployment=settings.azure.azure_openai_deployment,
+    credential=credential,
+)
+```
+
+IMPORTANT:
+This code belongs in:
+    infrastructure / Azure composition
+not:
+    ChangeExecutionService
+and not:
+    ReleaseGateService.
+Those services should receive a model port such as:
+    ModelClientPort
+through constructor injection.
+=======================================================================
+APP CONFIGURATION / KEY VAULT RECONCILIATION
+=======================================================================
+A useful Azure split is:
+    Azure App Configuration
+    -----------------------
+    ordinary mutable environment configuration
+    examples:
+        feature switches
+        resource references
+        environment labels
+        non-secret adapter configuration
+    Azure Key Vault
+    ---------------
+    actual secrets where secrets are unavoidable
+    Versioned Capability Repository
+    -------------------------------
+    assurance-critical artifacts
+    examples:
+        X1 task specification
+        gate-policy.yaml
+        eval-specification.yaml
+        SKILL.md
+Do NOT use App Configuration as a convenient mutable location for:
+    production gate threshold = 0.73
+unless the design explicitly versions and governs that artifact as assurance
+policy.
+Configuration convenience must not defeat capability reproducibility.
+=======================================================================
+CAPABILITY IDENTITY RECONCILIATION
+=======================================================================
+The production capability identity should eventually bind:
+    task specification hash
+    skill hash
+    gate-policy hash
+    eval-specification hash
+    model configuration identity
+    evidence-planner version
+    evidence-diversity-mapper version
+    mutation strategy version
+Conceptually:
+    CapabilityIdentity
+        │
+        ├── task_spec_sha256
+        ├── skill_sha256
+        ├── gate_policy_sha256
+        ├── eval_spec_sha256
+        ├── model_config_id
+        ├── planner_version
+        ├── mapper_version
+        └── mutation_version
+This is important because a statement such as:
+    "X1 achieved 98%"
+has little meaning if:
+    the prompt changed
+    the model changed
+    the gate changed
+    the policy changed
+after the experiment.
+=======================================================================
+B4 RECONCILIATION
+=======================================================================
+REMOVE from B4:
+    local TaskRequest definition
+    local TaskSpecification definition
+    local CandidateArtifact definition
+    local EvidenceArtifact definition
+    local GateDecision definition
+    local GateOutcome definition
+REPLACE with:
+
+```python
+from l1_automation.contracts import (
+    CandidateArtifact,
+    EvidenceArtifact,
+    GateDecision,
+    GateOutcome,
+    TaskRequest,
+    TaskSpecification,
+)
+```
+
+The B4 deterministic adapters may remain useful as LOCAL TEST ADAPTERS.
+Their contracts must become canonical B1 contracts.
+=======================================================================
+B5 RECONCILIATION
+=======================================================================
+B5 should NOT redefine:
+    GateOutcome
+    CandidateArtifact
+if B1 already owns them.
+Evaluation-specific concepts SHOULD remain in Component 5:
+    BenchmarkCase
+    PublicTaskPackage
+    HiddenOracle
+    OracleAssessment
+    DecisionClassification
+    CaseEvaluationResult
+    CampaignConfiguration
+    CampaignMetrics
+    CampaignReport
+The evaluation adapter should convert canonical online results into
+evaluation observations without defining a second competing candidate type
+unless a deliberate evaluation-specific projection is necessary.
+Preferred pattern:
+
+```python
+@dataclass(frozen=True, slots=True)
+class PipelineRunObservation:
+    run_id: str
+    case_id: str
+    candidate: CandidateArtifact
+    gate_decision: GateDecision
+    usage: ResourceUsage
+```
+
+rather than:
+
+```python
+PipelineCandidate
+CandidateArtifact
+Candidate
+GeneratedCandidate
+```
+
+all independently representing the same object.
+=======================================================================
+RESOURCE-USAGE RECONCILIATION
+=======================================================================
+Token accounting should also have one canonical representation.
+Recommended conceptual contract:
+
+```python
+@dataclass(frozen=True, slots=True)
+class ModelUsage:
+    model_id: str
+    purpose: str
+    input_tokens: int
+    output_tokens: int
+    calls: int
+    latency_seconds: float
+@dataclass(frozen=True, slots=True)
+class ResourceUsage:
+    model_usage: tuple[ModelUsage, ...]
+    sandbox_cpu_seconds: float = 0.0
+    sandbox_wall_seconds: float = 0.0
+```
+
+Then:
+    Component 2
+        produces usage evidence
+    Component 3
+        produces usage evidence
+    Component 5
+        aggregates it
+    Component 8
+        monetizes it
+Component 5 should NOT independently estimate model pricing.
+Component 8 owns economics.
+=======================================================================
+NOT-IMPLEMENTED RECONCILIATION
+=======================================================================
+B2 identified intentionally unresolved functionality.
+B6 requires a one-to-one relationship between those documented gaps and the
+actual code.
+Every important unresolved production capability should satisfy:
+    DOCUMENTATION
+        │
+        ▼
+    NOT-IMPLEMENTED.md
+        NI-XX
+        │
+        ▼
+    CODE
+        raises NotImplementedError
+        mentioning NI-XX
+Example:
+
+```python
+raise NotImplementedError(
+    "NI-07: production Azure hidden-oracle execution requires "
+    "enterprise-approved workload identity, storage isolation, and "
+    "Container Apps Job configuration. See NOT-IMPLEMENTED.md."
+)
+```
+
+Conversely:
+    if NI-07 is implemented
+then:
+    remove the NotImplementedError
+    implement tests
+    update NOT-IMPLEMENTED.md
+    document qualification implications.
+Do NOT leave stale documentation saying:
+    NOT IMPLEMENTED
+when real code exists.
+Do NOT leave code silently unimplemented when B2 claims it exists.
+=======================================================================
+RECOMMENDED NOT-IMPLEMENTED MACHINE-CHECK
+=======================================================================
+A later enhancement can scan Python source for:
+    NotImplementedError
+and require each assurance-relevant occurrence to contain:
+    NI-<number>
+For example:
+
+```python
+raise NotImplementedError(
+    "NI-07: ..."
+)
+```
+
+This turns B2 into a trackable engineering artifact rather than a narrative
+document that gradually becomes stale.
+=======================================================================
+LOCAL ADAPTER NAMING STANDARD
+=======================================================================
+Use names that state their trust level.
+GOOD:
+    InMemoryEvidenceRepository
+    LocalDeterministicSandboxRunner
+    DeterministicX1ChangeExecutionAdapter
+    InMemoryWorkflowPublisher
+BAD:
+    EvidenceRepository
+    ProductionRunner
+    DefaultEngine
+when the object is actually only a local/test substitute.
+The name itself should make it difficult to mistake:
+    deterministic test adapter
+for:
+    production implementation.
+=======================================================================
+AZURE ADAPTER NAMING STANDARD
+=======================================================================
+Recommended names:
+    AzureBlobEvidenceRepository
+    AzureContainerAppsJobRunner
+    AzureServiceBusTaskConsumer
+    AzureOpenAIModelClient
+    AzureDevOpsWorkflowPublisher
+    AzureResourceReadinessVerifier
+These classes may import Azure SDKs.
+The application/domain services should not.
+=======================================================================
+ERROR SEMANTICS AFTER B6
+=======================================================================
+The repository must distinguish at least:
+    ConfigurationError
+        startup/runtime configuration invalid
+    InfrastructureUnavailableError
+        required external service unavailable
+    CandidateValidationError
+        candidate identity/artifact invalid
+    EvidenceCollectionError
+        evidence collection could not complete
+    GateOutcome.FAIL
+        positive evidence says candidate should not proceed
+    GateOutcome.HUMAN_REVIEW_REQUIRED
+        automated evidence is insufficient or ambiguous
+    OracleError
+        offline hidden evaluator could not establish truth
+These are different events.
+A developer should not solve exception handling with:
+
+```python
+except Exception:
+    return GateOutcome.FAIL
+```
+
+That would create incorrect evaluation data and confuse infrastructure
+reliability with candidate quality.
+=======================================================================
+STARTUP SEQUENCE AFTER B6
+=======================================================================
+The application startup sequence should become:
+    process starts
+         │
+         ▼
+    load_platform_settings()
+         │
+         ▼
+    validate configuration
+         │
+         ▼
+    evaluate_readiness()
+         │
+         ├── NOT_READY
+         │       ↓
+         │   fail startup / diagnostic
+         │
+         └── READY
+                 ↓
+         build_application()
+                 │
+                 ▼
+         start workflow consumer / API
+For AZURE_POC the order should NOT be:
+    build half-configured application
+        ↓
+    discover missing resources during candidate execution.
+Fail as early as practical.
+=======================================================================
+PRODUCTION ENTRYPOINT — RECOMMENDED
+=======================================================================
+FILE: src/l1_automation/main.py
+
+```python
+"""
+Production-shaped process entry point.
+The entrypoint performs only startup/bootstrap responsibilities.
+It does not contain:
+    candidate-generation logic
+    gate logic
+    benchmark logic
+    business KPI logic.
+"""
+from __future__ import annotations
+from l1_automation.bootstrap.composition import (
+    build_application,
+)
+from l1_automation.configuration import (
+    load_platform_settings,
+)
+from l1_automation.configuration.readiness import (
+    ReadinessStatus,
+    evaluate_readiness,
+)
+def main() -> int:
+    """
+    Start the platform.
+    Returns an operating-system-style exit code:
+        0
+            startup successful
+        non-zero
+            startup rejected
+    A production Azure entrypoint should inject the real
+    AzureResourceReadinessVerifier before enabling AZURE_POC.
+    """
+    settings = load_platform_settings()
+    # LOCAL mode can evaluate readiness without Azure infrastructure.
+    #
+    # AZURE_POC intentionally remains NOT READY until the real Azure verifier
+    # is supplied by the Azure composition layer.
+    readiness = evaluate_readiness(
+        settings=settings,
+        azure_verifier=None,
+    )
+    if (
+        readiness.status
+        != ReadinessStatus.READY
+    ):
+        for failure in readiness.failures:
+            print(
+                f"STARTUP NOT READY: "
+                f"{failure.name}: "
+                f"{failure.details}"
+            )
+        return 2
+    application = build_application(
+        settings
+    )
+    # Starting a workflow consumer/server is intentionally outside the
+    # current B6 scope.
+    #
+    # The composition is nevertheless constructed here so configuration
+    # and dependency errors occur before accepting engineering work.
+    if application.orchestrator is None:
+        raise RuntimeError(
+            "Composition produced no orchestrator."
+        )
+    return 0
+if __name__ == "__main__":
+    raise SystemExit(
+        main()
+    )
+```
+
+=======================================================================
+WHY B6 DOES NOT IMPLEMENT A REAL AZURE RESOURCE VERIFIER
+=======================================================================
+The interface is implemented.
+The enterprise adapter is not.
+This is intentional.
+A correct implementation requires facts we do not possess:
+    subscription architecture
+    approved resource provider configuration
+    Azure RBAC policy
+    managed-identity design
+    network topology
+    private endpoint requirements
+    evidence-storage policy
+    hidden-oracle storage location
+    Azure DevOps authentication model
+Inventing these values would violate one of the central development rules of
+the project:
+    UNKNOWN PRODUCTION DEPENDENCY
+        ≠
+    SAFE DEFAULT.
+The appropriate code is therefore:
+    explicit port
+    +
+    explicit NotImplementedError / readiness failure
+until the enterprise configuration exists.
+=======================================================================
+WHY THREE AZURE JOB IDENTITIES MATTER
+=======================================================================
+Separating job names alone is not sufficient.
+The desired mature structure is approximately:
+    CHANGE EXECUTION IDENTITY
+    -------------------------
+    CAN READ:
+        public task
+        authorized source repository
+        approved skill/specification
+    CAN WRITE:
+        candidate artifact
+    CANNOT READ:
+        hidden oracle
+    RELEASE GATE IDENTITY
+    ---------------------
+    CAN READ:
+        candidate
+        public task/specification
+        approved gate policy
+        public/static dependencies
+    CAN WRITE:
+        gate evidence
+        gate decision
+    CANNOT READ:
+        hidden oracle
+    HIDDEN ORACLE IDENTITY
+    ----------------------
+    CAN READ:
+        exact candidate
+        hidden benchmark artifacts
+    CAN WRITE:
+        oracle assessment
+    DOES NOT NEED:
+        candidate-generation authority
+This is the infrastructure realization of the logical B3/B5 trust boundary.
+=======================================================================
+IMPORTANT AZURE CONTAINER APPS JOB DETAIL
+=======================================================================
+A Container Apps Job has access to secrets configured for that job when it
+starts.
+Therefore creating:
+    one shared job
+with:
+    every credential
+and merely passing:
+    MODE=change
+or:
+    MODE=oracle
+would materially weaken the hidden-oracle trust boundary.
+The preferred POC shape remains:
+    separate job definitions
+    +
+    separate workload identities
+    +
+    least privilege.
+=======================================================================
+CONFIGURATION CHANGE VERSUS CAPABILITY CHANGE
+=======================================================================
+Examples that ordinarily do NOT require capability requalification:
+    logging verbosity
+    telemetry destination
+    Service Bus queue resource rename
+    evidence-storage account migration
+provided behavior/evidence semantics are unchanged and migration itself is
+validated.
+Examples that MAY require requalification:
+    model deployment changed
+    model version changed
+    prompt changed
+    SKILL.md changed
+    GatePolicy changed
+    EvidenceDiversityMapper changed
+    mutation strategy changed
+    execution environment materially changed
+    task scope expanded
+The application should therefore distinguish:
+    infrastructure configuration version
+from:
+    capability configuration identity.
+=======================================================================
+B6 VERSIONING STANDARD
+=======================================================================
+Recommended identities:
+    software_version
+        repository release / Git commit
+    capability_version
+        X1 semantic capability
+    task_specification_hash
+        exact specification bytes
+    skill_hash
+        exact skill bytes
+    gate_policy_hash
+        exact policy bytes
+    eval_spec_hash
+        exact evaluation specification
+    model_configuration_id
+        model/deployment configuration
+    benchmark_version
+        frozen benchmark
+    execution_image_digest
+        actual container image
+A campaign result should eventually contain all applicable identities.
+=======================================================================
+PYPROJECT RECONCILIATION
+=======================================================================
+There should be ONE canonical:
+    pyproject.toml
+B4's temporary:
+    pyproject-b4-test-fragment.toml
+must be merged and deleted.
+Recommended minimum shape:
+
+```toml
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "l1-engineering-automation"
+version = "0.1.0"
+description = "POC platform for evidence-gated automation of bounded engineering tasks."
+requires-python = ">=3.11"
+dependencies = []
+[project.optional-dependencies]
+test = [
+    "pytest>=8,<9",
+]
+azure = [
+    "azure-identity>=1.19,<2",
+    "azure-storage-blob>=12,<13",
+    "azure-servicebus>=7,<8",
+    "azure-appconfiguration-provider>=2,<3",
+]
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+addopts = [
+    "-ra",
+    "--strict-config",
+    "--strict-markers",
+]
+[tool.setuptools.packages.find]
+where = [
+    "src",
+]
+```
+
+IMPORTANT:
+Before committing dependency versions to the actual enterprise repository,
+resolve them through the bank's approved package/security process.
+B6's important structural decision is:
+    Azure dependencies are an OPTIONAL infrastructure dependency group.
+The core domain/evaluation code should remain importable without Azure SDKs.
+=======================================================================
+WHY AZURE DEPENDENCIES SHOULD BE OPTIONAL
+=======================================================================
+A junior scientist should be able to run:
+    unit tests
+    gate-policy tests
+    statistical tests
+    synthetic campaign tests
+without:
+    Azure subscription
+    Azure credentials
+    Service Bus
+    Blob Storage
+    Azure OpenAI
+That supports:
+    reproducibility
+    faster development
+    lower cost
+    clearer test failure semantics.
+Azure integration tests should be marked separately.
+=======================================================================
+RECOMMENDED PYTEST MARKERS
+=======================================================================
+Add:
+
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "integration: requires external infrastructure",
+    "azure: requires Azure POC infrastructure",
+    "evaluation: evaluates AI capability rather than ordinary software behavior",
+]
+```
+
+Then:
+    pytest
+can run ordinary deterministic software tests.
+Whereas:
+    pytest -m azure
+can run authorized Azure integration tests.
+And actual large evaluation campaigns should generally have their own
+campaign runner rather than pretending to be ordinary unit tests.
+=======================================================================
+B6 REPOSITORY RECONCILIATION PROCEDURE
+=======================================================================
+Perform this procedure ONCE after assembling Components 1–12 and B1–B5.
+STEP 1 — SHARED CONTRACTS
+-------------------------
+Search for definitions of:
+    TaskRequest
+    TaskSpecification
+    CandidateArtifact
+    EvidenceArtifact
+    ExecutionReceipt
+    GateDecision
+    GateOutcome
+For each:
+    retain B1 canonical definition
+    update imports
+    delete duplicates.
+STEP 2 — PORTS
+--------------
+Search for:
+    ModelClientPort
+    EvidenceRepositoryPort
+    ExecutionEnvironmentPort
+    CapabilityRegistryPort
+    WorkflowPublisherPort
+    HiddenOraclePort
+If multiple interfaces represent exactly the same responsibility:
+    choose one
+    update imports
+    delete duplicates.
+STEP 3 — LOCAL ADAPTERS
+-----------------------
+Move deterministic B4/B5 implementations into clearly named local/test
+adapter modules.
+Do not discard useful deterministic test implementations.
+STEP 4 — AZURE ADAPTERS
+-----------------------
+For each production adapter:
+    implemented
+        → integration test required
+    not implemented
+        → NI-XX reference + explicit failure
+STEP 5 — CONFIGURATION
+----------------------
+Remove ad-hoc:
+    os.getenv(...)
+calls from domain/application modules.
+Only the configuration/bootstrap layer should interpret process environment
+variables.
+STEP 6 — ASSURANCE POLICY
+-------------------------
+Search environment/configuration code for:
+    mutation threshold
+    evidence requirement
+    gate threshold
+    false-release tolerance
+Move those values back into versioned assurance artifacts.
+STEP 7 — HIDDEN ORACLE
+----------------------
+Search online code for:
+    hidden oracle
+    reference patch
+    expected result
+    hidden test
+Any dependency deserves immediate review.
+STEP 8 — TOKEN USAGE
+--------------------
+Select one canonical usage contract.
+Remove per-component incompatible token counters.
+STEP 9 — EXCEPTIONS
+-------------------
+Review:
+    except Exception
+in assurance-critical code.
+Broad catches should normally:
+    re-raise typed infrastructure failure
+rather than:
+    PASS
+    FAIL
+    REVIEW
+without explicit semantics.
+STEP 10 — TEST
+--------------
+Run:
+    unit tests
+    architecture tests
+    B4 E2E test
+    B5 campaign-software test
+Only after those pass should Azure integration begin.
+=======================================================================
+B6 HIGH-VALUE ARCHITECTURAL INVARIANTS
+=======================================================================
+After reconciliation, the following should all be true:
+INVARIANT 1
+-----------
+One shared concept has one canonical contract.
+INVARIANT 2
+-----------
+Online components cannot import hidden-oracle implementation.
+INVARIANT 3
+-----------
+Domain/application services do not directly instantiate Azure SDK clients.
+INVARIANT 4
+-----------
+AZURE_POC cannot silently use LOCAL adapters.
+INVARIANT 5
+-----------
+Secrets are not stored in committed runtime configuration.
+INVARIANT 6
+-----------
+Assurance policy is not ordinary environment configuration.
+INVARIANT 7
+-----------
+Change execution, gate execution, and hidden oracle have distinct execution
+boundaries in the Azure POC configuration.
+INVARIANT 8
+-----------
+Candidate and gate identities remain canonical B1 objects.
+INVARIANT 9
+-----------
+Component 5 evaluates the same online pipeline intended for real use.
+INVARIANT 10
+------------
+NotImplemented functionality fails visibly.
+INVARIANT 11
+------------
+Infrastructure failures do not become candidate failures.
+INVARIANT 12
+------------
+Completed evaluation campaigns remain bound to exact capability/configuration
+identities.
+=======================================================================
+THINGS B6 STILL DOES NOT SETTLE
+=======================================================================
+B6 intentionally does NOT invent:
+    exact BMO Azure subscription
+    exact resource group
+    exact Service Bus namespace
+    exact Azure DevOps repository
+    exact managed identities
+    exact RBAC roles
+    exact network restrictions
+    exact Key Vault
+    exact model deployment
+    exact X1 production task
+    production gate thresholds
+    acceptable false-release tolerance
+    production benchmark
+    benchmark ownership
+    production retention policy
+These are enterprise decisions or empirical results.
+They should remain explicit gaps rather than plausible-looking constants.
+=======================================================================
+B6 RELATIONSHIP TO NOT-IMPLEMENTED.md
+=======================================================================
+After implementing B6, B2 should be revisited.
+Each NI entry should now fall into one of three states:
+    OPEN
+        still genuinely unimplemented
+    PARTIALLY IMPLEMENTED
+        interface/domain behavior exists
+        but production adapter remains absent
+    IMPLEMENTED
+        code + tests exist
+        NI entry can be closed
+Example:
+    NI-07 — Azure hidden-oracle executor
+    Status:
+        PARTIALLY IMPLEMENTED
+    Exists:
+        HiddenOraclePort
+        campaign integration
+        deterministic local implementation
+        readiness requirement
+    Missing:
+        Azure Container Apps Job adapter
+        workload identity
+        hidden storage isolation
+        Azure integration test
+This level of specificity prevents "not implemented" from becoming an
+unstructured TODO list.
+=======================================================================
+B6 SUCCESS CRITERIA
+=======================================================================
+B6 is complete when:
+    [ ] B1 is the sole owner of shared contracts.
+    [ ] B4 compatibility contract classes have been removed.
+    [ ] B5 no longer duplicates canonical online contracts.
+    [ ] There is one canonical pyproject.toml.
+    [ ] Runtime configuration is immutable and validated.
+    [ ] LOCAL and AZURE_POC modes are explicit.
+    [ ] AZURE_POC cannot fall back silently to LOCAL adapters.
+    [ ] Azure resource locators contain no secrets.
+    [ ] Assurance thresholds are absent from ordinary runtime configuration.
+    [ ] Azure SDK imports live behind infrastructure adapter boundaries.
+    [ ] Online code has no hidden-oracle dependency.
+    [ ] Architecture tests enforce those source-level boundaries.
+    [ ] Azure readiness is distinct from configuration validity.
+    [ ] Missing Azure implementations produce explicit NOT_READY or
+        NotImplementedError outcomes.
+    [ ] Change/gate/oracle Azure job identities are distinct.
+    [ ] Token/resource usage has one canonical contract.
+    [ ] B2 NOT-IMPLEMENTED entries correspond to actual code state.
+    [ ] B4 deterministic E2E tests still pass after reconciliation.
+    [ ] B5 evaluation-software tests still pass after reconciliation.
+    [ ] No evaluation result is invalidated merely because reconciliation
+        renamed Python modules without changing capability semantics.
+    [ ] Any material behavioral change introduced during reconciliation is
+        versioned and evaluated as a new capability configuration.
+=======================================================================
+WHAT B6 ACHIEVES
+=======================================================================
+B1 gave us:
+    LANGUAGE.
+B2 gave us:
+    VISIBLE GAPS.
+B3 gave us:
+    DESIGN RATIONALE.
+B4 gave us:
+    ONE WORKING SYSTEM PATH.
+B5 gave us:
+    A WAY TO MEASURE THAT SYSTEM.
+B6 gives us:
+    ONE CONSISTENT REPOSITORY.
+The architecture after B6 can be represented as:
+                     VERSIONED CAPABILITY
+                             │
+                             ▼
+                     Canonical B1 Contracts
+                             │
+             ┌───────────────┴────────────────┐
+             │                                │
+             ▼                                ▼
+       ONLINE SYSTEM                    OFFLINE EVALUATION
+             │                                │
+             │                                │
+      ChangeExecution                  Benchmark Manifest
+             │                                │
+             ▼                                │
+         Candidate                             │
+             │                                │
+             ▼                                │
+        ReleaseGate                           │
+             │                                │
+             ▼                                │
+     PASS / FAIL / REVIEW                     │
+             │                                │
+             └─────────────┐                  │
+                           │                  │
+                           ▼                  ▼
+                        Candidate        Hidden Oracle
+                        + Decision            │
+                           │                  │
+                           └────────┬─────────┘
+                                    ▼
+                          EvaluationCampaign
+                                    │
+                                    ▼
+                              CampaignReport
+ALL of these depend on:
+                     CANONICAL CONTRACTS
+rather than local compatibility types.
+Infrastructure surrounds the system:
+              ┌────────────────────────────────┐
+              │       CONFIGURATION ROOT       │
+              │                                │
+              │   LOCAL      or     AZURE_POC  │
+              └──────────────┬─────────────────┘
+                             │
+                             ▼
+                       COMPOSITION ROOT
+                             │
+          ┌──────────────────┼───────────────────┐
+          │                  │                   │
+          ▼                  ▼                   ▼
+       Model Port       Execution Port     Evidence Port
+          ▲                  ▲                   ▲
+          │                  │                   │
+     Azure/OpenAI       Container Jobs       Blob Storage
+      or Local             or Local           or Memory
+while:
+                    HIDDEN ORACLE ACCESS
+remains deliberately outside the identities available to:
+                    ChangeExecution
+and:
+                    ReleaseGate.
+=======================================================================
+B6 FINAL DESIGN POSITION
+=======================================================================
+B6 is intentionally less glamorous than the AI-agent components.
+That is precisely why it is important.
+A sophisticated release gate is not trustworthy if:
+    the wrong policy is loaded,
+    two components disagree about candidate identity,
+    local adapters masquerade as Azure adapters,
+    hidden evaluation artifacts leak into the online system,
+    or runtime configuration can silently alter assurance behavior.
+B6 therefore establishes an important engineering principle:
+    CONFIGURATION,
+    COMPOSITION,
+    CONTRACT IDENTITY,
+    AND TRUST BOUNDARIES
+are part of the assurance system.
+They are not administrative details around the AI.
+After B6, the repository should be coherent enough that the remaining work is
+less about inventing architecture and more about:
+    verifying cross-component consistency,
+    implementing the enterprise-specific adapters that remain genuinely
+    outstanding,
+    and preparing the final repository documentation.
+=======================================================================
+RECOMMENDED NEXT COMPONENT
+=======================================================================
+B7 should now be:
+    FINAL CROSS-COMPONENT CONSISTENCY AND ASSURANCE REVIEW
+B7 should inspect the repository as one system and verify:
+    contract consistency
+    dependency direction
+    candidate identity
+    evidence lineage
+    gate semantics
+    hidden-oracle isolation
+    statistical semantics
+    retry/error semantics
+    token accounting
+    configuration ownership
+    NOT-IMPLEMENTED correspondence
+    test coverage
+    documentation consistency
+B7 should be primarily a verification and reconciliation artifact rather than
+another major new architectural component.
+After B7, the final major deliverable should be:
+    B8 — MASTER README.md
+written in raw Markdown against the actual final repository structure.
+=======================================================================
+END OF B6
+=======================================================================

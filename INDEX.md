@@ -33,7 +33,14 @@ Source: [prompts/repo_diagram.txt](prompts/repo_diagram.txt)
 | `A10.txt` | 10 Execution Environment & Sandbox | [A10-execution-environment/](A10-execution-environment/) |
 | `A11.txt` | 11 Task Specification & Capability Registry | [A11-task-specification-registry/](A11-task-specification-registry/) |
 | `A12.txt` | 12 Engineering Workflow Integration | [A12-workflow-integration/](A12-workflow-integration/) |
-| `B1.txt` – `B8.txt` | blind-spot notes | **not received yet** |
+| `B1` | consolidated shared contracts | [B1-consolidated-shared-contracts/](B1-consolidated-shared-contracts/) |
+| `B2` | not-implemented register | [B2-not-implemented-register/NOT-IMPLEMENTED.md](B2-not-implemented-register/NOT-IMPLEMENTED.md) |
+| `B3` | design rationale | [B3-design-rationale/DESIGN-RATIONALE.md](B3-design-rationale/DESIGN-RATIONALE.md) |
+| `B4` | composition root + first end-to-end X1 test | [B4-composition-root/](B4-composition-root/) |
+| `B5` | hidden-oracle evaluation campaign | [B5-evaluation-campaign/](B5-evaluation-campaign/) |
+| `B6` | production configuration + reconciliation | [B6-production-configuration/](B6-production-configuration/) |
+| `B7` | cross-component consistency review | [B7-consistency-review/](B7-consistency-review/) |
+| `B8` | master README | [B8-master-readme/README.md](B8-master-readme/README.md) |
 | `E1.txt` | evidence diversity mapper | [E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.py](E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.py) |
 | `E2.txt` | its README | [E1-E2-conceptual-diversity-mapper/README.md](E1-E2-conceptual-diversity-mapper/README.md) |
 | `prompt_AB_.txt` | | [prompts/prompt_AB_.txt](prompts/prompt_AB_.txt) — **PARTIAL** |
@@ -45,6 +52,24 @@ Source: [prompts/repo_diagram.txt](prompts/repo_diagram.txt)
 **Three prompts are incomplete.** They were transcribed from photographs that stopped
 partway through the file. Each one carries a transcription note at the top and an end
 marker where the photograph stopped. Replace them with the real files when you can.
+
+### The B-series is a second, parallel repository
+
+The A-series describes twelve components, each its own Python package
+(`ai_engineering_contracts`, `ai_engineering_change_executor`, and so on).
+
+The B-series describes **one** package, `l1_automation`, with a completely different
+internal layout. B4, B5, B6 and B7 are fragments of that single package, not four
+separate projects. To run them you must merge the four `src/` trees into one directory.
+`PYTHONPATH` is not enough, because `architecture/` is a regular package in B6 and so
+B7's module inside it stays invisible.
+
+B1 is different again. It keeps the A-series package name `ai_engineering_contracts`
+but replaces its contents. See defect 11.
+
+Each B directory also holds `B<n>-SOURCE.txt`. That is the original bundle document as
+received, kept complete, because it contains migration steps and acceptance criteria
+that are not code and have no declared filename.
 
 ### A10 came in two versions
 
@@ -76,6 +101,11 @@ break the cross-component contract.
 | `A11-task-specification-registry/` | `task_specification_registry` | — |
 | `A12-workflow-integration/` | `engineering_workflow_integration` | httpx |
 | `E1-E2-conceptual-diversity-mapper/` | single module, not a package | — |
+| `B1-consolidated-shared-contracts/` | `ai_engineering_contracts` — **collides with A1** | — |
+| `B4-composition-root/` | `l1_automation.bootstrap` | — |
+| `B5-evaluation-campaign/` | `l1_automation.evaluation` | — |
+| `B6-production-configuration/` | `l1_automation.{configuration,bootstrap,architecture}` | — |
+| `B7-consistency-review/` | `l1_automation.architecture` | B6 |
 
 ## Install order
 
@@ -99,6 +129,21 @@ The E1/E2 mapper has no third-party dependency and needs no install. Run it dire
 python E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.py
 ```
 
+**The B-series needs its own virtual environment.** B1 must never be installed beside
+A1. See defect 11.
+
+```bash
+python -m venv .venv-b
+.venv-b/bin/pip install "pydantic>=2.10,<3" pytest PyYAML
+.venv-b/bin/pip install -e B1-consolidated-shared-contracts
+```
+
+B4 to B7 have no `pyproject.toml`. Run them with the source directory on the path:
+
+```bash
+cd B5-evaluation-campaign && PYTHONPATH=src ../.venv-b/bin/python -m pytest tests -q
+```
+
 ## Current test status
 
 | Component | Tests | Note |
@@ -116,6 +161,12 @@ python E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.
 | A11 | 3 / 3 pass | Two declared test files are missing. |
 | A12 | 6 / 6 pass | Two declared test files are missing. Defect 10. |
 | E1/E2 mapper | 8 / 8 pass | One open finding in the example fixture. |
+| B1 | 16 / 16 pass | The cleanest artifact received. But see defect 11. |
+| B4 | 6 / 6 pass | |
+| B5 | 10 / 10 pass | |
+| B6 | 10 / 13 pass | Defects 12 and 13. One failure was mail corruption, now repaired. |
+| B7 | cannot import alone | Needs B6 merged into the same tree. Defect 14. |
+| B4+B5+B6+B7 merged | 25 / 30 pass | Defect 15. |
 
 ## Open defects
 
@@ -134,6 +185,12 @@ says to report issues and not to alter the design.
 | 8 | `A10-execution-environment/src/execution_environment/hashing.py:24` | `canonical_json_bytes()` converts a Pydantic model only at the top level. `service.py:89` passes a plain dict holding nested models (`network`, `limits`), so `json.dumps` raises `TypeError`. **`ExecutionEnvironmentService.execute()` fails on every call.** |
 | 9 | `A10-execution-environment/Dockerfile` | The final `CMD [ ... ]` spans five lines. Dockerfile JSON-array form must be on one line. Every other Dockerfile in this repository uses the single-line form. The image cannot build. Not confirmed against a real build — no Docker daemon was running here. |
 | 10 | `A9`, `A12` and `A1` | Three incompatible task-request types. `A1.TaskRunRequest` has 16 fields; `A9.TaskRequest` has 9; `A12.TaskRequest` has 9. Only `task_type`, `requested_by` and `metadata` are common to all three. Neither A9 nor A12 imports `ai_engineering_contracts`. `A12.OrchestratorPort.submit_task()` cannot feed `A9.EngineeringAutomationOrchestrator.run()`. **This is contract drift, the blind spot the platform exists to catch.** |
+| 11 | `A1` and `B1` | Both define the Python package `ai_engineering_contracts`, with incompatible contents. A1 has `TaskRunRequest` and `GateOutcome`; B1 has `TaskRequest` and `GateDisposition`. The distribution names differ (`ai-engineering-shared-contracts`, `ai-engineering-contracts`), so **pip installs both without any warning** and whichever comes last silently shadows the other. That would break A2, A3, A4 and A5. B1 is therefore installed in a separate `.venv-b`. |
+| 12 | `B6-production-configuration/src/l1_automation/bootstrap/composition.py:125` | `_build_local_application()` imports six modules that exist nowhere in B1–B8: `l1_automation.capabilities.local_registry`, `.change_execution.local_service`, `.evidence.in_memory_repository`, `.release_gate.local_service`, `.workflow.in_memory_publisher`, `.orchestration.service`. The composition root cannot build anything. |
+| 13 | `B6-production-configuration/tests/` | No `conftest.py` was supplied, but `test_readiness.py` requires the fixture `azure_settings` and `test_composition.py` requires `complete_azure_settings`. Both error. The source even comments that the fixture "should be" the one used by the configuration tests, so the author knew it was absent. |
+| 14 | `B7-consistency-review` | Imports `l1_automation.architecture.repository_check`, which lives in B6. Because B6 makes `architecture/` a regular package, putting both on `PYTHONPATH` is not enough — the two directory trees must be physically merged. B7 collects zero tests on its own. |
+| 15 | `B4`, `B5`, `B6`, `B7` merged | **B7's own architecture review fails on the repository B4–B7 describe.** `tools/run_b7_review.py` reports 7 violations: `bootstrap/x1_poc.py` redefines `GateOutcome`, `TaskRequest`, `TaskSpecification`, `CandidateArtifact`, `EvidenceArtifact` and `GateDecision`, and `evaluation/contracts.py` redefines `GateOutcome`. B4 and B5 both say these compatibility types are temporary and must be deleted during B6 reconciliation. That step was never performed, so the B-series does not meet its own acceptance criteria. |
+| 16 | `B1` versus `B4`–`B7` | The two halves of the B-series are not connected. `l1_automation` never imports `ai_engineering_contracts` anywhere. B7's checker expects the canonical contracts to live in `l1_automation/contracts/`, which does not exist; B1 puts them in `ai_engineering_contracts` instead. Two different canonical homes are declared for the same contracts. |
 
 ## Files that were declared but never supplied
 
@@ -146,14 +203,27 @@ them. They were not invented.
 | A10 | `README-TENTH-STEPS.md` |
 | A11 | `tests/test_hashing.py`, `tests/test_validation.py`, `README-ELEVENTH-STEPS.md` |
 | A12 | `tests/test_idempotency.py`, `tests/test_azure_devops.py`, `README-TWELFTH-STEPS.md` |
+| B6 | `tests/conftest.py` (two fixtures are used but never defined) |
+| B4–B7 | one `pyproject.toml` for `l1_automation`; B4 supplies only a fragment |
 
 Two components also supplied files that their own declared structure does not list:
 `A10` adds `src/execution_environment/profile_validation.py`, and `A11` adds
 `src/task_specification_registry/yaml_loader.py` and `promotion.py`.
 
-## One correction that was applied
+B6 also shows a recommended `pyproject.toml` and a pytest marker block, but presents them
+as guidance rather than as files. They were not written out.
 
-Four URLs arrived wrapped by a mail-gateway rewriter
+## Two corrections that were applied
+
+Both are repairs to mail-gateway damage, not changes to the design.
+
+**A-series.** Four URLs arrived wrapped by a rewriter
 (`urldefense.com/v3/__...__;!!O9lNpA!...`), including `JSON_SCHEMA_DIALECT` in
-`constants.py` and an f-string whose `{artifact_id}` had been mangled. That is transit
-corruption, not source code, so the original URLs were restored.
+`constants.py` and an f-string whose `{artifact_id}` had been mangled.
+
+**B-series.** The same rewriter hit four URLs in
+`B6-production-configuration/tests/configuration/test_loader.py`. One of them mattered:
+`test_plain_http_service_endpoint_is_rejected` deliberately uses `http://` to prove that
+plain HTTP is refused. The wrapper turned it into an `https://urldefense.com/...` URL, so
+the test stopped testing anything and failed. Restoring the four originals fixed it. The
+corrupted form is still visible in `B6-SOURCE.txt`, which is kept exactly as received.

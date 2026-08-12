@@ -1,0 +1,4524 @@
+B5 — FIRST HIDDEN-ORACLE X1 EVALUATION CAMPAIGN
+================================================
+
+PURPOSE
+-------
+
+B4 established the first deterministic SOFTWARE end-to-end path:
+
+    TaskRequest
+        ↓
+    ChangeExecutionService
+        ↓
+    CandidateArtifact
+        ↓
+    ReleaseGateService
+        ↓
+    GateDecision
+        ↓
+    Orchestration / workflow result
+
+That answered an engineering question:
+
+    "Are the major components wired together correctly?"
+
+B5 deliberately answers a different and substantially more important
+evaluation question:
+
+    "When the complete X1 automation pipeline is exercised against cases
+     whose correct outcomes are hidden from the online system, how often
+     does the pipeline make the right decision, how uncertain are those
+     estimates, and how much automation does the gate actually achieve?"
+
+B5 therefore implements the first version of the OFFLINE evaluation path:
+
+    Validated Benchmark
+           │
+           ▼
+    EvaluationCampaignRunner
+           │
+           ├── exposes PUBLIC task information
+           │
+           ├── invokes the ONLINE pipeline
+           │
+           ├── keeps HIDDEN oracle inaccessible to that pipeline
+           │
+           ├── compares final candidate against hidden acceptance logic
+           │
+           ├── evaluates the gate decision against that oracle
+           │
+           ├── records PASS / FAIL / REVIEW
+           │
+           ├── detects FALSE RELEASE
+           │
+           ├── detects FALSE REJECTION
+           │
+           ├── calculates selective-automation metrics
+           │
+           ├── calculates statistically disciplined intervals
+           │
+           └── preserves case-level evidence
+           │
+           ▼
+    CampaignReport
+
+
+WHY B5 IS NOT "JUST MORE PYTEST"
+--------------------------------
+
+The repository now needs three explicitly different concepts:
+
+    SOFTWARE TEST
+
+        Does our code behave according to its contracts?
+
+
+    CANDIDATE RELEASE GATE
+
+        Is there sufficient evidence to allow THIS exact candidate
+        to progress?
+
+
+    PIPELINE EVALUATION
+
+        Across a population of tasks, how trustworthy is the entire
+        change-generation + release-gating capability?
+
+
+These concepts must not be collapsed.
+
+A green pytest suite can tell us that the evaluation machinery itself works.
+
+It cannot tell us that the AI system has a sufficiently low false-release
+rate.
+
+Likewise, 500 generated tests for one candidate do not provide 500
+independent observations of platform reliability.
+
+B5 therefore treats the BENCHMARK CASE as the principal unit for the first
+pipeline-level reliability calculations.
+
+Repeated runs of the same case are retained separately and are NOT silently
+counted as independent new tasks.
+
+
+DEEP-REVIEW DESIGN BASIS
+------------------------
+
+The design intentionally follows several established patterns seen in
+software-agent evaluation:
+
+    1. Candidate-generation and evaluation are separate phases.
+
+    2. Evaluation executes candidate patches in controlled, reproducible
+       environments rather than accepting a model's verbal claim that a
+       solution is correct.
+
+    3. Per-instance evaluation artifacts are retained instead of reporting
+       only an aggregate score.
+
+    4. Hidden evaluation criteria must remain inaccessible to the system
+       being evaluated.
+
+    5. Benchmark quality itself is an assurance problem. A large benchmark
+       does not compensate for broken, ambiguous, contaminated, or
+       incorrectly labelled cases.
+
+The current SWE-bench evaluation harness similarly evaluates generated
+patches through isolated execution and produces per-instance results as well
+as aggregate results. Recent coding-evaluation research has also reinforced
+the importance of auditing benchmark quality rather than assuming benchmark
+labels are automatically reliable.
+
+For our architecture, those practices are adapted to a more demanding
+question:
+
+    not merely
+
+        "Did the generated patch solve the task?"
+
+    but also
+
+        "Did our ReleaseGateService make the correct release decision?"
+
+
+=======================================================================
+IMPORTANT B5 ASSURANCE RULE
+=======================================================================
+
+The following path is FORBIDDEN:
+
+    HiddenOracle
+         │
+         ▼
+    ReleaseGateService
+
+
+The required path is:
+
+    PUBLIC Benchmark Case
+         │
+         ▼
+    ONLINE PIPELINE
+         │
+         ▼
+    CandidateArtifact
+         │
+         ▼
+    GateDecision
+         │
+         │
+         └──────────────────────┐
+                                │
+    HIDDEN ORACLE               │
+         │                      │
+         └──────────────┬───────┘
+                        ▼
+              EvaluationCampaignRunner
+                        │
+                        ▼
+               Pipeline Evaluation
+
+
+The hidden oracle judges the pipeline.
+
+It does not help the pipeline.
+
+
+=======================================================================
+B5 REPOSITORY SHAPE
+=======================================================================
+
+The proposed B5 additions are:
+
+    src/
+    └── l1_automation/
+        └── evaluation/
+            ├── __init__.py
+            ├── contracts.py
+            ├── oracle.py
+            ├── metrics.py
+            ├── statistics.py
+            ├── campaign_runner.py
+            └── synthetic_x1_benchmark.py
+
+    tests/
+    └── evaluation/
+        ├── __init__.py
+        ├── test_metrics.py
+        ├── test_statistics.py
+        ├── test_oracle_isolation.py
+        └── test_x1_campaign.py
+
+
+IMPORTANT REPOSITORY RECONCILIATION NOTE
+----------------------------------------
+
+B1 remains the canonical owner of cross-component contracts.
+
+If B1 already defines equivalent objects for:
+
+    run identity
+    candidate identity
+    gate outcome
+    usage measurement
+    artifact references
+
+the B5 implementation should IMPORT those contracts rather than duplicate
+them.
+
+The compact objects below are deliberately scoped to Component 5 concepts
+that are genuinely evaluation-specific:
+
+    BenchmarkCase
+    HiddenOracle
+    OracleAssessment
+    CaseEvaluationResult
+    CampaignConfiguration
+    CampaignReport
+
+They should remain inside the evaluation component unless another component
+has a legitimate need for them.
+
+
+=======================================================================
+FILE: src/l1_automation/evaluation/__init__.py
+=======================================================================
+
+"""
+Offline evaluation and capability-qualification package.
+
+This package evaluates the COMPLETE automation system.
+
+It must not be imported by the online ReleaseGateService for access to hidden
+benchmark information.
+
+Dependency direction should remain approximately:
+
+    EvaluationCampaignRunner
+          │
+          ├── invokes online pipeline through an explicit port
+          │
+          ├── obtains hidden truth through HiddenOraclePort
+          │
+          └── calculates evaluation metrics
+
+The online pipeline must never depend on:
+
+    HiddenOracle
+    BenchmarkTruth
+    expected acceptability
+    expected gate outcome
+    reference solution
+
+because doing so would contaminate the evaluation.
+"""
+
+
+=======================================================================
+FILE: src/l1_automation/evaluation/contracts.py
+=======================================================================
+
+"""
+Evaluation-specific contracts for Component 5.
+
+These contracts describe experiments and observations.
+
+They deliberately distinguish:
+
+    PUBLIC TASK INFORMATION
+
+from
+
+    HIDDEN EVALUATION INFORMATION.
+
+That distinction is one of the most important trust boundaries in the
+repository.
+
+Junior engineers extending these classes should resist adding hidden fields
+to PublicTaskPackage merely because doing so simplifies an evaluation.
+
+If the online pipeline can see the answer, the benchmark is no longer
+measuring the capability we think it is measuring.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import StrEnum
+from typing import Mapping
+
+
+def utc_now() -> datetime:
+    """
+    Return a timezone-aware UTC timestamp.
+
+    Evaluation evidence frequently comes from multiple processes and
+    execution environments. Naive timestamps make ordering and correlation
+    unnecessarily ambiguous.
+    """
+
+    return datetime.now(timezone.utc)
+
+
+class GateOutcome(StrEnum):
+    """
+    Canonical gate outcomes used by B5.
+
+    During repository reconciliation this enum should be imported directly
+    from B1 if B1 already defines GateOutcome.
+    """
+
+    PASS = "pass"
+    FAIL = "fail"
+    HUMAN_REVIEW_REQUIRED = "human_review_required"
+
+
+class OracleAcceptability(StrEnum):
+    """
+    Hidden ground-truth judgement for a candidate.
+
+    ACCEPTABLE
+        Candidate satisfies the benchmark's hidden acceptance criteria.
+
+    UNACCEPTABLE
+        Candidate violates at least one decisive hidden criterion.
+
+    ORACLE_ERROR
+        The benchmark environment could not produce a trustworthy judgement.
+
+    ORACLE_ERROR is deliberately NOT interpreted as UNACCEPTABLE.
+
+    A broken evaluator is an evaluation-system problem, not evidence that
+    the candidate itself is wrong.
+    """
+
+    ACCEPTABLE = "acceptable"
+    UNACCEPTABLE = "unacceptable"
+    ORACLE_ERROR = "oracle_error"
+
+
+class DecisionClassification(StrEnum):
+    """
+    Relationship between the online gate decision and hidden truth.
+
+    CORRECT_PASS
+        Gate passed a candidate that the hidden oracle accepts.
+
+    FALSE_RELEASE
+        Gate passed a candidate that the hidden oracle rejects.
+
+        This is a particularly important failure because the online system
+        would have permitted an unacceptable candidate to progress.
+
+    CORRECT_REJECTION
+        Gate failed an unacceptable candidate.
+
+    FALSE_REJECTION
+        Gate failed a candidate that the hidden oracle considers acceptable.
+
+    CORRECT_REVIEW
+        Gate abstained / requested human review.
+
+        B5 reports this separately rather than forcing abstention into a
+        binary correct/incorrect classification.
+
+    ORACLE_ERROR
+        Hidden evaluation did not produce a trustworthy truth label.
+    """
+
+    CORRECT_PASS = "correct_pass"
+    FALSE_RELEASE = "false_release"
+    CORRECT_REJECTION = "correct_rejection"
+    FALSE_REJECTION = "false_rejection"
+    REVIEW_REQUIRED = "review_required"
+    ORACLE_ERROR = "oracle_error"
+
+
+@dataclass(frozen=True, slots=True)
+class PublicTaskPackage:
+    """
+    Information legitimately available to the ONLINE automation pipeline.
+
+    The object must never contain:
+
+        hidden tests
+        expected candidate
+        reference patch
+        known defect label
+        expected gate result
+        hidden acceptance properties
+    """
+
+    case_id: str
+    task_type: str
+    repository_id: str
+    baseline_revision: str
+    instruction: str
+    public_metadata: Mapping[str, str] = field(
+        default_factory=dict
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkCase:
+    """
+    Public identity of one validated benchmark case.
+
+    The actual hidden oracle is deliberately stored separately.
+
+    `benchmark_case_version` allows the same logical case to be corrected or
+    strengthened without silently rewriting historical campaign results.
+    """
+
+    public_task: PublicTaskPackage
+    benchmark_case_version: str
+
+
+@dataclass(frozen=True, slots=True)
+class PipelineCandidate:
+    """
+    Minimal candidate information required by Component 5.
+
+    In the integrated repository, this should normally adapt/import the
+    canonical B1 CandidateArtifact rather than introduce a second candidate
+    model.
+
+    The evaluation layer needs immutable candidate identity because hidden
+    oracle results and gate decisions must refer to the exact same artifact.
+    """
+
+    candidate_id: str
+    candidate_sha256: str
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class PipelineRunObservation:
+    """
+    Observable result returned by the ONLINE pipeline to Component 5.
+
+    IMPORTANT:
+
+    This object contains only information that the online system legitimately
+    produced.
+
+    There is no oracle label here.
+    """
+
+    run_id: str
+    case_id: str
+    candidate: PipelineCandidate
+    gate_outcome: GateOutcome
+    gate_decision_id: str
+    gate_reason_codes: tuple[str, ...]
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    model_calls: int = 0
+
+    wall_time_seconds: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class OracleAssessment:
+    """
+    Hidden assessment of an exact candidate.
+
+    The assessment is created AFTER the online pipeline has produced its
+    candidate and gate decision.
+    """
+
+    case_id: str
+    candidate_id: str
+    candidate_sha256: str
+    acceptability: OracleAcceptability
+    passed_hidden_checks: int
+    failed_hidden_checks: int
+    reason_codes: tuple[str, ...]
+    oracle_version: str
+
+
+@dataclass(frozen=True, slots=True)
+class CaseEvaluationResult:
+    """
+    Complete evaluation result for one benchmark case and one pipeline run.
+
+    This object joins:
+
+        public case
+        online observation
+        hidden assessment
+        derived classification
+
+    only inside Component 5.
+    """
+
+    campaign_id: str
+    case_id: str
+    case_version: str
+
+    run_id: str
+    run_index: int
+
+    candidate_id: str
+    candidate_sha256: str
+
+    gate_outcome: GateOutcome
+    oracle_acceptability: OracleAcceptability
+
+    classification: DecisionClassification
+
+    gate_reason_codes: tuple[str, ...]
+    oracle_reason_codes: tuple[str, ...]
+
+    input_tokens: int
+    output_tokens: int
+    model_calls: int
+
+    wall_time_seconds: float
+
+    evaluated_at: datetime = field(
+        default_factory=utc_now
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CampaignConfiguration:
+    """
+    Frozen configuration for one evaluation campaign.
+
+    Repeated runs can help estimate stochastic variability, but repeated runs
+    of the same benchmark case are NOT automatically treated as independent
+    new benchmark cases.
+
+    B5 therefore stores `runs_per_case` explicitly.
+    """
+
+    campaign_id: str
+    benchmark_id: str
+    benchmark_version: str
+
+    capability_id: str
+    capability_version: str
+
+    runs_per_case: int = 1
+
+    confidence_level: float = 0.95
+
+    def __post_init__(self) -> None:
+        if not self.campaign_id.strip():
+            raise ValueError(
+                "campaign_id must be non-empty."
+            )
+
+        if self.runs_per_case < 1:
+            raise ValueError(
+                "runs_per_case must be at least 1."
+            )
+
+        if not 0.0 < self.confidence_level < 1.0:
+            raise ValueError(
+                "confidence_level must be strictly between 0 and 1."
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ProportionEstimate:
+    """
+    One proportion plus an uncertainty interval.
+
+    `numerator` and `denominator` remain visible deliberately.
+
+    Reporting:
+
+        false release = 2%
+
+    without the underlying counts can create a misleading impression of
+    precision.
+    """
+
+    numerator: int
+    denominator: int
+
+    estimate: float | None
+
+    lower_bound: float | None
+    upper_bound: float | None
+
+    confidence_level: float
+
+    method: str
+
+
+@dataclass(frozen=True, slots=True)
+class CampaignMetrics:
+    """
+    Aggregate campaign metrics.
+
+    IMPORTANT:
+
+    These metrics describe observed benchmark performance.
+
+    They are NOT automatically estimates of performance on all real L1 work.
+
+    External validity depends on benchmark representativeness.
+    """
+
+    total_case_runs: int
+    oracle_valid_case_runs: int
+
+    correct_passes: int
+    false_releases: int
+
+    correct_rejections: int
+    false_rejections: int
+
+    human_reviews: int
+    oracle_errors: int
+
+    automated_decisions: int
+    automated_passes: int
+
+    automation_coverage: ProportionEstimate
+    false_release_per_total: ProportionEstimate
+    false_release_given_pass: ProportionEstimate
+    false_rejection_per_total: ProportionEstimate
+    human_review_rate: ProportionEstimate
+
+    total_input_tokens: int
+    total_output_tokens: int
+    total_model_calls: int
+
+    total_wall_time_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
+class CampaignReport:
+    """
+    Immutable result of one completed evaluation campaign.
+    """
+
+    configuration: CampaignConfiguration
+    case_results: tuple[CaseEvaluationResult, ...]
+    metrics: CampaignMetrics
+
+    started_at: datetime
+    completed_at: datetime
+
+
+=======================================================================
+FILE: src/l1_automation/evaluation/oracle.py
+=======================================================================
+
+"""
+Hidden-oracle interfaces and deterministic implementation for X1.
+
+SECURITY / ASSURANCE BOUNDARY
+-----------------------------
+
+Only Component 5 should receive HiddenOraclePort.
+
+Do NOT inject this dependency into:
+
+    ChangeExecutionService
+    EvidencePlanner
+    EvidenceDiversityMapper
+    ReleaseGateService
+    WorkflowIntegration
+
+The strongest version of this separation eventually uses infrastructure
+controls:
+
+    separate credentials
+    separate artifact location
+    separate execution mount
+    explicit network/storage policy
+
+rather than relying only on Python module boundaries.
+
+B5 establishes the software contract.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from hashlib import sha256
+
+from .contracts import (
+    BenchmarkCase,
+    OracleAcceptability,
+    OracleAssessment,
+    PipelineCandidate,
+)
+
+
+class HiddenOraclePort(ABC):
+    """
+    Authoritative hidden evaluation boundary.
+    """
+
+    @abstractmethod
+    def assess(
+        self,
+        *,
+        benchmark_case: BenchmarkCase,
+        candidate: PipelineCandidate,
+    ) -> OracleAssessment:
+        """
+        Evaluate one exact candidate against hidden benchmark criteria.
+
+        Implementations must verify candidate identity where relevant.
+
+        This method must not mutate the candidate.
+        """
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, slots=True)
+class HiddenX1Definition:
+    """
+    Hidden definition for one synthetic X1 benchmark case.
+
+    The online pipeline never receives this object.
+
+    `required_fragment` and `forbidden_fragments` are intentionally simple
+    because B5's first benchmark validates the campaign machinery.
+
+    A mature benchmark should normally evaluate behavior through hidden
+    executable tests/properties rather than relying primarily on text
+    matching.
+    """
+
+    case_id: str
+    required_fragment: str
+    forbidden_fragments: tuple[str, ...]
+    oracle_version: str = "x1-hidden-oracle-1.0.0"
+
+
+class DeterministicHiddenX1Oracle(
+    HiddenOraclePort
+):
+    """
+    Deterministic hidden oracle for the first synthetic X1 campaign.
+
+    This implementation is intentionally transparent in source code for the
+    purposes of demonstrating the architecture.
+
+    In a genuine qualification environment, the ONLINE pipeline must not have
+    filesystem or credential access to hidden oracle definitions.
+
+    The important B5 contract is therefore:
+
+        campaign runner has oracle
+        online pipeline does not.
+    """
+
+    def __init__(
+        self,
+        *,
+        definitions: tuple[HiddenX1Definition, ...],
+    ) -> None:
+        if not definitions:
+            raise ValueError(
+                "At least one hidden oracle definition is required."
+            )
+
+        self._definitions = {
+            definition.case_id: definition
+            for definition in definitions
+        }
+
+        if len(self._definitions) != len(definitions):
+            raise ValueError(
+                "Duplicate hidden oracle case IDs are not permitted."
+            )
+
+    def assess(
+        self,
+        *,
+        benchmark_case: BenchmarkCase,
+        candidate: PipelineCandidate,
+    ) -> OracleAssessment:
+
+        case_id = benchmark_case.public_task.case_id
+
+        try:
+            definition = self._definitions[case_id]
+        except KeyError as exc:
+            return OracleAssessment(
+                case_id=case_id,
+                candidate_id=candidate.candidate_id,
+                candidate_sha256=candidate.candidate_sha256,
+                acceptability=(
+                    OracleAcceptability.ORACLE_ERROR
+                ),
+                passed_hidden_checks=0,
+                failed_hidden_checks=0,
+                reason_codes=(
+                    "hidden_definition_missing",
+                ),
+                oracle_version="unknown",
+            )
+
+        actual_digest = sha256(
+            candidate.content.encode("utf-8")
+        ).hexdigest()
+
+        if actual_digest != candidate.candidate_sha256:
+            return OracleAssessment(
+                case_id=case_id,
+                candidate_id=candidate.candidate_id,
+                candidate_sha256=candidate.candidate_sha256,
+                acceptability=(
+                    OracleAcceptability.ORACLE_ERROR
+                ),
+                passed_hidden_checks=0,
+                failed_hidden_checks=0,
+                reason_codes=(
+                    "candidate_hash_mismatch",
+                ),
+                oracle_version=definition.oracle_version,
+            )
+
+        checks: list[tuple[str, bool]] = []
+
+        checks.append(
+            (
+                "required_fragment_present",
+                (
+                    definition.required_fragment
+                    in candidate.content
+                ),
+            )
+        )
+
+        for index, forbidden in enumerate(
+            definition.forbidden_fragments
+        ):
+            checks.append(
+                (
+                    f"forbidden_fragment_absent:{index}",
+                    forbidden not in candidate.content,
+                )
+            )
+
+        passed = sum(
+            1
+            for _, result in checks
+            if result
+        )
+
+        failed = len(checks) - passed
+
+        failed_reasons = tuple(
+            name
+            for name, result in checks
+            if not result
+        )
+
+        acceptability = (
+            OracleAcceptability.ACCEPTABLE
+            if failed == 0
+            else OracleAcceptability.UNACCEPTABLE
+        )
+
+        return OracleAssessment(
+            case_id=case_id,
+            candidate_id=candidate.candidate_id,
+            candidate_sha256=candidate.candidate_sha256,
+            acceptability=acceptability,
+            passed_hidden_checks=passed,
+            failed_hidden_checks=failed,
+            reason_codes=failed_reasons,
+            oracle_version=definition.oracle_version,
+        )
+
+
+=======================================================================
+FILE: src/l1_automation/evaluation/statistics.py
+=======================================================================
+
+"""
+Statistical utilities for Component 5.
+
+STATISTICAL PHILOSOPHY
+----------------------
+
+B5 deliberately avoids pretending that small samples are precise.
+
+For binomial proportions we use the Wilson score interval rather than the
+simple normal/Wald interval.
+
+Reasons include:
+
+    - the Wald interval performs poorly for small samples;
+    - false-release rates may be near zero;
+    - POC sample sizes may initially be modest.
+
+This choice does NOT solve the larger evaluation problems:
+
+    - benchmark representativeness;
+    - dependence between repeated runs;
+    - correlated benchmark cases;
+    - benchmark contamination;
+    - oracle quality.
+
+A mathematically correct interval around a biased benchmark statistic remains
+a biased answer.
+
+The interval should therefore be interpreted as uncertainty conditional on
+the observed benchmark sample and stated assumptions.
+"""
+
+from __future__ import annotations
+
+from math import sqrt
+from statistics import NormalDist
+
+from .contracts import ProportionEstimate
+
+
+def wilson_interval(
+    *,
+    successes: int,
+    trials: int,
+    confidence_level: float = 0.95,
+) -> ProportionEstimate:
+    """
+    Calculate a two-sided Wilson score interval for a binomial proportion.
+
+    Parameters
+    ----------
+    successes:
+        Number of events of interest.
+
+    trials:
+        Number of eligible observations.
+
+    confidence_level:
+        Two-sided confidence level.
+
+    Returns
+    -------
+    ProportionEstimate
+
+    IMPORTANT
+    ---------
+
+    `trials == 0` does not produce an invented value of zero.
+
+    Instead:
+
+        estimate = None
+        bounds   = None
+
+    because a rate with no denominator is undefined.
+
+    This is particularly important for:
+
+        false_release_given_pass
+
+    when a highly conservative system emits zero PASS decisions.
+    """
+
+    if trials < 0:
+        raise ValueError(
+            "trials cannot be negative."
+        )
+
+    if successes < 0:
+        raise ValueError(
+            "successes cannot be negative."
+        )
+
+    if successes > trials:
+        raise ValueError(
+            "successes cannot exceed trials."
+        )
+
+    if not 0.0 < confidence_level < 1.0:
+        raise ValueError(
+            "confidence_level must be strictly between 0 and 1."
+        )
+
+    if trials == 0:
+        return ProportionEstimate(
+            numerator=successes,
+            denominator=trials,
+            estimate=None,
+            lower_bound=None,
+            upper_bound=None,
+            confidence_level=confidence_level,
+            method="wilson",
+        )
+
+    p_hat = successes / trials
+
+    alpha = 1.0 - confidence_level
+
+    z = NormalDist().inv_cdf(
+        1.0 - alpha / 2.0
+    )
+
+    z_squared = z * z
+
+    denominator = (
+        1.0
+        + z_squared / trials
+    )
+
+    center = (
+        p_hat
+        + z_squared / (2.0 * trials)
+    ) / denominator
+
+    half_width = (
+        z
+        * sqrt(
+            (
+                p_hat * (1.0 - p_hat) / trials
+                + z_squared / (4.0 * trials * trials)
+            )
+        )
+        / denominator
+    )
+
+    lower = max(
+        0.0,
+        center - half_width,
+    )
+
+    upper = min(
+        1.0,
+        center + half_width,
+    )
+
+    return ProportionEstimate(
+        numerator=successes,
+        denominator=trials,
+        estimate=p_hat,
+        lower_bound=lower,
+        upper_bound=upper,
+        confidence_level=confidence_level,
+        method="wilson",
+    )
+
+
+=======================================================================
+FILE: src/l1_automation/evaluation/metrics.py
+=======================================================================
+
+"""
+Deterministic campaign metric calculation.
+
+This module should contain NO LLM calls.
+
+Once Component 5 has:
+
+    gate decision
+    +
+    hidden oracle assessment
+
+classification and aggregation are ordinary deterministic analytics.
+
+Keeping this layer deterministic makes metric definitions reviewable and
+reproducible.
+"""
+
+from __future__ import annotations
+
+from .contracts import (
+    CampaignMetrics,
+    CaseEvaluationResult,
+    DecisionClassification,
+)
+
+from .statistics import wilson_interval
+
+
+def build_campaign_metrics(
+    *,
+    results: tuple[CaseEvaluationResult, ...],
+    confidence_level: float,
+) -> CampaignMetrics:
+    """
+    Aggregate case/run-level observations into campaign metrics.
+
+    IMPORTANT DENOMINATOR DISCIPLINE
+    --------------------------------
+
+    B5 reports two false-release quantities:
+
+    1. false_release_per_total
+
+       false releases
+       -----------------------------
+       all oracle-valid case runs
+
+
+    2. false_release_given_pass
+
+       false releases
+       -----------------------------
+       automated PASS decisions
+
+
+    These answer different questions.
+
+    The second is especially relevant when asking:
+
+        "When the system autonomously says PASS, how frequently was
+         that decision wrong on this benchmark?"
+
+    Neither should be reported without its numerator and denominator.
+    """
+
+    total_case_runs = len(results)
+
+    oracle_valid = tuple(
+        result
+        for result in results
+        if (
+            result.classification
+            != DecisionClassification.ORACLE_ERROR
+        )
+    )
+
+    oracle_valid_count = len(oracle_valid)
+
+    correct_passes = sum(
+        result.classification
+        == DecisionClassification.CORRECT_PASS
+        for result in oracle_valid
+    )
+
+    false_releases = sum(
+        result.classification
+        == DecisionClassification.FALSE_RELEASE
+        for result in oracle_valid
+    )
+
+    correct_rejections = sum(
+        result.classification
+        == DecisionClassification.CORRECT_REJECTION
+        for result in oracle_valid
+    )
+
+    false_rejections = sum(
+        result.classification
+        == DecisionClassification.FALSE_REJECTION
+        for result in oracle_valid
+    )
+
+    human_reviews = sum(
+        result.classification
+        == DecisionClassification.REVIEW_REQUIRED
+        for result in oracle_valid
+    )
+
+    oracle_errors = (
+        total_case_runs
+        - oracle_valid_count
+    )
+
+    automated_decisions = (
+        correct_passes
+        + false_releases
+        + correct_rejections
+        + false_rejections
+    )
+
+    automated_passes = (
+        correct_passes
+        + false_releases
+    )
+
+    return CampaignMetrics(
+        total_case_runs=total_case_runs,
+        oracle_valid_case_runs=oracle_valid_count,
+        correct_passes=correct_passes,
+        false_releases=false_releases,
+        correct_rejections=correct_rejections,
+        false_rejections=false_rejections,
+        human_reviews=human_reviews,
+        oracle_errors=oracle_errors,
+        automated_decisions=automated_decisions,
+        automated_passes=automated_passes,
+
+        automation_coverage=wilson_interval(
+            successes=automated_decisions,
+            trials=oracle_valid_count,
+            confidence_level=confidence_level,
+        ),
+
+        false_release_per_total=wilson_interval(
+            successes=false_releases,
+            trials=oracle_valid_count,
+            confidence_level=confidence_level,
+        ),
+
+        false_release_given_pass=wilson_interval(
+            successes=false_releases,
+            trials=automated_passes,
+            confidence_level=confidence_level,
+        ),
+
+        false_rejection_per_total=wilson_interval(
+            successes=false_rejections,
+            trials=oracle_valid_count,
+            confidence_level=confidence_level,
+        ),
+
+        human_review_rate=wilson_interval(
+            successes=human_reviews,
+            trials=oracle_valid_count,
+            confidence_level=confidence_level,
+        ),
+
+        total_input_tokens=sum(
+            result.input_tokens
+            for result in results
+        ),
+
+        total_output_tokens=sum(
+            result.output_tokens
+            for result in results
+        ),
+
+        total_model_calls=sum(
+            result.model_calls
+            for result in results
+        ),
+
+        total_wall_time_seconds=sum(
+            result.wall_time_seconds
+            for result in results
+        ),
+    )
+
+
+=======================================================================
+FILE: src/l1_automation/evaluation/campaign_runner.py
+=======================================================================
+
+"""
+EvaluationCampaignRunner — Component 5 application service.
+
+This is the core B5 class.
+
+Its role is intentionally narrow:
+
+    1. iterate validated benchmark cases;
+    2. expose only PUBLIC task data to the online pipeline;
+    3. collect the online candidate and gate result;
+    4. ask the HIDDEN oracle to assess that exact candidate;
+    5. classify the relationship between gate and hidden truth;
+    6. preserve case-level results;
+    7. calculate aggregate metrics.
+
+The campaign runner does NOT:
+
+    - help ChangeExecutionService solve the task;
+    - provide hidden tests to ReleaseGateService;
+    - change a candidate after seeing the oracle;
+    - retry until the benchmark passes;
+    - alter gate thresholds based on qualification results;
+    - declare production approval.
+
+Those would contaminate the experiment.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from time import perf_counter
+
+from .contracts import (
+    BenchmarkCase,
+    CampaignConfiguration,
+    CampaignReport,
+    CaseEvaluationResult,
+    DecisionClassification,
+    GateOutcome,
+    OracleAcceptability,
+    PipelineRunObservation,
+    PublicTaskPackage,
+)
+
+from .metrics import build_campaign_metrics
+from .oracle import HiddenOraclePort
+
+
+class OnlinePipelinePort(ABC):
+    """
+    Boundary through which Component 5 invokes the real ONLINE pipeline.
+
+    A production adapter should invoke:
+
+        Component 9 orchestration
+
+    which in turn uses:
+
+        Component 11 capability resolution
+        Component 2 ChangeExecutionService
+        Component 3 ReleaseGateService
+        Component 4 evidence persistence
+        Component 10 execution environment
+
+    Component 5 should not reimplement those services.
+    """
+
+    @abstractmethod
+    def execute(
+        self,
+        *,
+        public_task: PublicTaskPackage,
+        run_index: int,
+    ) -> PipelineRunObservation:
+        """
+        Execute one online pipeline attempt.
+
+        The implementation MUST NOT receive HiddenOraclePort.
+        """
+        raise NotImplementedError
+
+
+def classify_gate_against_oracle(
+    *,
+    gate_outcome: GateOutcome,
+    oracle_acceptability: OracleAcceptability,
+) -> DecisionClassification:
+    """
+    Deterministically classify one gate decision against hidden truth.
+
+    The function intentionally has no AI dependency.
+
+    HUMAN_REVIEW_REQUIRED remains an abstention/review outcome rather than
+    being coerced into PASS or FAIL.
+    """
+
+    if (
+        oracle_acceptability
+        == OracleAcceptability.ORACLE_ERROR
+    ):
+        return DecisionClassification.ORACLE_ERROR
+
+    if gate_outcome == GateOutcome.HUMAN_REVIEW_REQUIRED:
+        return DecisionClassification.REVIEW_REQUIRED
+
+    if (
+        gate_outcome == GateOutcome.PASS
+        and oracle_acceptability
+        == OracleAcceptability.ACCEPTABLE
+    ):
+        return DecisionClassification.CORRECT_PASS
+
+    if (
+        gate_outcome == GateOutcome.PASS
+        and oracle_acceptability
+        == OracleAcceptability.UNACCEPTABLE
+    ):
+        return DecisionClassification.FALSE_RELEASE
+
+    if (
+        gate_outcome == GateOutcome.FAIL
+        and oracle_acceptability
+        == OracleAcceptability.UNACCEPTABLE
+    ):
+        return DecisionClassification.CORRECT_REJECTION
+
+    if (
+        gate_outcome == GateOutcome.FAIL
+        and oracle_acceptability
+        == OracleAcceptability.ACCEPTABLE
+    ):
+        return DecisionClassification.FALSE_REJECTION
+
+    # GateOutcome and OracleAcceptability are enums, so reaching this branch
+    # indicates that one of them was expanded without updating classification
+    # semantics.
+    raise RuntimeError(
+        "Unhandled gate/oracle combination. "
+        "Update deterministic evaluation semantics."
+    )
+
+
+class EvaluationCampaignRunner:
+    """
+    Execute one immutable evaluation campaign.
+
+    The online pipeline and hidden oracle are separate constructor
+    dependencies.
+
+    This is intentional and testable.
+    """
+
+    def __init__(
+        self,
+        *,
+        online_pipeline: OnlinePipelinePort,
+        hidden_oracle: HiddenOraclePort,
+    ) -> None:
+        self._online_pipeline = online_pipeline
+        self._hidden_oracle = hidden_oracle
+
+    def run(
+        self,
+        *,
+        configuration: CampaignConfiguration,
+        benchmark_cases: tuple[BenchmarkCase, ...],
+    ) -> CampaignReport:
+        """
+        Execute the complete campaign.
+
+        A benchmark with zero cases fails explicitly.
+
+        Producing an attractive report from an empty benchmark would be
+        meaningless.
+        """
+
+        if not benchmark_cases:
+            raise ValueError(
+                "Evaluation campaign requires at least one benchmark case."
+            )
+
+        self._validate_case_identity(
+            benchmark_cases
+        )
+
+        started_at = datetime.now(
+            timezone.utc
+        )
+
+        case_results: list[
+            CaseEvaluationResult
+        ] = []
+
+        for benchmark_case in benchmark_cases:
+
+            for run_index in range(
+                configuration.runs_per_case
+            ):
+
+                run_start = perf_counter()
+
+                observation = (
+                    self._online_pipeline.execute(
+                        public_task=(
+                            benchmark_case.public_task
+                        ),
+                        run_index=run_index,
+                    )
+                )
+
+                elapsed = (
+                    perf_counter()
+                    - run_start
+                )
+
+                self._validate_observation_identity(
+                    benchmark_case=benchmark_case,
+                    observation=observation,
+                )
+
+                assessment = (
+                    self._hidden_oracle.assess(
+                        benchmark_case=benchmark_case,
+                        candidate=observation.candidate,
+                    )
+                )
+
+                self._validate_oracle_binding(
+                    observation=observation,
+                    assessment=assessment,
+                )
+
+                classification = (
+                    classify_gate_against_oracle(
+                        gate_outcome=(
+                            observation.gate_outcome
+                        ),
+                        oracle_acceptability=(
+                            assessment.acceptability
+                        ),
+                    )
+                )
+
+                # Prefer latency reported by the actual pipeline when
+                # available. The local elapsed timer is a defensive fallback.
+                #
+                # In a distributed production campaign, wall time should be
+                # obtained from authoritative run telemetry rather than
+                # process-local timing alone.
+
+                wall_time = (
+                    observation.wall_time_seconds
+                    if observation.wall_time_seconds > 0.0
+                    else elapsed
+                )
+
+                case_results.append(
+                    CaseEvaluationResult(
+                        campaign_id=(
+                            configuration.campaign_id
+                        ),
+                        case_id=(
+                            benchmark_case.public_task.case_id
+                        ),
+                        case_version=(
+                            benchmark_case
+                            .benchmark_case_version
+                        ),
+                        run_id=observation.run_id,
+                        run_index=run_index,
+                        candidate_id=(
+                            observation
+                            .candidate
+                            .candidate_id
+                        ),
+                        candidate_sha256=(
+                            observation
+                            .candidate
+                            .candidate_sha256
+                        ),
+                        gate_outcome=(
+                            observation.gate_outcome
+                        ),
+                        oracle_acceptability=(
+                            assessment.acceptability
+                        ),
+                        classification=classification,
+                        gate_reason_codes=(
+                            observation.gate_reason_codes
+                        ),
+                        oracle_reason_codes=(
+                            assessment.reason_codes
+                        ),
+                        input_tokens=(
+                            observation.input_tokens
+                        ),
+                        output_tokens=(
+                            observation.output_tokens
+                        ),
+                        model_calls=(
+                            observation.model_calls
+                        ),
+                        wall_time_seconds=wall_time,
+                    )
+                )
+
+        frozen_results = tuple(
+            case_results
+        )
+
+        metrics = build_campaign_metrics(
+            results=frozen_results,
+            confidence_level=(
+                configuration.confidence_level
+            ),
+        )
+
+        completed_at = datetime.now(
+            timezone.utc
+        )
+
+        return CampaignReport(
+            configuration=configuration,
+            case_results=frozen_results,
+            metrics=metrics,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+
+    @staticmethod
+    def _validate_case_identity(
+        benchmark_cases: tuple[BenchmarkCase, ...],
+    ) -> None:
+        """
+        Prevent duplicate benchmark case IDs inside one campaign.
+
+        Duplicate cases would silently overweight a task in aggregate metrics.
+        If intentional weighting is ever introduced, it should be explicit
+        rather than achieved through accidental duplication.
+        """
+
+        case_ids = [
+            case.public_task.case_id
+            for case in benchmark_cases
+        ]
+
+        if len(case_ids) != len(set(case_ids)):
+            raise ValueError(
+                "Duplicate benchmark case IDs are not permitted "
+                "within one campaign."
+            )
+
+    @staticmethod
+    def _validate_observation_identity(
+        *,
+        benchmark_case: BenchmarkCase,
+        observation: PipelineRunObservation,
+    ) -> None:
+        """
+        Ensure the online result belongs to the requested benchmark case.
+        """
+
+        expected = (
+            benchmark_case.public_task.case_id
+        )
+
+        if observation.case_id != expected:
+            raise ValueError(
+                "Online pipeline returned an observation for the wrong "
+                f"benchmark case: expected={expected!r}, "
+                f"actual={observation.case_id!r}."
+            )
+
+    @staticmethod
+    def _validate_oracle_binding(
+        *,
+        observation: PipelineRunObservation,
+        assessment,
+    ) -> None:
+        """
+        Ensure oracle truth refers to the EXACT candidate that was gated.
+
+        This protects against accidental evaluation of:
+
+            Candidate C2
+
+        while recording the gate outcome for:
+
+            Candidate C1.
+        """
+
+        candidate = observation.candidate
+
+        if assessment.candidate_id != candidate.candidate_id:
+            raise ValueError(
+                "Oracle assessment candidate_id does not match the "
+                "online candidate."
+            )
+
+        if (
+            assessment.candidate_sha256
+            != candidate.candidate_sha256
+        ):
+            raise ValueError(
+                "Oracle assessment candidate hash does not match the "
+                "online candidate."
+            )
+
+
+=======================================================================
+FILE: src/l1_automation/evaluation/synthetic_x1_benchmark.py
+=======================================================================
+
+"""
+First controlled synthetic X1 benchmark.
+
+WHY SYNTHETIC?
+--------------
+
+For the first POC we need cases for which:
+
+    - the requested behavior is unambiguous;
+    - hidden truth can be constructed reliably;
+    - execution can be deterministic;
+    - expected failure modes are known.
+
+Synthetic cases are useful for validating evaluation machinery.
+
+They must NOT be presented as proof of performance on all real L1 work.
+
+The benchmark below therefore carries an explicit synthetic identity.
+
+WHY MULTIPLE CASE TYPES?
+------------------------
+
+A benchmark containing many copies of the same trivial addition defect would
+inflate N without adding much diversity.
+
+The first B5 benchmark deliberately varies simple operators and boundary
+conditions.
+
+This is still a development benchmark rather than a production qualification
+benchmark.
+"""
+
+from __future__ import annotations
+
+from .contracts import (
+    BenchmarkCase,
+    PublicTaskPackage,
+)
+
+from .oracle import (
+    HiddenX1Definition,
+)
+
+
+BENCHMARK_ID = "synthetic-x1-development"
+
+BENCHMARK_VERSION = "1.0.0"
+
+
+X1_BENCHMARK_CASES: tuple[
+    BenchmarkCase,
+    ...
+] = (
+
+    BenchmarkCase(
+        public_task=PublicTaskPackage(
+            case_id="X1-001",
+            task_type="X1",
+            repository_id=(
+                "synthetic/x1-addition"
+            ),
+            baseline_revision="baseline-001",
+            instruction=(
+                "Correct calculate(a, b) so that the function returns "
+                "the sum of a and b rather than subtracting b."
+            ),
+            public_metadata={
+                "language": "python",
+                "difficulty": "development-smoke",
+            },
+        ),
+        benchmark_case_version="1.0.0",
+    ),
+
+    BenchmarkCase(
+        public_task=PublicTaskPackage(
+            case_id="X1-002",
+            task_type="X1",
+            repository_id=(
+                "synthetic/x1-upper-bound"
+            ),
+            baseline_revision="baseline-002",
+            instruction=(
+                "Correct within_limit(value, limit) so that a value "
+                "equal to the inclusive limit is accepted."
+            ),
+            public_metadata={
+                "language": "python",
+                "difficulty": "development-smoke",
+            },
+        ),
+        benchmark_case_version="1.0.0",
+    ),
+
+    BenchmarkCase(
+        public_task=PublicTaskPackage(
+            case_id="X1-003",
+            task_type="X1",
+            repository_id=(
+                "synthetic/x1-empty-list"
+            ),
+            baseline_revision="baseline-003",
+            instruction=(
+                "Correct first_or_none(values) so that an empty sequence "
+                "returns None instead of raising an index error."
+            ),
+            public_metadata={
+                "language": "python",
+                "difficulty": "development-smoke",
+            },
+        ),
+        benchmark_case_version="1.0.0",
+    ),
+
+    BenchmarkCase(
+        public_task=PublicTaskPackage(
+            case_id="X1-004",
+            task_type="X1",
+            repository_id=(
+                "synthetic/x1-discount-floor"
+            ),
+            baseline_revision="baseline-004",
+            instruction=(
+                "Correct apply_discount so that the returned monetary "
+                "amount can never be negative."
+            ),
+            public_metadata={
+                "language": "python",
+                "difficulty": "development-smoke",
+            },
+        ),
+        benchmark_case_version="1.0.0",
+    ),
+)
+
+
+X1_HIDDEN_DEFINITIONS: tuple[
+    HiddenX1Definition,
+    ...
+] = (
+
+    HiddenX1Definition(
+        case_id="X1-001",
+        required_fragment="return a + b",
+        forbidden_fragments=(
+            "return a - b",
+        ),
+    ),
+
+    HiddenX1Definition(
+        case_id="X1-002",
+        required_fragment="value <= limit",
+        forbidden_fragments=(
+            "value < limit",
+        ),
+    ),
+
+    HiddenX1Definition(
+        case_id="X1-003",
+        required_fragment=(
+            "return values[0] if values else None"
+        ),
+        forbidden_fragments=(
+            "return values[0]\n",
+        ),
+    ),
+
+    HiddenX1Definition(
+        case_id="X1-004",
+        required_fragment=(
+            "return max(0, amount - discount)"
+        ),
+        forbidden_fragments=(
+            "return amount - discount",
+        ),
+    ),
+)
+
+
+=======================================================================
+FILE: tests/evaluation/__init__.py
+=======================================================================
+
+"""
+Component 5 software tests.
+
+These tests validate the evaluation machinery.
+
+They are NOT themselves capability qualification evidence.
+
+The actual CampaignReport produced from a validated, frozen benchmark and
+real AI pipeline is the evaluation artifact.
+"""
+
+
+=======================================================================
+FILE: tests/evaluation/test_statistics.py
+=======================================================================
+
+"""
+Tests for statistical utilities.
+
+The purpose is to verify calculation semantics, especially at small sample
+sizes and zero denominators.
+"""
+
+import pytest
+
+from l1_automation.evaluation.statistics import (
+    wilson_interval,
+)
+
+
+def test_wilson_zero_events_is_not_zero_uncertainty() -> None:
+    """
+    Zero observed failures in a small sample must not become:
+
+        true failure probability = 0
+
+    The point estimate is zero, but the upper confidence bound remains
+    positive.
+    """
+
+    result = wilson_interval(
+        successes=0,
+        trials=10,
+        confidence_level=0.95,
+    )
+
+    assert result.estimate == 0.0
+    assert result.lower_bound == pytest.approx(0.0)
+    assert result.upper_bound is not None
+    assert result.upper_bound > 0.0
+
+
+def test_zero_denominator_is_undefined() -> None:
+    """
+    Example:
+
+        the gate emitted zero PASS decisions.
+
+    Then:
+
+        false releases / PASS decisions
+
+    has no valid denominator.
+
+    Returning zero would misleadingly imply perfect performance.
+    """
+
+    result = wilson_interval(
+        successes=0,
+        trials=0,
+        confidence_level=0.95,
+    )
+
+    assert result.estimate is None
+    assert result.lower_bound is None
+    assert result.upper_bound is None
+
+
+def test_successes_cannot_exceed_trials() -> None:
+    with pytest.raises(
+        ValueError,
+        match="cannot exceed",
+    ):
+        wilson_interval(
+            successes=2,
+            trials=1,
+        )
+
+
+=======================================================================
+FILE: tests/evaluation/test_metrics.py
+=======================================================================
+
+"""
+Tests for deterministic classification and metric semantics.
+"""
+
+from l1_automation.evaluation.campaign_runner import (
+    classify_gate_against_oracle,
+)
+
+from l1_automation.evaluation.contracts import (
+    DecisionClassification,
+    GateOutcome,
+    OracleAcceptability,
+)
+
+
+def test_pass_unacceptable_is_false_release() -> None:
+
+    result = classify_gate_against_oracle(
+        gate_outcome=GateOutcome.PASS,
+        oracle_acceptability=(
+            OracleAcceptability.UNACCEPTABLE
+        ),
+    )
+
+    assert result == (
+        DecisionClassification.FALSE_RELEASE
+    )
+
+
+def test_fail_acceptable_is_false_rejection() -> None:
+
+    result = classify_gate_against_oracle(
+        gate_outcome=GateOutcome.FAIL,
+        oracle_acceptability=(
+            OracleAcceptability.ACCEPTABLE
+        ),
+    )
+
+    assert result == (
+        DecisionClassification.FALSE_REJECTION
+    )
+
+
+def test_review_remains_review() -> None:
+    """
+    Review/abstention must not be hidden inside aggregate accuracy.
+    """
+
+    result = classify_gate_against_oracle(
+        gate_outcome=(
+            GateOutcome.HUMAN_REVIEW_REQUIRED
+        ),
+        oracle_acceptability=(
+            OracleAcceptability.ACCEPTABLE
+        ),
+    )
+
+    assert result == (
+        DecisionClassification.REVIEW_REQUIRED
+    )
+
+
+def test_oracle_error_is_not_candidate_failure() -> None:
+
+    result = classify_gate_against_oracle(
+        gate_outcome=GateOutcome.PASS,
+        oracle_acceptability=(
+            OracleAcceptability.ORACLE_ERROR
+        ),
+    )
+
+    assert result == (
+        DecisionClassification.ORACLE_ERROR
+    )
+
+
+=======================================================================
+FILE: tests/evaluation/test_oracle_isolation.py
+=======================================================================
+
+"""
+Tests documenting the hidden-oracle trust boundary.
+
+Python typing cannot by itself prove that production credentials are isolated.
+
+This test verifies the APPLICATION interface:
+
+    OnlinePipelinePort.execute(...)
+
+receives only:
+
+    PublicTaskPackage
+    run_index
+
+and not HiddenOraclePort.
+
+Infrastructure-level credential isolation must later be tested separately.
+"""
+
+import inspect
+
+from l1_automation.evaluation.campaign_runner import (
+    OnlinePipelinePort,
+)
+
+
+def test_online_pipeline_interface_has_no_hidden_oracle_parameter() -> None:
+
+    signature = inspect.signature(
+        OnlinePipelinePort.execute
+    )
+
+    parameters = set(
+        signature.parameters
+    )
+
+    assert "hidden_oracle" not in parameters
+    assert "oracle" not in parameters
+    assert "expected_answer" not in parameters
+    assert "reference_patch" not in parameters
+
+
+=======================================================================
+FILE: tests/evaluation/test_x1_campaign.py
+=======================================================================
+
+"""
+End-to-end SOFTWARE test of the B5 evaluation campaign.
+
+This uses a deterministic fake online pipeline so that the evaluation
+machinery itself can be tested with known outcomes.
+
+The fake deliberately creates all important categories:
+
+    correct PASS
+    false release
+    correct rejection
+    human review
+
+This lets us test the metrics before connecting the campaign runner to a
+stochastic LLM pipeline.
+
+When the real Component 2 + Component 3 stack is wired through
+OnlinePipelinePort, the SAME EvaluationCampaignRunner can be used without
+changing hidden-oracle logic or metric definitions.
+"""
+
+from __future__ import annotations
+
+from hashlib import sha256
+
+from l1_automation.evaluation.campaign_runner import (
+    EvaluationCampaignRunner,
+    OnlinePipelinePort,
+)
+
+from l1_automation.evaluation.contracts import (
+    CampaignConfiguration,
+    GateOutcome,
+    PipelineCandidate,
+    PipelineRunObservation,
+    PublicTaskPackage,
+)
+
+from l1_automation.evaluation.oracle import (
+    DeterministicHiddenX1Oracle,
+)
+
+from l1_automation.evaluation.synthetic_x1_benchmark import (
+    BENCHMARK_ID,
+    BENCHMARK_VERSION,
+    X1_BENCHMARK_CASES,
+    X1_HIDDEN_DEFINITIONS,
+)
+
+
+def _candidate(
+    *,
+    case_id: str,
+    content: str,
+) -> PipelineCandidate:
+
+    digest = sha256(
+        content.encode("utf-8")
+    ).hexdigest()
+
+    return PipelineCandidate(
+        candidate_id=(
+            f"candidate-{case_id}-{digest[:12]}"
+        ),
+        candidate_sha256=digest,
+        content=content,
+    )
+
+
+class DeterministicCampaignPipeline(
+    OnlinePipelinePort
+):
+    """
+    Test double with deliberately known gate behavior.
+
+    This object has NO access to the HiddenOraclePort.
+
+    It receives only public task information.
+
+    The outputs are hard-coded by public case ID because this is a software
+    test of the campaign evaluator, not a capability evaluation.
+    """
+
+    def execute(
+        self,
+        *,
+        public_task: PublicTaskPackage,
+        run_index: int,
+    ) -> PipelineRunObservation:
+
+        case_id = public_task.case_id
+
+        if case_id == "X1-001":
+
+            candidate = _candidate(
+                case_id=case_id,
+                content=(
+                    "def calculate(a, b):\n"
+                    "    return a + b\n"
+                ),
+            )
+
+            gate = GateOutcome.PASS
+
+        elif case_id == "X1-002":
+
+            # Deliberately incorrect candidate.
+            #
+            # The online gate deliberately makes a mistake and emits PASS.
+            #
+            # Hidden oracle must therefore classify this as FALSE RELEASE.
+
+            candidate = _candidate(
+                case_id=case_id,
+                content=(
+                    "def within_limit(value, limit):\n"
+                    "    return value < limit\n"
+                ),
+            )
+
+            gate = GateOutcome.PASS
+
+        elif case_id == "X1-003":
+
+            candidate = _candidate(
+                case_id=case_id,
+                content=(
+                    "def first_or_none(values):\n"
+                    "    return values[0]\n"
+                ),
+            )
+
+            gate = GateOutcome.FAIL
+
+        elif case_id == "X1-004":
+
+            candidate = _candidate(
+                case_id=case_id,
+                content=(
+                    "def apply_discount(amount, discount):\n"
+                    "    return max(0, amount - discount)\n"
+                ),
+            )
+
+            gate = (
+                GateOutcome.HUMAN_REVIEW_REQUIRED
+            )
+
+        else:
+            raise ValueError(
+                f"Unexpected test case: {case_id}"
+            )
+
+        return PipelineRunObservation(
+            run_id=(
+                f"run-{case_id}-{run_index}"
+            ),
+            case_id=case_id,
+            candidate=candidate,
+            gate_outcome=gate,
+            gate_decision_id=(
+                f"gate-{case_id}-{run_index}"
+            ),
+            gate_reason_codes=(
+                f"test-gate:{gate.value}",
+            ),
+
+            # Synthetic accounting values are included to verify that
+            # Component 5 aggregates usage correctly.
+            #
+            # These are NOT cost claims.
+            input_tokens=100,
+            output_tokens=50,
+            model_calls=2,
+            wall_time_seconds=1.0,
+        )
+
+
+def test_first_x1_evaluation_campaign() -> None:
+    """
+    Exercise the complete Component 5 software path.
+
+    Expected outcomes:
+
+        X1-001
+            candidate acceptable
+            gate PASS
+            => CORRECT_PASS
+
+        X1-002
+            candidate unacceptable
+            gate PASS
+            => FALSE_RELEASE
+
+        X1-003
+            candidate unacceptable
+            gate FAIL
+            => CORRECT_REJECTION
+
+        X1-004
+            candidate acceptable
+            gate REVIEW
+            => REVIEW_REQUIRED
+    """
+
+    online_pipeline = (
+        DeterministicCampaignPipeline()
+    )
+
+    hidden_oracle = (
+        DeterministicHiddenX1Oracle(
+            definitions=X1_HIDDEN_DEFINITIONS
+        )
+    )
+
+    runner = EvaluationCampaignRunner(
+        online_pipeline=online_pipeline,
+        hidden_oracle=hidden_oracle,
+    )
+
+    configuration = CampaignConfiguration(
+        campaign_id=(
+            "campaign-x1-b5-smoke"
+        ),
+        benchmark_id=BENCHMARK_ID,
+        benchmark_version=BENCHMARK_VERSION,
+        capability_id="X1",
+        capability_version="1.0.0",
+        runs_per_case=1,
+        confidence_level=0.95,
+    )
+
+    report = runner.run(
+        configuration=configuration,
+        benchmark_cases=X1_BENCHMARK_CASES,
+    )
+
+    metrics = report.metrics
+
+    assert metrics.total_case_runs == 4
+
+    assert metrics.oracle_valid_case_runs == 4
+
+    assert metrics.correct_passes == 1
+
+    assert metrics.false_releases == 1
+
+    assert metrics.correct_rejections == 1
+
+    assert metrics.false_rejections == 0
+
+    assert metrics.human_reviews == 1
+
+    assert metrics.oracle_errors == 0
+
+    # Three out of four cases received an automated binary decision:
+    #
+    #   PASS
+    #   PASS
+    #   FAIL
+    #
+    # One case abstained / requested review.
+
+    assert metrics.automated_decisions == 3
+
+    assert (
+        metrics.automation_coverage.estimate
+        == 0.75
+    )
+
+    # One false release occurred among all four oracle-valid case runs.
+
+    assert (
+        metrics.false_release_per_total.estimate
+        == 0.25
+    )
+
+    # More importantly, one of two PASS decisions was wrong.
+
+    assert (
+        metrics.false_release_given_pass.estimate
+        == 0.50
+    )
+
+    assert (
+        metrics.human_review_rate.estimate
+        == 0.25
+    )
+
+    # Synthetic usage accounting:
+    #
+    # 4 cases × 100 input tokens
+    # 4 cases × 50 output tokens
+    # 4 cases × 2 model calls
+
+    assert metrics.total_input_tokens == 400
+    assert metrics.total_output_tokens == 200
+    assert metrics.total_model_calls == 8
+
+    # Confidence interval must remain visibly broad for N=4.
+    #
+    # The test intentionally does not hard-code the exact numeric Wilson
+    # bounds because the important requirement is that uncertainty is NOT
+    # collapsed to the point estimate.
+
+    assert (
+        metrics.false_release_per_total
+        .lower_bound
+        is not None
+    )
+
+    assert (
+        metrics.false_release_per_total
+        .upper_bound
+        is not None
+    )
+
+    assert (
+        metrics.false_release_per_total
+        .upper_bound
+        >
+        metrics.false_release_per_total
+        .estimate
+    )
+
+
+=======================================================================
+FILE: tests/evaluation/test_repeated_runs.py
+=======================================================================
+
+"""
+Repeated-run semantics.
+
+This test protects against a subtle statistical mistake:
+
+    10 stochastic reruns of one task
+
+must not be described as:
+
+    10 different benchmark tasks.
+
+B5 records every run, but campaign interpretation must retain case identity.
+"""
+
+from l1_automation.evaluation.campaign_runner import (
+    EvaluationCampaignRunner,
+)
+
+from l1_automation.evaluation.contracts import (
+    CampaignConfiguration,
+)
+
+from l1_automation.evaluation.oracle import (
+    DeterministicHiddenX1Oracle,
+)
+
+from l1_automation.evaluation.synthetic_x1_benchmark import (
+    BENCHMARK_ID,
+    BENCHMARK_VERSION,
+    X1_BENCHMARK_CASES,
+    X1_HIDDEN_DEFINITIONS,
+)
+
+from .test_x1_campaign import (
+    DeterministicCampaignPipeline,
+)
+
+
+def test_repeated_runs_preserve_case_identity() -> None:
+
+    runner = EvaluationCampaignRunner(
+        online_pipeline=(
+            DeterministicCampaignPipeline()
+        ),
+        hidden_oracle=(
+            DeterministicHiddenX1Oracle(
+                definitions=X1_HIDDEN_DEFINITIONS
+            )
+        ),
+    )
+
+    configuration = CampaignConfiguration(
+        campaign_id="campaign-repeat-test",
+        benchmark_id=BENCHMARK_ID,
+        benchmark_version=BENCHMARK_VERSION,
+        capability_id="X1",
+        capability_version="1.0.0",
+        runs_per_case=3,
+    )
+
+    report = runner.run(
+        configuration=configuration,
+        benchmark_cases=X1_BENCHMARK_CASES,
+    )
+
+    # Four unique tasks × three stochastic-style repetitions.
+
+    assert len(report.case_results) == 12
+
+    unique_cases = {
+        result.case_id
+        for result in report.case_results
+    }
+
+    assert len(unique_cases) == 4
+
+    for case_id in unique_cases:
+
+        case_runs = [
+            result
+            for result in report.case_results
+            if result.case_id == case_id
+        ]
+
+        assert len(case_runs) == 3
+
+        assert {
+            result.run_index
+            for result in case_runs
+        } == {0, 1, 2}
+
+
+=======================================================================
+OPTIONAL FILE:
+src/l1_automation/evaluation/reporting.py
+=======================================================================
+
+"""
+Human-readable campaign reporting.
+
+This formatter deliberately keeps counts and intervals visible.
+
+It avoids generating a single "AI QUALITY SCORE."
+
+Such a score would hide important trade-offs among:
+
+    false release
+    false rejection
+    automation coverage
+    human review
+    cost
+    latency
+"""
+
+from __future__ import annotations
+
+from .contracts import (
+    CampaignReport,
+    ProportionEstimate,
+)
+
+
+def _format_rate(
+    name: str,
+    value: ProportionEstimate,
+) -> str:
+
+    if value.estimate is None:
+        return (
+            f"{name}: undefined "
+            f"({value.numerator}/{value.denominator})"
+        )
+
+    assert value.lower_bound is not None
+    assert value.upper_bound is not None
+
+    return (
+        f"{name}: "
+        f"{value.estimate:.3%} "
+        f"({value.numerator}/{value.denominator}); "
+        f"{value.confidence_level:.0%} "
+        f"{value.method} CI "
+        f"[{value.lower_bound:.3%}, "
+        f"{value.upper_bound:.3%}]"
+    )
+
+
+def render_campaign_report(
+    report: CampaignReport,
+) -> str:
+    """
+    Render an intentionally conservative plain-text report.
+
+    The result distinguishes observed benchmark measurements from production
+    claims.
+
+    A later dashboard can visualize the same structured CampaignReport.
+    """
+
+    metrics = report.metrics
+    config = report.configuration
+
+    lines = [
+        (
+            "X1 PIPELINE EVALUATION CAMPAIGN"
+        ),
+        (
+            "================================"
+        ),
+        "",
+        f"Campaign: {config.campaign_id}",
+        (
+            f"Benchmark: "
+            f"{config.benchmark_id} "
+            f"v{config.benchmark_version}"
+        ),
+        (
+            f"Capability: "
+            f"{config.capability_id} "
+            f"v{config.capability_version}"
+        ),
+        (
+            f"Runs per case: "
+            f"{config.runs_per_case}"
+        ),
+        "",
+        (
+            f"Total case-runs: "
+            f"{metrics.total_case_runs}"
+        ),
+        (
+            f"Oracle-valid case-runs: "
+            f"{metrics.oracle_valid_case_runs}"
+        ),
+        "",
+        (
+            f"Correct PASS: "
+            f"{metrics.correct_passes}"
+        ),
+        (
+            f"False releases: "
+            f"{metrics.false_releases}"
+        ),
+        (
+            f"Correct rejections: "
+            f"{metrics.correct_rejections}"
+        ),
+        (
+            f"False rejections: "
+            f"{metrics.false_rejections}"
+        ),
+        (
+            f"Human review: "
+            f"{metrics.human_reviews}"
+        ),
+        (
+            f"Oracle errors: "
+            f"{metrics.oracle_errors}"
+        ),
+        "",
+        _format_rate(
+            "Automation coverage",
+            metrics.automation_coverage,
+        ),
+        _format_rate(
+            "False release / all oracle-valid runs",
+            metrics.false_release_per_total,
+        ),
+        _format_rate(
+            "False release / PASS decisions",
+            metrics.false_release_given_pass,
+        ),
+        _format_rate(
+            "False rejection / all oracle-valid runs",
+            metrics.false_rejection_per_total,
+        ),
+        _format_rate(
+            "Human-review rate",
+            metrics.human_review_rate,
+        ),
+        "",
+        (
+            f"Input tokens: "
+            f"{metrics.total_input_tokens:,}"
+        ),
+        (
+            f"Output tokens: "
+            f"{metrics.total_output_tokens:,}"
+        ),
+        (
+            f"Model calls: "
+            f"{metrics.total_model_calls:,}"
+        ),
+        (
+            f"Accumulated wall time: "
+            f"{metrics.total_wall_time_seconds:.2f}s"
+        ),
+        "",
+        "INTERPRETATION WARNING",
+        "----------------------",
+        (
+            "These statistics describe observed performance on the "
+            "specified benchmark configuration."
+        ),
+        (
+            "They do not by themselves establish performance on all "
+            "real L1 engineering tasks."
+        ),
+    ]
+
+    return "\n".join(lines)
+
+
+=======================================================================
+B5 — CONNECTING THE REAL B4 ONLINE PIPELINE
+=======================================================================
+
+The deterministic `DeterministicCampaignPipeline` above exists only to prove
+that Component 5's evaluation logic is correct.
+
+The next mechanical integration is an adapter similar to:
+
+    B4OrchestratorEvaluationAdapter
+            │
+            ▼
+    B4 / Component 9 Orchestrator
+
+The conceptual implementation is:
+
+
+-----------------------------------------------------------------------
+FILE:
+src/l1_automation/evaluation/adapters/online_pipeline_adapter.py
+-----------------------------------------------------------------------
+
+"""
+Adapter from Component 5 to the real ONLINE orchestration path.
+
+During final repository reconciliation, imports in this module must use the
+canonical B1/B4/Component-9 contracts rather than the simplified names shown
+here.
+
+This adapter is intentionally thin.
+
+It translates evaluation PublicTaskPackage into the standard online
+TaskRequest and translates the resulting orchestration outcome back into a
+PipelineRunObservation.
+
+It must contain no hidden oracle logic.
+"""
+
+from __future__ import annotations
+
+from time import perf_counter
+
+from l1_automation.evaluation.campaign_runner import (
+    OnlinePipelinePort,
+)
+
+from l1_automation.evaluation.contracts import (
+    GateOutcome,
+    PipelineCandidate,
+    PipelineRunObservation,
+    PublicTaskPackage,
+)
+
+
+class OrchestratorEvaluationAdapter(
+    OnlinePipelinePort
+):
+    """
+    Invoke the same online pipeline used for ordinary engineering tasks.
+
+    This is critical.
+
+    We do not want a special benchmark-only ChangeExecutionService or a
+    special benchmark-only ReleaseGateService because that would evaluate a
+    different system than the one intended for deployment.
+    """
+
+    def __init__(
+        self,
+        *,
+        orchestrator,
+        task_request_factory,
+    ) -> None:
+        self._orchestrator = orchestrator
+        self._task_request_factory = (
+            task_request_factory
+        )
+
+    def execute(
+        self,
+        *,
+        public_task: PublicTaskPackage,
+        run_index: int,
+    ) -> PipelineRunObservation:
+
+        # -------------------------------------------------------------
+        # STEP 1 — CONSTRUCT ORDINARY ONLINE TASK REQUEST
+        # -------------------------------------------------------------
+        #
+        # Notice that only PUBLIC information enters this operation.
+        #
+        # Hidden oracle data is not a constructor dependency and is not a
+        # method parameter.
+
+        task_request = (
+            self._task_request_factory(
+                public_task
+            )
+        )
+
+        started = perf_counter()
+
+        result = self._orchestrator.run(
+            task_request
+        )
+
+        elapsed = (
+            perf_counter()
+            - started
+        )
+
+        candidate = result.candidate
+        decision = result.gate_decision
+
+        # -------------------------------------------------------------
+        # STEP 2 — VERIFY CANDIDATE BINDING
+        # -------------------------------------------------------------
+
+        if (
+            decision.candidate_id
+            != candidate.candidate_id
+        ):
+            raise RuntimeError(
+                "Online gate decision is not bound to the candidate "
+                "returned by orchestration."
+            )
+
+        if (
+            decision.candidate_sha256
+            != candidate.sha256
+        ):
+            raise RuntimeError(
+                "Online gate decision candidate hash does not match "
+                "candidate content identity."
+            )
+
+        # -------------------------------------------------------------
+        # STEP 3 — NORMALIZE OBSERVATION
+        # -------------------------------------------------------------
+
+        return PipelineRunObservation(
+            run_id=result.run_id,
+            case_id=public_task.case_id,
+
+            candidate=PipelineCandidate(
+                candidate_id=(
+                    candidate.candidate_id
+                ),
+                candidate_sha256=(
+                    candidate.sha256
+                ),
+                content=(
+                    candidate.patch_text
+                ),
+            ),
+
+            gate_outcome=GateOutcome(
+                decision.outcome.value
+            ),
+
+            gate_decision_id=(
+                decision.decision_id
+            ),
+
+            gate_reason_codes=(
+                tuple(
+                    decision.reason_codes
+                )
+            ),
+
+            # These should come from the canonical resource-usage evidence
+            # defined in the earlier components once final reconciliation
+            # occurs.
+            input_tokens=getattr(
+                result,
+                "input_tokens",
+                0,
+            ),
+
+            output_tokens=getattr(
+                result,
+                "output_tokens",
+                0,
+            ),
+
+            model_calls=getattr(
+                result,
+                "model_calls",
+                0,
+            ),
+
+            wall_time_seconds=elapsed,
+        )
+
+
+=======================================================================
+WHY THE REAL BENCHMARK ORACLE SHOULD EVENTUALLY EXECUTE CODE
+=======================================================================
+
+The simple B5 synthetic oracle intentionally uses content checks because the
+goal of this component is to establish evaluation architecture.
+
+For a serious X1 benchmark, the hidden oracle should preferably work more
+like:
+
+    CandidateArtifact
+          │
+          ▼
+    fresh hidden evaluation sandbox
+          │
+          ├── restore known baseline
+          ├── apply exact candidate
+          ├── install pinned dependencies
+          ├── execute hidden acceptance tests
+          ├── execute hidden properties
+          ├── verify forbidden behavior
+          └── capture deterministic receipt
+          │
+          ▼
+    OracleAssessment
+
+
+This is materially stronger than asking an LLM:
+
+    "Is this patch correct?"
+
+
+The hidden oracle should derive truth from the strongest available observable
+behavior.
+
+A mature X1 oracle may combine:
+
+    hidden executable tests
+    property-based checks
+    invariants
+    compilation
+    known failure reproduction
+    deterministic fixtures
+
+and only where necessary:
+
+    carefully governed semantic human/oracle review.
+
+
+=======================================================================
+AZURE MAPPING
+=======================================================================
+
+The offline campaign architecture maps cleanly to Azure.
+
+For a POC:
+
+    EvaluationCampaignRunner
+            │
+            ▼
+    benchmark manifest
+            │
+            ▼
+    per-case orchestration
+            │
+            ├── ChangeExecution job
+            ├── ReleaseGate job
+            └── HiddenOracle job
+            │
+            ▼
+    evidence / campaign results
+
+
+Azure Container Apps Jobs remain a reasonable POC execution primitive for
+finite-duration, on-demand containerized tasks.
+
+A possible conceptual separation is:
+
+    JOB PROFILE A
+    -------------
+    change execution
+
+        Credentials:
+            public benchmark/task artifacts
+            approved source repository
+            candidate output storage
+
+        NO ACCESS:
+            hidden oracle
+
+
+    JOB PROFILE B
+    -------------
+    release gating
+
+        Credentials:
+            candidate artifacts
+            public requirements
+            approved gate resources
+
+        NO ACCESS:
+            hidden oracle
+
+
+    JOB PROFILE C
+    -------------
+    hidden oracle
+
+        Credentials:
+            candidate artifact
+            hidden test/oracle store
+
+        NO REQUIREMENT:
+            change-generation model credentials
+
+
+This is stronger than placing all three concerns in the same container and
+asking the software not to inspect certain directories.
+
+
+=======================================================================
+B5 STATISTICAL DISCIPLINE
+=======================================================================
+
+The first version intentionally calculates Wilson intervals for simple
+binomial proportions.
+
+This is appropriate as a transparent first implementation.
+
+It does NOT mean we have solved the full statistical problem.
+
+
+B5 MUST PRESERVE THIS DISTINCTION:
+
+    CASE COUNT
+
+versus
+
+    RUN COUNT.
+
+
+Example:
+
+    25 benchmark cases
+    ×
+    5 repeated runs
+    =
+    125 pipeline executions
+
+
+This is NOT automatically equivalent to:
+
+    125 independent benchmark tasks.
+
+
+The hierarchy is:
+
+    X1 CAPABILITY
+        │
+        ├── CASE 1
+        │      ├── RUN 1
+        │      ├── RUN 2
+        │      ├── RUN 3
+        │      ├── RUN 4
+        │      └── RUN 5
+        │
+        ├── CASE 2
+        │      └── ...
+        │
+        └── CASE 25
+               └── ...
+
+
+The final statistical model may therefore require:
+
+    cluster-aware bootstrap
+
+or:
+
+    hierarchical / multilevel modelling
+
+or:
+
+    case-level aggregation
+
+depending on the experiment.
+
+
+B5 DOES NOT IMPLEMENT THOSE METHODS YET.
+
+
+WHY?
+
+
+Because introducing sophisticated statistical machinery before observing the
+actual structure of:
+
+    benchmark size
+    runs per case
+    outcome frequency
+    case heterogeneity
+
+would create complexity without evidence that the chosen method is the right
+one.
+
+The important point is that B5 preserves the identifiers required to do the
+correct analysis later.
+
+
+=======================================================================
+FALSE RELEASE — THE PRIMARY SAFETY-RELEVANT PIPELINE METRIC
+=======================================================================
+
+A false release occurs when:
+
+    RELEASE GATE
+        says
+        PASS
+
+while:
+
+    HIDDEN ORACLE
+        says
+        UNACCEPTABLE.
+
+
+Formally:
+
+    FalseRelease_i =
+        1
+        if Gate_i = PASS
+        and Oracle_i = UNACCEPTABLE
+
+        0
+        otherwise
+
+
+B5 intentionally reports at least two denominators.
+
+
+METRIC A
+--------
+
+    FALSE RELEASE PER ORACLE-VALID TASK/RUN
+
+        false releases
+        --------------------------
+        oracle-valid observations
+
+
+This describes the frequency of false releases across evaluated work.
+
+
+METRIC B
+--------
+
+    FALSE RELEASE GIVEN AUTOMATED PASS
+
+        false releases
+        --------------------------
+        PASS decisions
+
+
+This asks a more operational question:
+
+    "When the gate gives us a green light, how often is that green light
+     wrong on the benchmark?"
+
+
+Both are useful.
+
+Neither should be reported without its denominator.
+
+
+=======================================================================
+WHY ZERO FALSE RELEASES IS NOT ENOUGH
+=======================================================================
+
+Suppose:
+
+    benchmark cases = 10
+
+and:
+
+    false releases observed = 0.
+
+
+We should NOT conclude:
+
+    false-release probability = 0.
+
+
+The point estimate is:
+
+    0 / 10 = 0%
+
+
+but uncertainty remains substantial.
+
+B5 therefore keeps a confidence interval around the observed proportion.
+
+As the number of genuinely informative benchmark cases grows, the interval
+can narrow.
+
+This is exactly why creating 500 highly correlated AI-generated tests for
+ONE code change does not solve the platform-level uncertainty problem.
+
+
+=======================================================================
+SELECTIVE AUTOMATION
+=======================================================================
+
+The architecture permits:
+
+    HUMAN_REVIEW_REQUIRED.
+
+
+This means the system is a SELECTIVE automation system.
+
+Therefore an important metric is:
+
+    AUTOMATION COVERAGE
+
+        PASS + FAIL automated decisions
+        --------------------------------
+        oracle-valid observations
+
+
+A gate can often reduce false releases simply by requesting human review on
+almost everything.
+
+That may be safe but economically useless.
+
+
+Therefore these metrics must be interpreted together:
+
+    false release
+    false rejection
+    human-review rate
+    automation coverage
+    task success
+    cost
+    latency
+
+
+There is no scientifically meaningful universal quality scalar that should
+replace all of them.
+
+
+=======================================================================
+THE ABSTENTION FRONTIER
+=======================================================================
+
+Eventually we should examine configurations such as:
+
+    POLICY A
+        False release:       very low
+        Human review:        70%
+
+    POLICY B
+        False release:       low
+        Human review:        30%
+
+    POLICY C
+        False release:       higher
+        Human review:        5%
+
+
+The correct operating point depends on:
+
+    task risk
+    defect cost
+    rollback ability
+    review capacity
+    task volume
+    economic value
+
+
+Component 5 should MEASURE this frontier.
+
+It should not choose the enterprise risk appetite.
+
+
+=======================================================================
+B5 BENCHMARK VALIDATION REQUIREMENT
+=======================================================================
+
+The synthetic benchmark file above is a DEVELOPMENT benchmark.
+
+It must not silently become a qualification benchmark.
+
+Before a benchmark is labelled:
+
+    VALIDATED GOLDEN BENCHMARK
+
+each case should satisfy checks equivalent to:
+
+
+    [ ] Public task is internally coherent.
+
+    [ ] Requested behavior is solvable from public information.
+
+    [ ] Baseline actually exhibits the intended defect.
+
+    [ ] Hidden tests actually detect the intended defect.
+
+    [ ] At least one known acceptable implementation passes.
+
+    [ ] Known defective implementations fail.
+
+    [ ] Hidden oracle does not require exact textual equality unless exact
+        equality is genuinely part of the requirement.
+
+    [ ] Hidden artifacts are inaccessible to the online system.
+
+    [ ] Case does not unintentionally disclose its answer.
+
+    [ ] Environment is reproducible.
+
+    [ ] Dependencies are pinned sufficiently for the experiment.
+
+    [ ] Case difficulty and failure type are recorded.
+
+    [ ] Duplicate or near-duplicate cases are identified.
+
+    [ ] Benchmark version is frozen for the campaign.
+
+
+This is important because benchmark errors create false confidence just as
+model errors do.
+
+
+=======================================================================
+B5 GROUND-TRUTH MATURITY LEVELS
+=======================================================================
+
+The project should distinguish at least four levels.
+
+
+LEVEL 0 — TEST FIXTURE
+----------------------
+
+Purpose:
+
+    software test only
+
+Example:
+
+    hard-coded candidate and outcome
+
+Use:
+
+    verify CampaignRunner logic
+
+
+LEVEL 1 — SYNTHETIC DEVELOPMENT BENCHMARK
+-----------------------------------------
+
+Purpose:
+
+    develop prompts
+    develop gates
+    test benchmark machinery
+    inspect failures
+
+Use:
+
+    NOT final qualification
+
+
+LEVEL 2 — VALIDATED SYNTHETIC / CONTROLLED HOLDOUT
+--------------------------------------------------
+
+Purpose:
+
+    measure capability under controlled conditions
+
+Requirements:
+
+    hidden
+    frozen
+    independently validated
+    not used for tuning
+
+
+LEVEL 3 — REPRESENTATIVE REALISTIC / HISTORICAL HOLDOUT
+-------------------------------------------------------
+
+Purpose:
+
+    estimate behavior closer to real L1 work
+
+Requirements may include:
+
+    historical engineering tasks
+    authentic repositories
+    realistic documentation
+    realistic ambiguity
+    independently constructed truth
+
+
+Even Level 3 does not automatically prove performance on every future task.
+
+External validity remains an empirical question.
+
+
+=======================================================================
+DEVELOPMENT VERSUS QUALIFICATION
+=======================================================================
+
+The following workflow should be explicit:
+
+
+    DEVELOPMENT BENCHMARK
+           │
+           ▼
+    inspect failures
+           │
+           ▼
+    modify:
+        prompt
+        model
+        skill
+        evidence planner
+        gate policy
+           │
+           ▼
+    repeat
+
+
+Then freeze the configuration.
+
+
+    FROZEN CONFIGURATION
+           │
+           ▼
+    HIDDEN QUALIFICATION SET
+           │
+           ▼
+    one pre-specified campaign
+           │
+           ▼
+    qualification report
+
+
+Do NOT repeatedly inspect the qualification set and tune against it while
+continuing to call it "holdout" evaluation.
+
+
+=======================================================================
+TOKEN ACCOUNTING IN B5
+=======================================================================
+
+Component 5 should attribute all inference used during a campaign.
+
+A useful decomposition remains:
+
+    CHANGE EXECUTION
+        input tokens
+        output tokens
+        model calls
+
+
+    RELEASE GATE
+        evidence-planning tokens
+        test-synthesis tokens
+        diversity-mapper tokens
+        semantic-review tokens
+        adversarial-generation tokens
+
+
+    PIPELINE TOTAL
+        sum of the above
+
+
+Important distinction:
+
+    EvaluationCampaignRunner's OWN LLM use
+
+should ideally be:
+
+    zero or minimal.
+
+
+The campaign becomes expensive because it repeatedly invokes the online
+pipeline.
+
+The statistical analysis itself does not require an LLM.
+
+
+=======================================================================
+WHY COMPONENT 5 MUST NOT ASK AN LLM TO CLASSIFY FALSE RELEASE
+=======================================================================
+
+This would be poor design:
+
+    prompt = f"""
+    Gate said PASS.
+    Hidden oracle said UNACCEPTABLE.
+    Is this a false release?
+    """
+
+    answer = llm(prompt)
+
+
+The result is already logically determined.
+
+Correct implementation:
+
+    if gate == PASS and oracle == UNACCEPTABLE:
+        classification = FALSE_RELEASE
+
+
+Use deterministic code whenever the rule is deterministic.
+
+
+=======================================================================
+CAMPAIGN IMMUTABILITY
+=======================================================================
+
+A completed campaign should preserve:
+
+    campaign_id
+
+    benchmark_id
+    benchmark_version
+    benchmark manifest hash
+
+    capability_id
+    capability_version
+
+    task specification hash
+
+    ChangeExecution configuration hash
+
+    ReleaseGate configuration hash
+
+    gate-policy hash
+
+    model deployment/version identifiers
+
+    execution-image digest
+
+    run count
+
+    random settings / seeds where available
+
+    case-level results
+
+    token measurements
+
+    timestamps
+
+    statistical-method version
+
+
+If any material configuration changes:
+
+    create a NEW campaign.
+
+
+Do not overwrite the old report.
+
+
+=======================================================================
+CAMPAIGN RESULT STORAGE
+=======================================================================
+
+Component 4 should eventually persist:
+
+    CampaignReport
+         │
+         ├── campaign manifest
+         ├── case result JSONL
+         ├── candidate references
+         ├── gate-decision references
+         ├── oracle-assessment references
+         ├── execution receipts
+         ├── token/cost records
+         └── aggregate metrics
+
+
+Suggested conceptual layout:
+
+    evaluations/
+    └── campaigns/
+        └── campaign-x1-2026-001/
+            ├── manifest.json
+            ├── report.json
+            ├── case-results.jsonl
+            ├── candidates/
+            ├── gate-decisions/
+            ├── oracle-results/
+            └── receipts/
+
+
+These should be immutable experiment artifacts where practical.
+
+
+=======================================================================
+B5 FAILURE SEMANTICS
+=======================================================================
+
+B5 must distinguish:
+
+
+CANDIDATE UNACCEPTABLE
+----------------------
+
+The hidden oracle executed correctly and found a real benchmark violation.
+
+Outcome:
+
+    UNACCEPTABLE
+
+
+ORACLE FAILURE
+--------------
+
+Hidden environment crashed.
+
+Outcome:
+
+    ORACLE_ERROR
+
+
+ONLINE PIPELINE FAILURE
+-----------------------
+
+Change execution or release gating failed because of infrastructure.
+
+Outcome:
+
+    pipeline technical failure
+
+This should eventually be represented separately in the campaign contracts.
+
+
+BENCHMARK CASE INVALID
+----------------------
+
+The case itself is broken or ambiguous.
+
+Outcome:
+
+    benchmark validation failure
+
+The case should normally be removed or repaired in a NEW benchmark version.
+
+
+These must not all become:
+
+    FAIL.
+
+
+=======================================================================
+IMPORTANT EXTENSION FOR THE FINAL COMPONENT-5 CONTRACT
+=======================================================================
+
+Once B1 reconciliation occurs, I recommend adding a dedicated execution
+status to PipelineRunObservation, conceptually:
+
+    class PipelineExecutionStatus(StrEnum):
+        COMPLETED = "completed"
+        TECHNICAL_FAILURE = "technical_failure"
+        TIMEOUT = "timeout"
+        BUDGET_EXHAUSTED = "budget_exhausted"
+
+
+This would allow Component 5 to report:
+
+    pipeline completion rate
+
+separately from:
+
+    candidate correctness
+
+and:
+
+    gate correctness.
+
+
+It is deliberately called out here rather than silently added as a competing
+B1 shared contract.
+
+
+=======================================================================
+B5 WHAT NOT TO DO
+=======================================================================
+
+Do NOT implement:
+
+    benchmark_case_count = number_of_generated_tests
+
+
+Do NOT implement:
+
+    confidence = average(llm_self_confidence)
+
+
+Do NOT implement:
+
+    if benchmark_score > 90:
+        production_approved = True
+
+
+Do NOT implement:
+
+    hidden_tests = task_context["hidden_tests"]
+
+
+Do NOT implement:
+
+    gate_prompt += oracle_expected_answer
+
+
+Do NOT implement:
+
+    while campaign_result_bad:
+        modify_prompt()
+        rerun_same_holdout()
+
+
+Do NOT implement:
+
+    if oracle_crashes:
+        candidate_is_bad = True
+
+
+Do NOT implement:
+
+    if gate_requests_review:
+        count_as_correct_pass = True
+
+
+Do NOT implement:
+
+    one_quality_score = weighted_average(
+        false_release,
+        review_rate,
+        latency,
+        cost,
+        task_success,
+    )
+
+
+These patterns would destroy important distinctions in the assurance model.
+
+
+=======================================================================
+B5 FIRST REAL CAMPAIGN — RECOMMENDED SEQUENCE
+=======================================================================
+
+After the software tests above pass, conduct the first real campaign in this
+order:
+
+
+STEP 1
+------
+
+Select one narrow X1 capability.
+
+Freeze:
+
+    task scope
+    skill
+    prompt
+    model configuration
+    release-gate configuration
+
+
+STEP 2
+------
+
+Create approximately:
+
+    20–30 DEVELOPMENT cases
+
+initially.
+
+Purpose:
+
+    debug benchmark machinery
+    debug oracle
+    inspect failures
+    improve gate
+
+
+Do NOT make strong statistical qualification claims from this set.
+
+
+STEP 3
+------
+
+Construct a separate hidden holdout.
+
+Do not expose it to:
+
+    ChangeExecutionService
+    ReleaseGateService
+    Evidence Diversity Mapper
+
+
+STEP 4
+------
+
+Validate each holdout case.
+
+Use known:
+
+    acceptable candidate
+
+and preferably several:
+
+    defective candidates
+
+to verify the oracle.
+
+
+STEP 5
+------
+
+Freeze:
+
+    benchmark version
+    capability version
+    gate policy
+    model configuration
+
+
+STEP 6
+------
+
+Execute the campaign.
+
+Record every case.
+
+Do not silently drop difficult cases.
+
+
+STEP 7
+------
+
+Calculate at minimum:
+
+    task solution rate
+
+    correct PASS
+
+    false release
+
+    correct rejection
+
+    false rejection
+
+    human-review rate
+
+    automation coverage
+
+    pipeline completion rate
+
+    total tokens
+
+    tokens per completed task
+
+    tokens per autonomous PASS
+
+    wall-clock latency
+
+
+STEP 8
+------
+
+Display confidence intervals with visible denominators.
+
+
+STEP 9
+------
+
+Inspect every false release individually.
+
+
+STEP 10
+-------
+
+Do NOT modify the configuration and continue calling the same campaign a
+qualification result.
+
+If configuration changes:
+
+    new campaign ID
+    new configuration identity
+    rerun.
+
+
+=======================================================================
+B5 MINIMUM QUALIFICATION REPORT
+=======================================================================
+
+A real report should eventually resemble:
+
+    X1 CAPABILITY QUALIFICATION
+    ===========================
+
+    Capability:
+        X1 v1.3.0
+
+    Benchmark:
+        x1-holdout v2.0.0
+
+    Unique cases:
+        N
+
+    Runs per case:
+        R
+
+    Total executions:
+        N × R
+
+    Pipeline completion:
+        x / y
+
+    Candidate acceptable:
+        x / y
+
+    Gate PASS:
+        x / y
+
+    Gate FAIL:
+        x / y
+
+    Human review:
+        x / y
+
+    False releases:
+        x / y
+
+    False release among PASS:
+        x / PASS
+
+    False rejections:
+        x / y
+
+    Automation coverage:
+        x / y
+
+    Input tokens:
+        ...
+
+    Output tokens:
+        ...
+
+    Model calls:
+        ...
+
+    Total inference cost:
+        ...
+
+    Sandbox cost:
+        ...
+
+    Median latency:
+        ...
+
+    Qualification limitations:
+        ...
+
+    Benchmark limitations:
+        ...
+
+    Known unresolved failure modes:
+        ...
+
+
+No single scalar "AI score" should replace this report.
+
+
+=======================================================================
+B5 ABLATION HOOK
+=======================================================================
+
+B5 intentionally makes `EvaluationCampaignRunner` independent from the
+internal implementation of ReleaseGateService.
+
+This allows later campaigns to compare:
+
+
+    CONFIGURATION A
+    ----------------
+    deterministic repository tests only
+
+
+    CONFIGURATION B
+    ----------------
+    existing tests
+    +
+    AI test synthesis
+
+
+    CONFIGURATION C
+    ----------------
+    existing tests
+    +
+    AI test synthesis
+    +
+    mutation
+
+
+    CONFIGURATION D
+    ----------------
+    existing tests
+    +
+    AI test synthesis
+    +
+    mutation
+    +
+    Evidence Diversity Mapper
+
+
+while holding constant:
+
+    benchmark
+    task capability
+    major execution configuration
+
+
+This is how we can determine whether the more experimental parts of the gate
+actually improve outcomes.
+
+
+=======================================================================
+B5 EVIDENCE-DIVERSITY HYPOTHESIS
+=======================================================================
+
+One of the major research questions remains:
+
+    Is diversity-aware evidence generation materially better than simply
+    generating more tests?
+
+
+B5 makes that question measurable.
+
+
+Example controlled comparison:
+
+
+    BASELINE
+    --------
+
+    100 tests generated using one strategy
+
+
+    DIVERSITY-AWARE
+    ---------------
+
+    25 initial tests
+
+        ↓
+
+    Evidence Diversity Mapper
+
+        ↓
+
+    targeted additional evidence
+
+        ↓
+
+    approximately equivalent token budget
+
+
+Compare:
+
+    hidden-defect detection
+
+    false releases
+
+    mutation survivors
+
+    evidence categories
+
+    human-review rate
+
+    token consumption
+
+
+If diversity-aware generation does not materially improve these outcomes, we
+should be willing to simplify the architecture.
+
+
+=======================================================================
+B5 SHARED-BLIND-SPOT HYPOTHESIS
+=======================================================================
+
+B5 also gives us the structure needed to compare:
+
+
+    CONDITION A
+    -----------
+
+    same model:
+        code generation
+        test generation
+
+
+    CONDITION B
+    -----------
+
+    same model:
+        code generation
+
+    diversity-aware evidence:
+        test generation
+
+
+    CONDITION C
+    -----------
+
+    model A:
+        code generation
+
+    model B:
+        test generation
+
+
+    CONDITION D
+    -----------
+
+    model diversity
+    +
+    representation diversity
+    +
+    deterministic tooling
+    +
+    mutation
+    +
+    evidence diversity
+
+
+The hidden benchmark evaluates which strategy actually catches more failures.
+
+This is preferable to assuming, without evidence, that any one diversity
+mechanism solves shared blind spots.
+
+
+=======================================================================
+B5 TOKEN-CONSUMPTION HYPOTHESIS
+=======================================================================
+
+The earlier assumption that ReleaseGateService necessarily consumes fewer
+tokens than ChangeExecutionService should remain rejected.
+
+B5 can directly measure:
+
+    candidate-generation tokens
+
+versus:
+
+    release-gate tokens.
+
+
+A sophisticated release gate may consume MORE inference because it performs:
+
+    evidence planning
+    multiple test generations
+    semantic review
+    adversarial generation
+    diversity-gap analysis
+
+
+That is acceptable only if the additional cost purchases meaningful
+assurance.
+
+B5 therefore enables later measurements such as:
+
+    marginal token cost
+    -------------------
+    reduction in false release
+
+
+but those should be interpreted cautiously and mainly within controlled
+benchmark campaigns.
+
+
+=======================================================================
+B5 BENCHMARK QUALITY RISK
+=======================================================================
+
+A poor benchmark can create three dangerous situations.
+
+
+FALSELY EASY BENCHMARK
+----------------------
+
+The pipeline appears highly capable because cases are simplistic or leaked.
+
+
+BROKEN ORACLE
+-------------
+
+Correct candidates are labelled wrong or defective candidates are labelled
+correct.
+
+
+UNREPRESENTATIVE BENCHMARK
+--------------------------
+
+The measured system is reliable on the benchmark but not on real work.
+
+
+Therefore Component 5 evaluates TWO things over time:
+
+    the automation capability
+
+and indirectly:
+
+    the adequacy of the benchmark used to measure it.
+
+
+Benchmark maintenance should eventually become its own governed process.
+
+
+=======================================================================
+B5 LIMITATIONS
+=======================================================================
+
+B5 deliberately DOES NOT yet solve the following.
+
+
+1. PRODUCTION-GRADE HIDDEN EXECUTION
+------------------------------------
+
+The supplied oracle is deterministic and executable as software, but it is
+not yet a separate Azure-isolated hidden-test service.
+
+
+2. REAL X1 BENCHMARK
+--------------------
+
+The first four cases are evaluation-software fixtures, not sufficient
+qualification evidence.
+
+
+3. HIERARCHICAL STATISTICS
+--------------------------
+
+Repeated case runs are preserved but not yet modelled with a full
+hierarchical statistical estimator.
+
+
+4. BENCHMARK REPRESENTATIVENESS
+-------------------------------
+
+No statistical method can infer real-world representativeness from synthetic
+cases alone.
+
+
+5. COST INGESTION
+-----------------
+
+Token counts are supported, but actual model pricing, Azure compute cost, and
+human-review cost should come from Component 8.
+
+
+6. STOCHASTIC MODEL ADAPTER
+---------------------------
+
+The B5 software test intentionally does not require a real LLM endpoint.
+
+
+7. BENCHMARK GOVERNANCE
+-----------------------
+
+Approval authority, holdout ownership, benchmark-access controls, and
+requalification triggers require enterprise decisions.
+
+
+8. FORMAL QUALIFICATION THRESHOLD
+---------------------------------
+
+B5 MEASURES false release, review rate, etc.
+
+It deliberately does NOT invent a rule such as:
+
+    false release upper bound < X
+    therefore production approved.
+
+
+That threshold must eventually be calibrated and approved according to task
+risk and enterprise tolerance.
+
+
+=======================================================================
+B5 RELATIONSHIP TO B1–B4
+=======================================================================
+
+    B1
+    Shared Contracts
+        │
+        ▼
+    establishes common identities and types
+
+
+    B2
+    NOT-IMPLEMENTED.md
+        │
+        ▼
+    identifies known implementation gaps
+
+
+    B3
+    DESIGN-RATIONALE.md
+        │
+        ▼
+    preserves why architectural boundaries exist
+
+
+    B4
+    Composition Root + Software E2E Path
+        │
+        ▼
+    proves that components can operate as one system
+
+
+    B5
+    Hidden-Oracle Evaluation Campaign
+        │
+        ▼
+    starts measuring whether that system deserves trust
+
+
+The distinction between B4 and B5 is fundamental:
+
+    B4:
+        DOES THE SYSTEM RUN CORRECTLY?
+
+    B5:
+        DOES THE SYSTEM MAKE CORRECT AUTOMATION DECISIONS?
+
+
+=======================================================================
+WHAT B5 NOW ADDS TO THE ORIGINAL ARCHITECTURE
+=======================================================================
+
+Before B5:
+
+    ONLINE
+    ──────
+
+    Task
+      ↓
+    ChangeExecution
+      ↓
+    Candidate
+      ↓
+    ReleaseGate
+      ↓
+    PASS / FAIL / REVIEW
+
+
+After B5:
+
+    ONLINE
+    ──────
+
+    Task
+      ↓
+    ChangeExecution
+      ↓
+    Candidate
+      ↓
+    ReleaseGate
+      ↓
+    PASS / FAIL / REVIEW
+
+
+
+    OFFLINE
+    ───────
+
+    Frozen Benchmark
+          │
+          ├──────── PUBLIC task ────────┐
+          │                             │
+          │                             ▼
+          │                       ONLINE PIPELINE
+          │                             │
+          │                             ▼
+          │                      Candidate + Gate
+          │                             │
+          │                             │
+          └──── HIDDEN oracle ──────────┤
+                                        │
+                                        ▼
+                            EvaluationCampaignRunner
+                                        │
+                         ┌──────────────┼──────────────┐
+                         │              │              │
+                         ▼              ▼              ▼
+                    false release    review rate     coverage
+                         │              │              │
+                         ├──────────────┼──────────────┤
+                         │              │              │
+                         ▼              ▼              ▼
+                    uncertainty       tokens        latency
+                                        │
+                                        ▼
+                                CampaignReport
+
+
+=======================================================================
+B5 COMPLETION CRITERIA
+=======================================================================
+
+B5 should be considered complete when:
+
+
+    [ ] Public benchmark data and hidden oracle data are represented
+        separately.
+
+    [ ] OnlinePipelinePort has no hidden-oracle dependency.
+
+    [ ] CampaignRunner invokes the ordinary online pipeline.
+
+    [ ] Hidden oracle evaluates the exact candidate generated by the online
+        pipeline.
+
+    [ ] Candidate IDs and hashes are verified across the gate/oracle boundary.
+
+    [ ] PASS + UNACCEPTABLE is deterministically classified as FALSE_RELEASE.
+
+    [ ] FAIL + ACCEPTABLE is deterministically classified as FALSE_REJECTION.
+
+    [ ] HUMAN_REVIEW_REQUIRED remains a separate abstention outcome.
+
+    [ ] ORACLE_ERROR remains distinct from candidate failure.
+
+    [ ] False-release denominators are explicit.
+
+    [ ] Confidence intervals remain broad when sample sizes are small.
+
+    [ ] Zero events do not imply zero uncertainty.
+
+    [ ] Zero denominators produce undefined rates rather than invented zeros.
+
+    [ ] Repeated runs preserve case identity.
+
+    [ ] Token usage is aggregated.
+
+    [ ] Campaign configuration is immutable.
+
+    [ ] Benchmark and capability versions are recorded.
+
+    [ ] A deterministic four-case campaign software test passes.
+
+    [ ] No one interprets the four-case synthetic campaign as production
+        qualification.
+
+    [ ] The architecture is ready to substitute the real Component 2 +
+        Component 3 online pipeline behind OnlinePipelinePort.
+
+
+=======================================================================
+WHAT SHOULD COME AFTER B5
+=======================================================================
+
+The next work should move from architectural completeness toward repository
+reconciliation and Azure deployability.
+
+The sequence should now be approximately:
+
+    B6
+    Production-configuration and implementation reconciliation
+
+        - replace any compact B4/B5 compatibility types with B1 contracts;
+        - align imports across Components 1–12;
+        - centralize package/version configuration;
+        - reconcile production versus local adapters;
+        - create environment/configuration validation;
+        - document required Azure settings;
+        - ensure NOT-IMPLEMENTED entries match actual code.
+
+
+    B7
+    Final cross-component consistency review
+
+        - dependency direction;
+        - candidate identity;
+        - trust boundaries;
+        - hidden-oracle isolation;
+        - gate semantics;
+        - evidence lineage;
+        - token accounting;
+        - error semantics;
+        - configuration;
+        - tests;
+        - documentation.
+
+
+    B8
+    Final master README.md
+
+        written only after the physical repository structure and component
+        interfaces are reconciled.
+
+
+=======================================================================
+B5 FINAL DESIGN POSITION
+=======================================================================
+
+B5 introduces the point at which the POC becomes scientifically testable.
+
+The architecture now asks two separate assurance questions.
+
+
+QUESTION 1 — CANDIDATE LEVEL
+----------------------------
+
+    ReleaseGateService:
+
+        "Is there sufficient evidence to allow THIS candidate to progress?"
+
+
+QUESTION 2 — SYSTEM LEVEL
+-------------------------
+
+    EvaluationCampaignRunner:
+
+        "Across tasks whose truth the online system cannot see, how often
+         does this entire automation architecture make the right decision?"
+
+
+The first question protects individual engineering changes.
+
+The second protects us from trusting the first mechanism merely because it
+looks sophisticated.
+
+
+That distinction should remain one of the central principles of the entire
+L1 automation platform.
+
+
+=======================================================================
+END OF B5
+=======================================================================
