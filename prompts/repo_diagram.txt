@@ -4,8 +4,9 @@ repo_demo_1
     │   └── prompt_truncate
     │       └── repo_0
     │           └── prompt_AB
-    │               ├── A[1-12].txt
-    │               └── B[1-8].txt
+    │               ├── A[1–12].txt
+    │               └── B[1–8].txt
+    │
     └── repo_evidence
         └── prompt_E
             ├── E1.txt

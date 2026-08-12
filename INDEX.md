@@ -43,15 +43,35 @@ Source: [prompts/repo_diagram.txt](prompts/repo_diagram.txt)
 | `B8` | master README | [B8-master-readme/README.md](B8-master-readme/README.md) |
 | `E1.txt` | evidence diversity mapper | [E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.py](E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.py) |
 | `E2.txt` | its README | [E1-E2-conceptual-diversity-mapper/README.md](E1-E2-conceptual-diversity-mapper/README.md) |
-| `prompt_AB_.txt` | | [prompts/prompt_AB_.txt](prompts/prompt_AB_.txt) — **PARTIAL** |
-| `prompt_truncate.txt` | | [prompts/prompt_truncate.txt](prompts/prompt_truncate.txt) — **PARTIAL** |
-| `prompt_E.txt` | | [prompts/prompt_E.txt](prompts/prompt_E.txt) — complete |
-| `prompt_EBA.txt` | | [prompts/prompt_EBA.txt](prompts/prompt_EBA.txt) — **PARTIAL** |
-| `repo_diagram.txt` | | [prompts/repo_diagram.txt](prompts/repo_diagram.txt) — complete |
+| `prompt_AB_.txt` | reconstruct one repository from A + B | [prompts/prompt_AB_.txt](prompts/prompt_AB_.txt) |
+| `prompt_truncate.txt` | cut down to a laptop-runnable demo | [prompts/prompt_truncate.txt](prompts/prompt_truncate.txt) |
+| `prompt_E.txt` | preserve E1/E2 verbatim | [prompts/prompt_E.txt](prompts/prompt_E.txt) |
+| `prompt_EBA.txt` | integrate the mapper into the release gate | [prompts/prompt_EBA.txt](prompts/prompt_EBA.txt) |
+| `repo_diagram.txt` | the build flow | [prompts/repo_diagram.txt](prompts/repo_diagram.txt) |
 
-**Three prompts are incomplete.** They were transcribed from photographs that stopped
-partway through the file. Each one carries a transcription note at the top and an end
-marker where the photograph stopped. Replace them with the real files when you can.
+All five prompts are now complete. The first versions of three of them were transcribed
+from photographs that stopped partway through; those have been replaced.
+
+### `prompt_AB` came in two versions, and only one is kept
+
+Two variants arrived: `prompt_AB.txt` (280 lines) and `prompt_AB_.txt` (237 lines). They
+are the same instruction set, reorganised. `prompt_AB_.txt` is the later revision:
+
+- it replaces 20 flat numbered rules with named sections;
+- it **adds** `EvidenceBundle` to the canonical contract list, which the older version
+  omitted;
+- it **adds** the rule that local test doubles must be named `local`, `fake`, `scripted`,
+  `synthetic` or `in-memory`, so a stub cannot pass for a production adapter.
+
+It drops the older rules 18 and 19, on failure-state distinctions and statistical
+discipline. That loses nothing. Both are already carried by the artifacts the prompt
+reconstructs: rule 18 is the twelve typed exceptions in B7 section 80, and rule 19 is
+four lines of the B7 section 154 invariant checklist, enforced in B5 code where
+`wilson_interval` returns `None` rather than a fake zero for an empty denominator. In a
+prompt whose central instruction is COPY VERBATIM, restating them was redundant.
+
+**Use `prompt_AB_.txt`.** The older variant is deliberately not kept, to avoid a second
+A10-style situation where nobody can tell which version was used.
 
 ### The B-series is a second, parallel repository
 
