@@ -1,0 +1,17 @@
+Read E1.txt and E2.txt completely before making changes.
+
+Create a new repository from the material in those two files.
+
+Requirements:
+
+* Treat the Python code in E1.txt as authoritative and preserve it verbatim unless a change is strictly required to make the repository runnable.
+* Treat the README content in E2.txt as authoritative and preserve it verbatim in README.md.
+* Do not redesign, simplify, or rewrite the architecture.
+* Do not remove comments.
+* Do not replace implemented logic with placeholders.
+* If code in E1.txt explicitly raises NotImplementedError, keep that behavior.
+* Split the Python code into sensible files/modules only where the existing code clearly supports that split; otherwise keep it together.
+* Add only the minimum repository scaffolding needed, such as init.py, requirements if required, and basic test/package structure.
+* Do not invent API keys, endpoints, model names, credentials, or environment-specific parameters.
+* Preserve the generic-engine/evidence-adapter architecture exactly.
+* After creating the repo, verify imports and syntax and report any issue that prevents execution without silently changing the design.

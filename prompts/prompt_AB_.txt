@@ -1,0 +1,237 @@
+You are acting as a senior software engineer reconstructing a repository from 20 source artifact files in the current folder:
+
+A1.txt through A12.txt
+B1.txt through B8.txt
+
+Your task is to read all 20 files, infer the intended final repository, create the directory structure, and place the intended code, tests, configuration, and Markdown files in the correct locations.
+
+IMPORTANT CONSTRAINTS
+
+1. Read all 20 files before making repository changes.
+
+2. Treat the TXT files as source artifacts, not files to copy directly into the final repository.
+
+3. The files were produced at different stages and may contain:
+- explanatory prose;
+- headings such as FILE:;
+- separator lines;
+- outer code fences;
+- text-window markers;
+- accidental display characters;
+- duplicated or superseded code;
+- temporary compatibility definitions;
+- instructions about where content belongs.
+
+4. Distinguish carefully between:
+- actual source code;
+- actual Markdown file content;
+- configuration;
+- tests;
+- examples;
+- architectural commentary;
+- presentation-only text.
+
+5. When a file explicitly contains code intended for a named destination file, preserve that code verbatim except for removing presentation wrappers that are clearly outside the source, such as:
+- FILE: path headings;
+- outer display fences;
+- chat-only separator lines.
+
+Do not rewrite, reformat, simplify, modernize, shorten, or refactor extracted code unless later artifacts explicitly require reconciliation.
+
+6. When a file contains Markdown intended for a .md file, preserve the Markdown verbatim except for outer presentation wrappers. Do not rewrite it.
+
+7. Preserve extensive comments inside code. They are intentional and are meant to help junior engineers and data scientists understand and modify the system.
+
+8. Be conservative when deciding that text is accidental. If content appears to be part of an explicitly defined code or Markdown artifact, preserve it.
+
+AUTHORITATIVE ORDER
+
+Use the B-series artifacts to reconcile the A-series components.
+
+- A1 through A12 contain the original 12 components and their substantive implementations.
+- B1 is authoritative for canonical shared contracts.
+- B2 is authoritative for NOT-IMPLEMENTED.md.
+- B3 is authoritative for DESIGN-RATIONALE.md.
+- B4 defines the composition root and deterministic X1 end-to-end path.
+- B5 defines hidden-oracle and pipeline-level evaluation.
+- B6 defines final configuration, composition, repository reconciliation, and architecture checks.
+- B7 defines final cross-component consistency requirements.
+- B8 is the authoritative master README.md.
+
+Later B-series reconciliation instructions override temporary compatibility structures from earlier artifacts.
+
+CANONICAL CONTRACTS
+
+Avoid duplicate definitions of shared concepts. Use the canonical B1 definitions where applicable, including concepts such as:
+
+TaskRequest
+TaskSpecification
+CapabilityIdentity
+CandidateArtifact
+EvidenceArtifact
+EvidenceBundle
+ExecutionReceipt
+GateDecision
+GateOutcome
+ModelUsage
+ResourceUsage
+
+If B4 or B5 defines temporary versions of these for demonstration, replace those temporary definitions with canonical imports when the later B-series instructions require it.
+
+Do not create parallel versions of the same shared domain concept.
+
+ARCHITECTURAL BOUNDARIES
+
+Preserve these boundaries:
+
+- ChangeExecutionService generates a candidate.
+- ReleaseGateService independently decides PASS, FAIL, or HUMAN_REVIEW_REQUIRED.
+- Human review remains outside ReleaseGateService.
+- Hidden-oracle information must not be available to the online change-generation or release-gating path.
+- EvaluationCampaignRunner must evaluate the same logical online pipeline rather than a separate benchmark-only implementation.
+- Infrastructure adapters remain outside core domain/application code.
+- Azure SDK usage belongs behind infrastructure adapters.
+- Assurance policies belong in versioned capability artifacts, not arbitrary environment variables.
+- Candidate identity and evidence lineage must remain explicit.
+- Infrastructure failure must remain distinct from candidate failure.
+- NotImplemented production functionality must fail explicitly.
+
+DO NOT INVENT PRODUCTION FUNCTIONALITY
+
+If the artifacts intentionally leave a production capability unimplemented:
+
+- preserve its NotImplementedError or equivalent explicit failure;
+- preserve its NI identifier from B2;
+- do not create a fake success implementation;
+- do not insert guessed Azure resources, credentials, thresholds, or enterprise policy.
+
+Local deterministic/test implementations are allowed when clearly named as local, fake, scripted, synthetic, or in-memory implementations.
+
+REPOSITORY RECONSTRUCTION PROCESS
+
+Step 1: Inventory
+
+Read all A1-A12 and B1-B8.
+
+Build an internal inventory of intended artifacts including:
+- intended destination path;
+- source artifact;
+- artifact type;
+- whether it is authoritative, temporary, example-only, or superseded.
+
+Do not create files until this inventory is complete.
+
+Step 2: Determine final structure
+
+Use B6, B7, and B8 to determine the final structure.
+
+Prefer one coherent Python src layout, approximately:
+
+src/l1_automation/
+
+Do not create duplicate package trees merely because the components were authored separately.
+
+Step 3: Extract files
+
+For each explicitly defined file:
+- remove only external presentation wrappers;
+- preserve the intended file body;
+- write it to the correct destination.
+
+Step 4: Reconcile duplicates
+
+Inspect especially for:
+- duplicate shared contracts;
+- duplicate GateOutcome definitions;
+- duplicate CandidateArtifact representations;
+- duplicate ResourceUsage models;
+- duplicate ports representing the same responsibility;
+- temporary B4/B5 compatibility classes;
+- multiple project configuration fragments.
+
+Follow later B-series reconciliation instructions.
+
+Do not otherwise refactor working code.
+
+Step 5: Documentation
+
+Create the final documentation, including at minimum:
+
+README.md
+NOT-IMPLEMENTED.md
+DESIGN-RATIONALE.md
+
+Use the B8, B2, and B3 content respectively.
+
+Keep Markdown as raw Markdown.
+
+Step 6: Configuration
+
+Create the final canonical configuration and project files described by the artifacts.
+
+There should be one canonical pyproject.toml.
+
+Merge temporary fragments only where the B-series explicitly says to do so.
+
+Do not create or commit real secrets.
+
+Step 7: Tests
+
+Place all intended tests in the correct directories.
+
+Preserve:
+- unit tests;
+- contract tests;
+- architecture tests;
+- configuration tests;
+- deterministic end-to-end tests;
+- evaluation tests;
+- statistical tests.
+
+Do not weaken assertions merely to make tests pass.
+
+Step 8: Validate
+
+After reconstruction:
+
+- run Python syntax or compile checks;
+- run deterministic tests that do not require Azure or a live model;
+- run the B7 architecture review if present;
+- inspect imports for duplicate or superseded definitions;
+- fix only reconstruction problems such as bad paths, accidental outer fences, duplicate canonical types, broken imports caused by reconciliation, or truncated extraction.
+
+Do not perform speculative redesign.
+
+Do not attempt real Azure integration or live model calls unless the repository is already configured for them.
+
+Step 9: Report
+
+When complete, report:
+
+- final directory tree;
+- major mapping from A/B artifacts to repository modules;
+- duplicate definitions that were reconciled;
+- presentation-only content that was deliberately excluded;
+- remaining NI or NotImplemented items;
+- tests and checks run;
+- any ambiguity that could not be safely resolved.
+
+PRESERVATION RULE
+
+When you encounter an explicitly identified code block or Markdown file body, default to copying it verbatim.
+
+Only change it when a later artifact explicitly requires reconciliation.
+
+If two artifacts conflict and the authoritative hierarchy above does not resolve the conflict, do not silently choose based on coding preference. Make the smallest safe change required for repository coherence and report the ambiguity.
+
+FINAL GOAL
+
+The final repository should be an integrated implementation of A1-A12 and B1-B8, not a folder containing the original TXT files.
+
+It should be coherent, readable, runnable in its deterministic/local paths, preserve the intended assurance boundaries, and explicitly expose production capabilities that remain unimplemented.
+
+Begin by reading all 20 TXT files and creating the internal inventory before changing anything.
+
+
+
+Regarding `prompt_AB.txt` and `prompt_AB_.txt` I'm not sure which one to use, can you analyze the difference first?

@@ -1,18 +1,36 @@
+# Environments
 .venv/
-.pytest_cache/
+.venv-b/
+.env
+uv.lock
+
+# Python build and cache
 __pycache__/
 *.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Test and lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Generated artifacts
+artifacts/
+gate-artifacts/
+generated-schemas/
+.gate-reports/
+graphify-out/
+
+# Editors and tooling
 .DS_Store
 .idea/
-build/
-.env
-.worktrees/
-.claude/
-graphify-out/
 .vscode/
+.claude/
 .codex/
 .superpowers/
 .workspace/
+.worktrees/
 update.sh
-uv.lock
-*.egg-info

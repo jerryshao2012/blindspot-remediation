@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# COMPONENT 8 POC ECONOMICS POLICY
+# ---------------------------------------------------------------------------
+#
+# THESE VALUES ARE EXECUTABLE EXAMPLES.
+#
+# They are not asserted BMO value thresholds.
+#
+# Production values require agreement among:
+#
+#   Enterprise Platform Engineering
+#   Applied AI / Evals
+#   Finance
+#   Value Engineering
+#   FinOps
+#   Operational Risk
+#   Workforce / vendor-management stakeholders
+#
+# The POC should first prove the measurement pipeline using known synthetic
+# economics before attempting a formal workforce or vendor business case.
+
+currency: "CAD"
+
+policy:
+  policy_version: "poc-engineering-economics-1.0"
+
+  minimum_work_items: 100
+
+  minimum_safely_delivered_changes: 50
+
+  # Require at least 15% lower cost per safely delivered change.
+  minimum_cost_reduction_fraction: 0.15
+
+  # Require at least 25% lower active human effort per safe change.
+  minimum_human_effort_reduction_fraction: 0.25
+
+  # POC guardrail—not an asserted production threshold.
+  maximum_change_failure_rate: 0.10
+
+  # A high review rate may mean the platform is an assistant rather than an
+  # autonomous replacement for the target L1 activity.
+  maximum_human_review_rate: 0.40
+
+  confidence_level: 0.95

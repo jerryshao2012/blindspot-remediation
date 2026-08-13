@@ -1,0 +1,51 @@
+task_type: "X1"
+
+definition_version: "1.0.0"
+
+enabled: true
+
+# Reference to the task-specific skill/instruction package.
+#
+# Component 9 resolves the reference.
+# Component 2 consumes the actual execution instructions.
+skill_reference: "skills/x1/1.0.0"
+
+change_execution_profile: "x1-change-execution-v1"
+
+release_gate_profile: "x1-release-gate-v1"
+
+required_evidence_types:
+  - "repository_diff"
+  - "build_result"
+  - "unit_test_result"
+  - "static_analysis_result"
+  - "independent_test_result"
+  - "mutation_analysis_result"
+
+# POC allow list.
+#
+# Production should use canonical repository identifiers and policy-controlled
+# repository registration rather than substring matching.
+allowed_repository_patterns:
+  - "engineering-poc"
+
+budget:
+  maximum_execution_attempts: 2
+
+  maximum_gate_attempts: 3
+
+  maximum_total_llm_input_tokens: 500000
+
+  maximum_total_llm_output_tokens: 100000
+
+  maximum_total_llm_requests: 200
+
+  maximum_elapsed_seconds: 7200
+
+maximum_more_evidence_cycles: 2
+
+# False for the initial POC.
+#
+# The demonstration should prove the release decision before granting the
+# control plane authority to deploy autonomously.
+automatic_release_allowed: false

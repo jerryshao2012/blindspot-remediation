@@ -1,0 +1,459 @@
+You are acting as a senior software engineer integrating an existing Evidence Diversity Mapper repository into the latest L1 engineering automation repository.
+
+Both repositories already exist.
+
+Do not redesign either repository from scratch.
+
+First inspect both repositories and understand their public contracts, package structure, tests, and configuration before changing code.
+
+GOAL
+
+Integrate the Evidence Diversity Mapper into the L1 automation repository so that ReleaseGateService can use conceptual evidence coverage during evidence planning.
+
+The integration should preserve the existing architecture:
+
+ChangeExecutionService generates CandidateArtifact.
+
+ReleaseGateService gathers and evaluates evidence.
+
+EvidencePlanner decides what evidence should be collected.
+
+Evidence Diversity Mapper analyzes the conceptual coverage of the current EvidenceBundle and identifies sparse, missing, or uncertain conceptual regions.
+
+EvidencePlanner may use those gaps to request additional evidence.
+
+The final GatePolicy remains responsible for PASS, FAIL, or HUMAN_REVIEW_REQUIRED.
+
+The Evidence Diversity Mapper must not make the gate decision itself.
+
+IMPORTANT INTEGRATION BOUNDARY
+
+Treat the Evidence Diversity Mapper as an external reusable product.
+
+Do not copy its internal implementation into the L1 repository unless absolutely required.
+
+Prefer using its published Python package, local package reference, or documented API.
+
+The L1 repository should own only a thin evidence-domain adapter.
+
+Do not make the generic Diversity Mapper import L1 release-gate classes.
+
+INTEGRATION CONTRACT
+
+Inspect the mapper repository and identify its actual equivalents of:
+
+ConceptSchema
+ArtifactDescriptor
+ConceptMapping
+CoverageAssessment
+CoverageGap
+ExpansionRequest
+
+Also identify its mapping and expansion interfaces.
+
+Do not invent duplicate contracts if the mapper repository already provides them.
+
+In the L1 repository, create or adapt a thin EvidenceDiversityMapperAdapter that translates:
+
+EvidenceArtifact into the mapper's ArtifactDescriptor
+
+and translates:
+
+CoverageAssessment
+CoverageGap
+ExpansionRequest
+
+into the evidence-planning structures already used by the L1 repository.
+
+Preserve the L1 repository's canonical EvidenceArtifact, CandidateArtifact, EvidenceBundle, GateDecision, GateOutcome, and CapabilityIdentity contracts.
+
+Do not create competing versions of those shared L1 concepts.
+
+EVIDENCE MAPPING
+
+The adapter should provide the mapper enough information to reason about conceptual coverage.
+
+Where available, include:
+
+evidence ID;
+evidence family/type;
+candidate ID;
+what behavior or claim the evidence addresses; generation method; execution method; interpretation method; producer identity; model identity where applicable; parent evidence IDs; generation batch or lineage information; result; uncertainty; relevant structured metadata.
+
+Do not send hidden-oracle information to the mapper during online release gating.
+
+HIDDEN ORACLE BOUNDARY
+
+The online Evidence Diversity Mapper integration must not receive:
+
+hidden benchmark tests;
+reference solutions;
+OracleAssessment;
+expected candidate correctness;
+expected GateDecision.
+
+The mapper operates only on evidence legitimately available to ReleaseGateService.
+
+CONCEPT SCHEMA
+
+Determine how the mapper repository expects ConceptSchema to be provided.
+
+For the first integration, create a versioned evidence-specific ConceptSchema or configuration for software-release evidence.
+
+Prefer a small, inspectable schema suitable for the current X1 POC.
+
+Possible conceptual dimensions may include:
+
+normal behavior;
+boundary behavior;
+invalid input;
+error handling;
+state transition;
+authorization;
+dependency failure;
+invariant preservation;
+backward compatibility;
+mutation family;
+requirement interpretation.
+
+Do not hard-code this list into the generic Diversity Mapper product.
+
+Keep the evidence-specific schema in the L1 repository or its capability configuration.
+
+Ensure the ConceptSchema version becomes part of the relevant capability or gate configuration identity if it can materially change gate behavior.
+
+EVIDENCE PLANNING LOOP
+
+Integrate the mapper into the existing EvidencePlanner flow.
+
+The desired behavior is:
+
+1. EvidencePlanner creates the initial evidence plan.
+
+2. Evidence collectors produce evidence.
+
+3. EvidenceDiversityMapperAdapter maps the current EvidenceBundle and obtains conceptual coverage.
+
+4. Coverage gaps are returned to EvidencePlanner.
+
+5. EvidencePlanner decides which gaps justify additional collection.
+
+6. Existing evidence collectors generate or gather the requested additional evidence.
+
+7. New evidence is mapped again.
+
+8. The process stops when:
+   required coverage conditions are satisfied;
+   a decisive failure exists;
+   the evidence budget is exhausted;
+   or further collection is not justified.
+
+Do not implement an unbounded loop.
+
+Use the existing evidence budget and stopping semantics where available.
+
+If no appropriate budget exists, add the smallest explicit budget abstraction necessary.
+
+EXPANSION REQUESTS
+
+The mapper may return ExpansionRequests.
+
+Do not let the mapper directly invoke arbitrary release-gate tools unless its existing API explicitly requires this architecture.
+
+Prefer:
+
+CoverageGap or ExpansionRequest
+
+being translated by EvidencePlanner into the appropriate existing collector request.
+
+For example, a conceptual gap may be addressed by:
+
+generated behavioral tests;
+property tests;
+mutation analysis;
+static analysis;
+structural analysis;
+semantic review.
+
+The EvidencePlanner owns that choice.
+
+RE-MAPPING
+
+Do not assume newly generated evidence fills the requested gap.
+
+After new evidence is created, send it back through the mapper.
+
+Use the resulting ConceptMapping and CoverageAssessment to determine whether coverage actually changed.
+
+PRESERVE UNCERTAINTY
+
+If the mapper returns uncertain, unknown, unresolved, or partially mapped artifacts, preserve that state.
+
+Do not convert mapper uncertainty into positive coverage.
+
+Do not convert mapper failure into "no gaps found."
+
+If the mapper is required by the gate policy and is unavailable, use the existing evidence-unavailable semantics. This should normally prevent automatic PASS and may lead to HUMAN_REVIEW_REQUIRED.
+
+MAPPER FAILURE SEMANTICS
+
+Normalize mapper failures into typed L1 integration exceptions.
+
+Examples:
+
+mapper unavailable;
+invalid schema;
+malformed mapper response;
+unsupported artifact;
+mapping failure;
+expansion failure.
+
+Do not convert these automatically into candidate FAIL.
+
+The candidate may be correct even when diversity analysis is unavailable.
+
+FINAL GATE POLICY
+
+Do not move release policy into the mapper.
+
+The final GatePolicy should continue to operate on typed evidence and diversity assessment.
+
+A policy may require conditions such as:
+
+required conceptual regions represented; no critical unresolved diversity gaps; minimum evidence-family coverage; no decisive veto evidence.
+
+But the mapper itself must not return PASS, FAIL, or HUMAN_REVIEW_REQUIRED.
+
+LOCAL LAPTOP SUPPORT
+
+The latest L1 repository is intended to run locally on a laptop with an API-connected LLM.
+
+The diversity integration must preserve that capability.
+
+If the Evidence Diversity Mapper can run as a local Python package, prefer that for the first integration.
+
+If it exposes an API, add a provider adapter using configuration rather than hard-coded endpoints.
+
+Do not require Azure for the default local integration.
+
+Provide environment/configuration examples only if required by the mapper.
+
+Do not commit secrets.
+
+DEPENDENCY MANAGEMENT
+
+Use the mapper repository as a proper dependency.
+
+Prefer one of these approaches, based on how the mapper repo is actually packaged:
+
+editable local package during development; Git dependency; published internal package; documented HTTP API client.
+
+Do not duplicate its source tree inside the L1 repository simply to make imports work.
+
+Update pyproject.toml or the existing dependency mechanism cleanly.
+
+Keep optional dependencies optional where appropriate.
+
+TESTING
+
+Add deterministic integration tests.
+
+Tests must not require live LLM calls or a live remote Diversity Mapper service by default.
+
+Use the mapper repository's deterministic, scripted, or fake implementation if it provides one.
+
+Otherwise create an L1-side fake only for testing the adapter boundary.
+
+Test at minimum:
+
+EvidenceArtifact to ArtifactDescriptor translation;
+
+ConceptSchema loading/versioning;
+
+CoverageAssessment translation;
+
+CoverageGap translation;
+
+ExpansionRequest translation;
+
+lineage preservation;
+
+uncertainty preservation;
+
+mapper unavailable behavior;
+
+mapper malformed-response behavior;
+
+initial evidence mapping;
+
+gap-guided second evidence-planning cycle;
+
+re-mapping of newly generated evidence;
+
+budget termination;
+
+candidate identity preservation;
+
+hidden-oracle isolation;
+
+final GatePolicy remaining independent of mapper implementation.
+
+Add one end-to-end deterministic X1 test showing that:
+
+the initial evidence contains a known conceptual gap;
+
+the mapper identifies the gap;
+
+EvidencePlanner requests additional evidence;
+
+the new evidence is collected;
+
+the evidence is re-mapped;
+
+the final gate receives the completed EvidenceBundle and diversity assessment.
+
+This test should not require a real API key.
+
+LIVE INTEGRATION TEST
+
+If the mapper repository and L1 repository both support live API-backed execution, add a separate optional integration test.
+
+Skip it automatically unless all required configuration is present.
+
+Do not make live mapper or live LLM access part of the normal unit-test suite.
+
+ARCHITECTURE CHECKS
+
+Update existing architecture checks if necessary to enforce:
+
+the generic mapper package does not depend on L1 release-gate classes;
+
+online mapper integration cannot access hidden-oracle modules;
+
+ReleaseGateService does not instantiate the mapper implementation directly;
+
+the mapper is injected through an interface/adapter;
+
+GatePolicy does not depend on mapper internals;
+
+no duplicate ConceptSchema or mapper contracts are created unnecessarily;
+
+candidate and evidence identities remain canonical.
+
+DOCUMENTATION
+
+Update README.md with a concise section describing:
+
+what the Evidence Diversity Mapper does;
+
+why conceptual coverage is different from number of tests;
+
+where the mapper sits in the release-gate process;
+
+how to configure it locally;
+
+how to run the deterministic integration test;
+
+how to run an optional live integration;
+
+what happens if the mapper is unavailable.
+
+Update DESIGN-RATIONALE.md to preserve these principles:
+
+conceptual diversity is not statistical independence;
+
+linguistic or syntactic variety is not conceptual coverage;
+
+the mapper coordinates evidence exploration;
+
+the EvidencePlanner chooses how gaps are addressed;
+
+new evidence must be re-mapped;
+
+the mapper does not decide release.
+
+Update NOT-IMPLEMENTED.md only if this integration closes or changes an existing NI item.
+
+Do not remove unresolved empirical questions about whether mapper-guided evidence actually improves false-release behavior.
+
+EVALUATION
+
+Preserve the pipeline-level evaluation architecture.
+
+The offline EvaluationCampaignRunner should automatically evaluate the ReleaseGateService with the mapper enabled when that mapper configuration is part of the capability being evaluated.
+
+Ensure the mapper version and ConceptSchema version are captured in capability/campaign identity where appropriate.
+
+This enables controlled comparisons such as:
+
+mapper disabled;
+mapper mapping-only;
+mapper-guided expansion.
+
+Do not claim that the mapper improves assurance merely because the integration works.
+
+The campaign framework should remain capable of measuring whether it actually reduces false releases, improves hidden-defect detection, changes review rate, and changes token or compute cost.
+
+WORK PROCESS
+
+Perform the work in this order:
+
+1. Inspect both repositories.
+
+2. Identify the mapper repository's actual public contracts and integration mechanism.
+
+3. Identify the existing EvidencePlanner, EvidenceArtifact, EvidenceBundle, ReleaseGateService, GatePolicy, composition root, configuration, and tests in the L1 repository.
+
+4. Produce an internal mapping between the two contract sets.
+
+5. Reuse existing contracts wherever possible.
+
+6. Implement the thin EvidenceDiversityMapperAdapter.
+
+7. Add the evidence-specific ConceptSchema configuration.
+
+8. Integrate mapping and gap feedback into EvidencePlanner.
+
+9. Add bounded re-mapping and expansion cycles.
+
+10. Update composition and dependency configuration.
+
+11. Add deterministic tests.
+
+12. Update documentation.
+
+13. Run syntax checks, architecture checks, unit tests, local X1 E2E tests, and deterministic evaluation tests.
+
+14. Do not perform broad refactoring unrelated to this integration.
+
+FINAL REPORT
+
+When complete, report:
+
+the files added or modified;
+
+how the mapper repository is referenced as a dependency;
+
+which mapper contracts are used;
+
+how EvidenceArtifact is translated;
+
+where the ConceptSchema is stored;
+
+how CoverageGaps reach EvidencePlanner;
+
+how re-mapping works;
+
+how mapper failures are handled;
+
+how the mapper version is recorded in evaluation;
+
+the exact commands to run deterministic tests;
+
+the exact command for an optional live integration test;
+
+test results;
+
+remaining ambiguities or NotImplemented items.
+
+The final result should integrate the existing Evidence Diversity Mapper product into the existing L1 release-gate architecture with the smallest clean adapter boundary possible, while preserving all existing assurance, hidden-oracle, statistical, and local-laptop execution constraints.

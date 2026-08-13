@@ -1,0 +1,194 @@
+task_type: "PYTHON_TARGETED_CHANGE"
+
+version: "1.0.0"
+
+display_name: "Python Targeted Change"
+
+description: >
+  Performs a bounded change to an existing Python codebase in response
+  to an approved engineering task. The capability is intentionally
+  restricted to targeted source and test changes for the initial POC.
+
+status: "qualifying"
+
+created_at: "2026-08-07T00:00:00Z"
+
+repository_scope:
+
+  repository_id: "engineering-poc-repository"
+
+  allowed_base_branches:
+    - "main"
+
+  path_rules:
+
+    - pattern: "src/**/*.py"
+      allow_write: true
+      explanation: "Application Python source may be modified."
+
+    - pattern: "tests/**/*.py"
+      allow_write: true
+      explanation: "Repository tests may be modified or added."
+
+    - pattern: ".azuredevops/**"
+      allow_write: false
+      explanation: "The change agent may not modify pipeline governance."
+
+    - pattern: "task_specs/**"
+      allow_write: false
+      explanation: "The change agent may not modify its governing contract."
+
+    - pattern: "release_gate/**"
+      allow_write: false
+      explanation: "Release-gate policy is outside the change-agent trust domain."
+
+  maximum_files_changed: 12
+
+  maximum_changed_lines: 800
+
+
+skill_contract:
+
+  required_skills:
+
+    - artifact_id: "python-change-skill"
+      uri: "skills/python-change/SKILL.md"
+      sha256: "1111111111111111111111111111111111111111111111111111111111111111"
+      version: "1.0.0"
+
+  optional_skills: []
+
+  repository_instructions: []
+
+
+change_contract:
+
+  permitted_languages:
+    - "python"
+
+  permitted_operations:
+    - "modify_existing_source"
+    - "add_test"
+    - "modify_test"
+    - "add_source_file"
+
+  forbidden_operations:
+    - "modify_pipeline_policy"
+    - "modify_release_gate_policy"
+    - "modify_task_specification"
+    - "modify_benchmark_oracle"
+    - "change_repository_permissions"
+
+  require_existing_tests_before_change: true
+
+  require_candidate_diff: true
+
+  require_change_rationale: true
+
+
+execution_contract:
+
+  change_execution_profile_id: "change-execution-v1"
+
+  release_gate_profile_id: "release-gate-v1"
+
+  benchmark_profile_id: "benchmark-v1"
+
+  maximum_execution_attempts: 3
+
+
+evidence_contract:
+
+  require_baseline_comparison: true
+
+  require_environment_provenance: true
+
+  diversity_specification: null
+
+  requirements:
+
+    - evidence_type: "baseline_tests"
+      required: true
+      minimum_observations: 1
+      independent_from_change_agent: false
+      artifact_specification: null
+
+    - evidence_type: "candidate_tests"
+      required: true
+      minimum_observations: 1
+      independent_from_change_agent: false
+      artifact_specification: null
+
+    - evidence_type: "independent_test_synthesis"
+      required: true
+      minimum_observations: 1
+      independent_from_change_agent: true
+      artifact_specification: null
+
+    - evidence_type: "static_analysis"
+      required: true
+      minimum_observations: 1
+      independent_from_change_agent: true
+      artifact_specification: null
+
+    - evidence_type: "mutation_analysis"
+      required: true
+      minimum_observations: 1
+      independent_from_change_agent: true
+      artifact_specification: null
+
+
+gate_contract:
+
+  gate_policy:
+
+    artifact_id: "python-targeted-change-gate"
+    uri: "release_gate/python-targeted-change-v1.yaml"
+    sha256: "2222222222222222222222222222222222222222222222222222222222222222"
+    version: "1.0.0"
+
+  permitted_outcomes:
+    - "pass"
+    - "fail"
+    - "more_evidence"
+    - "human_review_required"
+
+  fail_closed_on_missing_required_evidence: true
+
+  fail_closed_on_policy_error: true
+
+
+benchmark_contract:
+
+  benchmark_suite:
+
+    artifact_id: "python-targeted-change-benchmark"
+    uri: "benchmarks/python-targeted-change/manifest.yaml"
+    sha256: "3333333333333333333333333333333333333333333333333333333333333333"
+    version: "1.0.0"
+
+  minimum_cases: 30
+
+  qualification_policy:
+
+    artifact_id: "python-targeted-change-qualification"
+    uri: "benchmarks/python-targeted-change/qualification.yaml"
+    sha256: "4444444444444444444444444444444444444444444444444444444444444444"
+    version: "1.0.0"
+
+  require_hidden_oracle: true
+
+
+governance_contract:
+
+  risk_tier: "moderate"
+
+  maximum_llm_input_tokens: 2000000
+
+  maximum_llm_output_tokens: 500000
+
+  maximum_total_cost_usd: 100.0
+
+  human_review_allowed: true
+
+  auto_release_allowed: false

@@ -1,0 +1,395 @@
+Create a NEW repository from the existing L1 engineering automation repository.
+
+Do not modify the original repository.
+
+The new repository must be a smaller, laptop-runnable version whose scope ends at the release gate. It must also include a local API connector to an LLM so that a developer can run the complete truncated pipeline from a laptop.
+
+Read the existing repository first and reuse its relevant code, contracts, comments, tests, design rationale, and evaluation logic. Preserve substantive code verbatim wherever possible. Only modify code where necessary to remove downstream dependencies or make the system runnable locally.
+
+SCOPE
+
+Keep only the engineering path through:
+
+TaskRequest
+ChangeExecutionService
+CandidateArtifact
+ReleaseGateService
+GateDecision
+
+GateDecision must support:
+
+PASS
+FAIL
+HUMAN_REVIEW_REQUIRED
+
+GateDecision is the terminal online domain result.
+
+The repository must NOT:
+
+deploy code to production;
+observe released code in production;
+collect post-release operational metrics; calculate process outcomes; calculate business KPIs; implement production feedback loops; automatically modify prompts or policies from production feedback; implement production rollback or deployment.
+
+It is acceptable to return, print, persist, or publish GateDecision. Nothing after that belongs to this repository.
+
+KEEP THESE CORE CAPABILITIES
+
+Preserve and reconcile the existing implementations for:
+
+canonical shared contracts;
+TaskRequest;
+TaskSpecification;
+CapabilityIdentity;
+CandidateArtifact;
+EvidenceArtifact;
+EvidenceBundle;
+EvidenceProvenance;
+ExecutionReceipt;
+GateDecision;
+GateOutcome;
+ModelUsage;
+ResourceUsage;
+ChangeExecutionService;
+EvidencePlanner;
+EvidenceDiversityMapper;
+deterministic test execution;
+compiler/static/structural evidence;
+AI-generated behavioral tests;
+mutation testing;
+GatePolicy;
+ReleaseGateService;
+benchmark construction;
+benchmark validation;
+HiddenOracle;
+EvaluationCampaignRunner;
+campaign statistics;
+false-release analysis;
+token and deterministic-compute accounting; local configuration; architecture checks; local end-to-end tests.
+
+Preserve the existing distinction that ChangeExecutionService proposes a candidate and ReleaseGateService independently decides whether sufficient evidence exists.
+
+Human review remains outside ReleaseGateService. The gate only returns HUMAN_REVIEW_REQUIRED with structured reasons.
+
+LOCAL LAPTOP EXECUTION
+
+The new repository must run on a normal developer laptop.
+
+Do not require Azure, Jira, Service Bus, containers, or enterprise infrastructure for the default local path.
+
+Provide a simple local execution mode using the local filesystem and Python subprocess execution in a temporary isolated working directory.
+
+The local mode should be clearly documented as a development/POC execution environment, not production-grade security isolation.
+
+A developer should be able to:
+
+1. create a Python virtual environment;
+2. install the package;
+3. set LLM API environment variables;
+4. run one sample X1 task;
+5. inspect the generated candidate;
+6. run the release gate;
+7. receive PASS, FAIL, or HUMAN_REVIEW_REQUIRED; 8. run a small offline evaluation campaign.
+
+LLM API CONNECTOR
+
+Create one provider-neutral ModelClientPort and one practical HTTP/API implementation suitable for laptop use.
+
+Prefer an OpenAI-compatible API interface because many model gateways expose that shape.
+
+Configuration should use environment variables similar to:
+
+L1_LLM_BASE_URL
+L1_LLM_API_KEY
+L1_LLM_MODEL
+
+Optionally support:
+
+L1_LLM_TIMEOUT_SECONDS
+L1_LLM_MAX_RETRIES
+
+Do not hard-code secrets.
+
+Do not commit API keys.
+
+Provide a .env.example or equivalent example configuration containing placeholders only.
+
+The application code must not directly call an LLM SDK from ChangeExecutionService or ReleaseGateService. Those components receive ModelClientPort through dependency injection.
+
+The model connector should capture:
+
+model identifier;
+request purpose;
+input token usage when reported;
+output token usage when reported;
+latency;
+retry count;
+provider errors.
+
+If the selected API does not report token counts, represent that explicitly rather than inventing values.
+
+The connector should support structured JSON responses where the calling component requires structured output.
+
+Validate structured responses before using them.
+
+LOCAL MODEL FAILURE SEMANTICS
+
+A model API timeout, authentication failure, rate limit, malformed response, or network failure must not silently become GateOutcome.FAIL or GateOutcome.PASS.
+
+Use typed infrastructure/model exceptions.
+
+If required gate evidence cannot be generated because the LLM service is unavailable, the release-gate workflow should normally end in HUMAN_REVIEW_REQUIRED or an explicit execution failure according to the existing gate semantics.
+
+Never manufacture evidence.
+
+OFFLINE / MOCK MODE
+
+Also provide a deterministic fake or scripted ModelClient implementation for unit tests.
+
+Tests must not require a real API key.
+
+The fake implementation must be clearly named, for example:
+
+DeterministicModelClient
+ScriptedModelClient
+FakeModelClient
+
+Do not disguise it as a production implementation.
+
+LOCAL CHANGE EXECUTION
+
+The laptop implementation should:
+
+copy or prepare the benchmark/repository baseline in a temporary working directory; provide authorized task context to ChangeExecutionService; call the configured LLM; produce a candidate patch or modified working tree; calculate candidate identity/hash; preserve model usage; avoid modifying the original repository under evaluation.
+
+Use existing repository abstractions where possible.
+
+LOCAL RELEASE GATE
+
+The local release gate should use as much of the existing real gate implementation as possible.
+
+It should support, where already available:
+
+existing tests;
+generated behavioral tests;
+syntax/compiler checks;
+static or structural analysis;
+mutation testing;
+EvidencePlanner;
+EvidenceDiversityMapper;
+explicit evidence provenance;
+explicit evidence lineage;
+GatePolicy.
+
+AI may generate tests or semantic findings.
+
+Deterministic tests must be executed deterministically after generation.
+
+The final GatePolicy should remain deterministic wherever the existing architecture allows it.
+
+Do not replace the gate with a single LLM question asking whether the code is correct.
+
+LOCAL EXECUTION SAFETY
+
+Because this runs on a laptop, make the limitations clear.
+
+Generated code is potentially unsafe.
+
+For the POC:
+
+use a temporary working directory;
+set execution timeouts;
+restrict commands to configured/approved commands; do not pass unrelated environment secrets into subprocesses; do not give generated code access to the LLM API key unless absolutely required; avoid network-dependent tests by default; clean up temporary workspaces when safe to do so.
+
+Document that this is development isolation, not a production sandbox.
+
+PIPELINE-LEVEL EVALUATION
+
+Retain offline evaluation only for the truncated pipeline.
+
+The evaluation target consists of:
+
+ChangeExecutionService;
+CandidateArtifact;
+ReleaseGateService;
+GateDecision.
+
+The HiddenOracle independently determines whether the exact generated candidate is correct.
+
+EvaluationCampaignRunner should compare candidate correctness with GateDecision and calculate at least:
+
+candidate success rate;
+correct passes;
+false releases;
+correct rejections;
+false rejections;
+human-review rate;
+automation coverage;
+false release among PASS decisions;
+pipeline completion rate;
+input tokens;
+output tokens;
+model calls;
+deterministic test executions;
+mutation executions;
+latency.
+
+Keep explicit numerators and denominators.
+
+Do not create one overall AI quality score.
+
+Preserve the existing statistical discipline that generated test count is not benchmark sample size and repeated runs of one benchmark case retain the same case identity.
+
+SAMPLE X1
+
+Create or retain one very small X1 example that can run completely on a laptop.
+
+The example should include:
+
+a small baseline repository or fixture;
+a clear task request;
+a task specification;
+a skill/instruction artifact if supported; a gate policy; deterministic existing tests; hidden oracle tests used only by offline evaluation.
+
+The public online pipeline must not have access to the hidden oracle tests.
+
+Provide a command such as:
+
+python -m l1_automation.cli run-x1 ...
+
+or an equivalent simple CLI.
+
+Also provide a command for a small evaluation campaign, for example:
+
+python -m l1_automation.cli evaluate-x1 ...
+
+Use the actual final CLI design you implement and document the exact commands in README.md.
+
+CLI
+
+Create a small CLI suitable for demonstrations.
+
+At minimum support:
+
+running one task through generation and gating; printing the candidate ID; printing the gate outcome; printing concise gate reasons; optionally printing evidence IDs; running a small benchmark campaign; printing campaign metrics.
+
+Keep the CLI thin. It should invoke application services rather than duplicate their logic.
+
+CONFIGURATION
+
+Create one clear local configuration path.
+
+Prefer environment variables for API endpoints and secrets and version-controlled files for task/gate/evaluation policy.
+
+Do not put assurance thresholds into arbitrary environment variables when they belong to GatePolicy or TaskSpecification.
+
+The repository should work without Azure packages installed unless Azure-specific optional adapters are intentionally retained.
+
+DEPENDENCIES
+
+Keep dependencies minimal.
+
+Use the existing Python version unless reconciliation requires otherwise.
+
+Prefer standard library functionality where practical.
+
+If an HTTP client or model SDK is needed, choose one maintained dependency and isolate it behind the model adapter.
+
+Do not add an agent framework unless the existing code genuinely requires it.
+
+Do not introduce LangChain, AutoGen, Semantic Kernel, or similar frameworks merely for convenience.
+
+REPOSITORY CLEANUP
+
+Remove modules whose only purpose is:
+
+production operational telemetry;
+post-release monitoring;
+business/process metrics;
+business KPI calculation;
+automatic production deployment;
+rollback;
+production feedback learning.
+
+If a module mixes relevant pre-gate logic with downstream logic, split it conservatively.
+
+Keep resource accounting for generation, gating, and evaluation.
+
+UPDATE DOCUMENTATION
+
+Create or update:
+
+README.md
+DESIGN-RATIONALE.md
+NOT-IMPLEMENTED.md
+
+README.md must state near the beginning:
+
+This repository ends at GateDecision.
+
+It evaluates AI code generation plus release gating. It does not deploy or observe the generated code in production.
+
+README.md must contain a concise laptop quick-start including:
+
+virtual environment creation;
+installation;
+LLM environment variables;
+running sample X1;
+running the evaluation campaign;
+running deterministic tests.
+
+Update NOT-IMPLEMENTED.md so production deployment, post-release telemetry, business KPIs, and production feedback are OUT OF SCOPE rather than unfinished requirements.
+
+Keep relevant unresolved items such as production-grade isolation, enterprise security, gate calibration, benchmark representativeness, and advanced statistical analysis.
+
+TESTING
+
+Retain or create deterministic tests for:
+
+canonical contracts;
+candidate hashing/identity;
+model connector error normalization;
+ChangeExecutionService using fake model; ReleaseGateService; gate veto semantics; HUMAN_REVIEW_REQUIRED semantics; EvidencePlanner; EvidenceDiversityMapper; mutation logic; hidden-oracle isolation; campaign metrics; Wilson intervals or existing uncertainty implementation; local end-to-end X1; architecture boundaries.
+
+Tests must run without a live LLM.
+
+Add a separate optional integration test for the live LLM connector, skipped unless the required API configuration is present.
+
+Do not weaken tests simply to make them pass.
+
+ARCHITECTURE CHECKS
+
+Update architecture checks so they verify:
+
+no hidden-oracle imports in online components; no duplicate canonical contracts; no direct model-provider API calls inside core services; no post-release/business-KPI dependency in the online pipeline; GateDecision is the terminal online domain result; tests do not require live API credentials by default.
+
+WORK PROCESS
+
+First inspect the existing repository and identify modules as KEEP, REMOVE, MODIFY, or REVIEW.
+
+Then create a new repository rather than destructively editing the original.
+
+Reuse substantive existing code whenever possible.
+
+Make only the changes required to produce the truncated, laptop-runnable architecture.
+
+After implementation:
+
+run Python compile/syntax checks;
+run deterministic tests;
+run architecture checks;
+run the local deterministic X1 test;
+if LLM API configuration is available, run one live X1 integration test; do not require the live integration test for the normal test suite.
+
+Finally report:
+
+the new repository tree;
+what was copied unchanged;
+what was modified;
+what was removed;
+how to configure the LLM API;
+the exact commands to run X1 locally;
+the exact command to run the evaluation campaign; test results; remaining NotImplemented items; any unresolved ambiguity.
+
+Do not add new major architecture unless required to make the existing design runnable locally.
+
+The final result should be a compact repository that a developer can clone onto a laptop, connect to an LLM through an API, generate a bounded code change, independently release-gate that candidate, and evaluate the same truncated generate-and-gate pipeline against hidden benchmark truth.
