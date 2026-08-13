@@ -230,6 +230,26 @@ Do not give the guardrail the work of the offline measurement.
 
 ---
 
+## N-8 — The tool must answer three questions, not two
+
+- **Is this project healthy?** A check of the whole repository.
+- **Is this change safe?** The gate, applied to one difference. Needs a base revision.
+- **Is the gate any good?** Without this, the threshold is a number that a person
+  selected. A team can see green on each change and learn nothing.
+- **Where the answers come from:** a team does not need to build an artificial
+  benchmark. Their history has the answers. Run the gate on the last 200 merged
+  changes, then look at which changes were reverted or corrected soon after. This
+  gives the false-release rate and the false-block rate on their own code.
+- **The limits:** a revert is good evidence, a correction is weak evidence, an
+  incident is rarely from one change only. Old changes may not build today. The
+  quantity of incidents is small, thus the uncertainty is large. History shows the
+  bad changes that went out, but it cannot show the good changes that the gate
+  stopped.
+- **Result:** the backtest gives a threshold that is better than arbitrary. It does
+  not give a calibrated threshold.
+
+---
+
 ## Closed notes
 
 None yet.
