@@ -2,14 +2,40 @@
 
 - Spec approval: **not obtained (autonomous run)** — confidence claim is
   correspondingly reduced; `spec.md` is the artifact to review after the fact.
-- Source state: git commit `a0f54a1`; sha256 tree hash `a6b9851f5af585de` —
-  reproduce both with `./tools/source_state.sh` (works from any directory).
-- Toolchain: pinned in `requirements-dev.txt` (local run: Python 3.14.3;
-  CI runs the same gauntlet on 3.12 via `.github/workflows/gauntlet.yml`).
+- Source state: sha256 tree hash `7a90096c75a00bfa`, taken at commit `a061f93` —
+  print both with `./tools/source_state.sh` (works from any directory). **The
+  tree hash is the value to check.** It covers this demo's source files only, so
+  it stays constant while the rest of the repository changes around it. The
+  commit advances with every repository change and only records where the run
+  happened.
+- Toolchain: pinned in `requirements-dev.txt` (local run: Python 3.14.3).
 - Entry point: `./tools/gauntlet.sh` reruns every layer below.
 
-All numbers are from one final fresh run of the entry point, executed
-2026-08-06 after the last code edit.
+All numbers are from one fresh run of the entry point on a clean virtual
+environment, executed 2026-08-13.
+
+> **Source-state reconciliation, 2026-08-13.** The previous version of this file
+> cited commit `a0f54a1` and tree hash `a6b9851f5af585de`. Neither is reachable
+> from this repository: the demo was developed in a separate repository and
+> arrived here squashed into `9f58041`. The old values could not be verified, so
+> they are replaced with values reproducible here. The same version cited
+> `.github/workflows/gauntlet.yml`; that file does not exist in this repository,
+> so the CI claim is withdrawn. The gauntlet has been run only on Python 3.14.3.
+>
+> Three faults blocked a clean run and are now fixed:
+>
+> 1. `requirements-dev.txt` listed only the dev tools, so a fresh clone failed
+>    every test with `ModuleNotFoundError: No module named 'ratelimiter'`. The
+>    package is now installed from that file with `-e .`.
+> 2. `ruff format --check` failed on `src/ratelimiter/__init__.py`: a
+>    continuation line used an 8-space indent where ruff 0.16.0 wants 4. The file
+>    is reformatted. Whitespace only; behaviour is unchanged.
+> 3. `tools/source_state.sh` hashed `src/*.egg-info`, which the editable install
+>    creates. The tree hash therefore changed after every install. Build output
+>    is now excluded from the hash.
+>
+> Consequence of fix 1: `pip-audit` now reports `ratelimiter` as skipped, because
+> the local package is not on PyPI. This is a skip, not a vulnerability.
 
 ## Spec → Test mapping
 
@@ -42,7 +68,7 @@ Status legend: pass / fail / unverified / n-a.
 | Mutation | `python tools/mutants.py` (manual, scripted; only pytest exit 1 counts as a kill — error exits are flagged, never counted) | 8/8 killed |
 | Property-based | hypothesis, 2 properties | 100 examples each, 0 falsified |
 | Real execution | `python examples/demo.py` (real `time.monotonic`) | burst of 5 → `[True, True, True, False, False]`; other key unaffected; allowed again after window |
-| Supply chain | `pip-audit -r requirements-dev.txt` | no known vulnerabilities; runtime dependencies: **none** (stdlib only), dev toolchain pinned & justified in spec setup plan |
+| Supply chain | `pip-audit -r requirements-dev.txt` | no known vulnerabilities; `ratelimiter` skipped (local package, not on PyPI); runtime dependencies: **none** (stdlib only), dev toolchain pinned & justified in spec setup plan |
 | Secret scan | must-not scan in `tools/gauntlet.sh` (api key / secret / password / token / private key over src, tests, tools, examples) | clean, no matches |
 | License check | — | n-a: zero runtime dependencies, nothing redistributed beyond this repo's own MIT code; dev tools are not shipped |
 | Suite health | pytest-randomly (order shuffled every run; seed printed in non-quiet runs) | 17 passed in randomized order |

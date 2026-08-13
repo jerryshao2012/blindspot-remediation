@@ -1,3 +1,7 @@
+# The package itself, in editable mode. The gauntlet imports `ratelimiter`,
+# so this must be installed or every test fails on ModuleNotFoundError.
+-e .
+
 pytest==9.1.1
 pytest-cov==7.1.0
 coverage==7.15.2

@@ -9,6 +9,10 @@ if git rev-parse --short HEAD >/dev/null 2>&1; then
 else
   printf "commit: (no git)\n"
 fi
+# egg-info is excluded: the documented setup installs the package in editable
+# mode, which writes src/<name>.egg-info. That is build output, not source, and
+# including it made the tree hash change after every install.
 tree_hash=$(find src tests tools examples pyproject.toml requirements-dev.txt spec.md \
-  -type f -not -path "*__pycache__*" | sort | xargs shasum -a 256 | shasum -a 256 | cut -c1-16)
+  -type f -not -path "*__pycache__*" -not -path "*.egg-info*" \
+  | sort | xargs shasum -a 256 | shasum -a 256 | cut -c1-16)
 printf "tree:   %s\n" "$tree_hash"

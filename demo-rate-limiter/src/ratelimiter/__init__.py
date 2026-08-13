@@ -16,7 +16,7 @@ class RateLimiter:
     """
 
     def __init__(
-            self, limit: int, window_seconds: float, clock: Callable[[], float]
+        self, limit: int, window_seconds: float, clock: Callable[[], float]
     ) -> None:
         if limit <= 0:
             raise ValueError(f"limit must be positive, got {limit}")
