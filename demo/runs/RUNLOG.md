@@ -11,6 +11,7 @@ it is what keeps runs comparable). `box` is the confusion-matrix cell.
 | control2-lazy | X1 | PASS | wrong | FALSE_RELEASE | 0 | unknown | (planted by hand) |
 | run-01 | X1 | NEEDS_HUMAN | oracle_error | escalated | 127 | 16.2 AIC | claude-haiku-4.5 (Auto) |
 | run-01b | X1 | PASS | correct | good_pass | 127 | 16.2 AIC | claude-haiku-4.5 (Auto) |
+| run-02 | X1 | PASS | correct | good_pass | 103 | 16.6 AIC | claude-haiku-4.5 (Auto) |
 
 ## Notes
 
@@ -34,6 +35,26 @@ What it taught, and what changed because of it:
   record "the AI's change passed" when the truth is "the AI's change passed
   after a human fixed its environment." Keeping both keeps the denominator
   honest.
+
+### run-02 (2026-08-16) — task card v2, no human step needed
+
+Same task, card v2 (`demo/tasks/X1_v2.md`), which names the venv interpreter
+and says to reinstall after touching setup.py. Copilot made the same four
+edits as run 1 and this time also reinstalled the package. Gate: PASS on all
+six checks (coverage 89% → 90%, the try/except branch removed); oracle 15/15;
+good_pass. 103 s, 16.6 AIC, Auto → claude-haiku-4.5.
+
+Method note: the card was pasted on its own, without the two-line wrapper
+RUN.md suggests around it. The card already contains "do not modify test.py"
+and the exact test command, so nothing the AI needed was missing; the only
+thing dropped was "then stop", and the diff shows it stopped anyway. Recorded
+here for honesty, not because it changes the result.
+
+What run 1 → run 2 shows, together: the *only* difference between an
+escalation and a clean pass was two paragraphs on the task card telling the
+AI which interpreter to use and to install what it declared. The AI's edits
+were identical. That is a finding about task specification, not about the
+model — and it is why the card is versioned.
 
 ### Is this "continuous monitoring and improvement"? Half of it is.
 

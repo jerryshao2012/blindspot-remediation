@@ -62,7 +62,22 @@ report one — never a guess. `box` is the confusion-matrix cell.
 | run_id | task | gate verdict | truth (oracle) | box | wall_s (copilot) | cost | model |
 |---|---|---|---|---|---|---|---|
 EOF
-echo "| $RUN_ID | X1 | $VERDICT | $TRUTH | $BOX | $WALL | $COST | $MODEL |" >> "$LOG"
+ROW="| $RUN_ID | X1 | $VERDICT | $TRUTH | $BOX | $WALL | $COST | $MODEL |"
+# Insert the row at the END OF THE TABLE, not the end of the file: the log
+# carries notes below the table, and a plain append would land the row under
+# the prose (this happened once). The table ends at the first blank line
+# after its header row.
+"$PY" - "$LOG" "$ROW" <<'PYEOF'
+import sys
+path, row = sys.argv[1], sys.argv[2]
+lines = open(path, encoding="utf-8").read().split("\n")
+hdr = next(i for i, l in enumerate(lines) if l.startswith("| run_id |"))
+end = hdr + 1
+while end < len(lines) and lines[end].startswith("|"):
+    end += 1
+lines.insert(end, row)
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+PYEOF
 
 echo
 echo "gate said:  $VERDICT"

@@ -97,18 +97,12 @@ keeps `demo/oracle/` out of its reach.
 ## Step 3 — Give it the task, and time it (5–15 minutes)
 
 Open the **current frozen copy** of the task card — `demo/tasks/X1_v2.md` (the
-live `X1.md` says which version is current). Paste from the frozen copy, not
-from `X1.md`, so the AI sees exactly the versioned text and nothing else. Note
-the time. Then paste this into Copilot:
-
-```
-Complete the following task in this repository. Do not modify test.py.
-
-<paste the full contents of demo/tasks/X1_v2.md here>
-
-When you believe you are done, run the test command named in the task and
-show me the result. Then stop. Do not run anything else.
-```
+live `X1.md` says which version is current). Note the time, then **paste the
+entire file, as-is, into Copilot.** Nothing else — no wrapper, no
+introduction, no hints. The card is written to stand alone: it already says
+what to change, what not to touch, which interpreter to use, and how to know
+it is done. Paste from the frozen copy, not from `X1.md`, so the AI sees
+exactly the versioned text.
 
 The task card is the *whole* instruction. Do not add hints, and do not mention
 the oracle, the trap, or what you expect it to get wrong. What the card says
