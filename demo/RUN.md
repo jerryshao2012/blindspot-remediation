@@ -1,8 +1,14 @@
-# Your first run — do this yourself
+# Doing a run — step by step
 
-This is a walkthrough for **run 1**, the one you drive by hand. Every step says
-what to type, what you should see, and *why*, so that by the end you understand
-each piece well enough to explain it to someone else. Budget 30–40 minutes.
+This is the walkthrough for a run, driven by hand. Every step says what to
+type, what you should see, and *why*, so that by the end you understand each
+piece well enough to explain it to someone else. Budget 30–40 minutes the first
+time, ~10 minutes once you know it.
+
+Every run gets its own id: `run-01`, `run-02`, … Below, `run-NN` stands for
+the id of the run you are doing. If a run needs a human intervention and a
+re-gate, the re-gate is a *new* id with a suffix — `run-NNb` — because it is a
+new event (see the notes in `runs/RUNLOG.md`).
 
 You will need: a terminal, this repository, and GitHub Copilot CLI (step 2
 installs it). Keep a notepad open: you will write down two numbers.
@@ -31,6 +37,8 @@ installs it). Keep a notepad open: you will write down two numbers.
 
 Copilot sees the task and the repository. **It never sees `demo/oracle/`.** That
 folder is the answer key, and it exists so that *you* can grade the gate.
+
+A sequence diagram of exactly this is in `DIAGRAMS.md`.
 
 ---
 
@@ -61,7 +69,7 @@ the reset closes it.
 
 ---
 
-## Step 2 — Install and start Copilot CLI (5 minutes, once)
+## Step 2 — Start Copilot CLI (install once; 5 minutes the first time)
 
 ```bash
 brew install copilot-cli
@@ -92,14 +100,18 @@ Have `demo/tasks/X1.md` open in another window. Note the time. Then paste this
 into Copilot:
 
 ```
-Read the task in the file I am about to describe and complete it in this
-repository. Do not modify test.py.
+Complete the following task in this repository. Do not modify test.py.
 
 <paste the full contents of demo/tasks/X1.md here>
 
-When you believe you are done, run: python -m pytest test.py -q
-and show me the result. Then stop. Do not run anything else.
+When you believe you are done, run the test command named in the task and
+show me the result. Then stop. Do not run anything else.
 ```
+
+The task card is the *whole* instruction. Do not add hints, and do not mention
+the oracle, the trap, or what you expect it to get wrong. What the card says
+is what the AI is being measured against, so the card is versioned: any change
+to it is recorded in `demo/tasks/X1-CHANGES.md` with the reason.
 
 Watch what it does. Two things to write down:
 
@@ -123,7 +135,7 @@ When it is done, quit Copilot (`/exit`) and `cd` back to the repository root.
 ## Step 4 — Run the gate (1 minute)
 
 ```bash
-bash demo/gate/gate.sh "$PWD/demo/workbench/python-slugify" "$PWD/demo/workbench/venv" run-01
+bash demo/gate/gate.sh "$PWD/demo/workbench/python-slugify" "$PWD/demo/workbench/venv" run-NN
 ```
 
 You will see one line per check, then a verdict. Something like:
@@ -150,7 +162,7 @@ problem), `NEEDS_HUMAN` (a check *could not run* — no evidence either way, so
 escalate). The last one is the whole point of "fail closed": a broken check is
 not a pass.
 
-The evidence is saved under `demo/runs/run-01/` — `evidence.json`, the
+The evidence is saved under `demo/runs/run-NN/` — `evidence.json`, the
 candidate patch, and a log per check.
 
 ---
@@ -158,10 +170,12 @@ candidate patch, and a log per check.
 ## Step 5 — Grade the run against the hidden oracle (30 seconds)
 
 ```bash
-bash demo/grade.sh run-01 <wall_seconds> <cost-or-unknown> <model-or-unknown>
+bash demo/grade.sh run-NN <wall_seconds> <cost-or-unknown> <model-or-unknown>
 ```
 
-For example `bash demo/grade.sh run-01 127 16.2-AIC claude-haiku-4.5`.
+For example `bash demo/grade.sh run-02 127 16.2-AIC claude-haiku-4.5`. Cost is
+whatever Copilot's footer shows ("AIC used") — take the difference between
+before and after the task. Model is what the footer shows next to "Auto →".
 
 This runs the tests in `demo/oracle/` — the ones Copilot never saw — and
 prints:
@@ -191,7 +205,7 @@ Open `demo/runs/RUNLOG.md`. One row. That row is the first real data point in
 this whole project — the first time the online lane and the offline lane of
 the HLD have touched.
 
-Then look at the *patch*, `demo/runs/run-01/candidate.patch`, and ask: did
+Then look at the *patch*, `demo/runs/run-NN/candidate.patch`, and ask: did
 Copilot do the whole task, or the lazy version? The most likely lazy version
 is: it edited `setup.py` but left the `try/except ImportError` fallback in
 `slugify/slugify.py`. That candidate **passes the gate and fails the oracle**
@@ -203,15 +217,17 @@ this whole project exists to measure.
 
 ---
 
-## Step 7 — Reset, so run 2 starts clean
+## Step 7 — Reset, so the next run starts clean
 
 ```bash
 bash demo/setup_workbench.sh reset
 ```
 
-Runs 2–5 are the same seven steps. After five rows you have an honest average
-for minutes and tokens per run — the cost estimate — and that number decides
-whether 30 or 100 runs are affordable.
+Every run is the same seven steps. After five rows you have an honest average
+for minutes and cost per run — the cost estimate — and that number decides
+whether 30 or 100 runs are affordable. Remember what five rows do *not* tell
+you: five clean runs are still consistent with a true failure rate of ~43%.
+Five sizes the bill; it does not prove the pipeline works.
 
 ---
 
@@ -224,9 +240,10 @@ whether 30 or 100 runs are affordable.
 - **Baseline check in step 1 is not 82 passed.** Stop. Do not run anything on
   a broken baseline. Delete `demo/workbench/` and run `bash
   demo/setup_workbench.sh` (without `reset`) to rebuild it from scratch.
-- **Copilot asks to run commands you did not expect** (installing things,
-  editing files outside the repo). Say no. It only needs to edit files and run
-  `python -m pytest test.py -q`.
+- **Copilot asks to run commands you did not expect** (editing files outside
+  the repo, network calls, anything destructive). Say no. Installing the
+  dependency it just declared (`pip install -e .` in the venv) is *expected*
+  and is part of the task — run 1 showed what happens when it skips that.
 - **You want to see the gate reject something before trusting it.** Append a
   line to `test.py` in the workbench and run step 4: `scope` fails. Or `pip
   uninstall mypy` in the venv and run step 4: `NEEDS_HUMAN`. Then reset.

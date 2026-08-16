@@ -127,7 +127,9 @@ demo/
 ├── oracle/
 │   └── test_x1_oracle.py THE ANSWER KEY — hidden from the AI and from the gate
 ├── grade.sh              run the oracle, sort the run into a box, append to the run log
-├── RUN-1.md              step-by-step: do run 1 yourself
+├── RUN.md                step-by-step: do a run yourself
+├── DIAGRAMS.md           the flow and the HLD mapping, in Mermaid
+├── CORPUS.md             which repos are on the bench and why
 ├── workbench/            (created by setup; not committed) the clone + venv the AI works in
 └── runs/                 (created per run) evidence.json, patch, per-check logs, RUNLOG.md
 ```
@@ -286,7 +288,7 @@ bash demo/setup_workbench.sh
 demo/workbench/venv/bin/pip install pytest-cov mypy ruff
 ```
 
-**One run, driven by hand — follow [demo/RUN-1.md](demo/RUN-1.md).** In short:
+**One run, driven by hand — follow [demo/RUN.md](demo/RUN.md).** In short:
 
 ```bash
 bash demo/setup_workbench.sh reset                       # 1. baseline green
@@ -335,10 +337,9 @@ Also: report *counts with denominators*, never one score. "1 false release in
 
 1. **Runs 1–5** on X1 (this document).
 2. **A second and third repository** on the bench, each with a green baseline
-   from a clean clone and its own X-task and oracle. `cachetools` (312 tests,
-   4.4 s, no dependencies) is measured and ready; the third is open — the
-   `superpowers` suggestion needs a check, since it is a Markdown skills
-   framework with no test suite for a gate to run.
+   from a clean clone and its own X-task and oracle. `itsdangerous` (297
+   tests, 0.6 s) and `cachetools` (312 tests, 4.4 s) are measured and admitted;
+   see `demo/CORPUS.md` for the full candidate table.
 3. **A stronger gate**, driven by what the runs reveal. Control 2 already
    says where: the visible suite cannot see backend divergence.
 4. **The Evidence Diversity Mapper as a corpus audit** — "your three repos are
