@@ -100,7 +100,7 @@ component.** Eight of twelve components are islands.
 |---|---|---|---|---|
 | B1 | `B1-consolidated-shared-contracts/` | Canonical contracts, v2 | Cleanest artifact received (16/16 tests). Cannot be co-installed with A1: pip silently merges the two package trees and breaks A2–A4. A one-line distribution rename fixes it | The contract base **if** any A/B code is reused |
 | B2 | `B2-not-implemented-register/` | Register of what is deliberately unbuilt | 5,287 lines. Honest about enterprise blockers (Azure, RBAC); silent about self-inflicted gaps (no AI, no planner). Its NI-id convention appears in 0 of 49 `NotImplementedError` sites | Reference; compress later |
-| B3 | `B3-design-rationale/` | Why the design is shaped this way | 8,057 lines. The principles are the best of the scaffolding; some are enforced in code, several are contradicted by it | **Mine for the presentation**; do not maintain as-is |
+| B3 | `B3-design-rationale/` | Why the design is shaped this way | 8,057 lines. The principles are the best of the scaffolding; some are enforced in code, several are contradicted by it | **Mine for the principles**; do not maintain as-is |
 | B4 | `B4-composition-root/` | Wires everything; first end-to-end "X1" run | Runs — but its "four evidence types" are one string comparison relabelled four times | Teaching example of what not to do; not needed |
 | B5 | `B5-evaluation-campaign/` | The measurement harness + hidden oracle | Statistics module is correct (Wilson, explicit denominators, refuses fake zeros). The oracle is substring matching, and the runner has never been connected to any gate | **Reuse `statistics.py`** and the campaign shape, with an executable oracle instead |
 | B6 | `B6-production-configuration/` | Final config + composition | Config loader mostly works; the composition root imports six modules that do not exist and has never executed | Not needed |
@@ -152,7 +152,7 @@ tell us what our benchmark cannot see. Park it until we have a corpus worth audi
 right), and A3's policy semantics as a reference when writing the gate skill.
 
 **Plus the audit itself:** INDEX.md and NOTES.md are the record of what was received
-and what state it was in. That record is presentation material — the scaffolding
+and what state it was in. That record is worth keeping — the scaffolding
 demonstrates, on itself, the contract drift and provenance failures the platform was
 designed to catch.
 
@@ -178,7 +178,7 @@ none of it directly, and inherits two modules and five ideas.
    secret scan — every check fail-closed (a check that cannot run is a failure, not a
    skip), emitting a small evidence file per run.
 2. **The X1 task spec.** Candidate: switch `python-slugify`'s transliteration backend
-   from `text-unidecode` to `Unidecode` (a supported extra — K's literal "change
+   from `text-unidecode` to `Unidecode` (a supported extra — the textbook "change
    package x to y"). Probing found real output divergences between the backends
    (currency symbols, fractions), so a naive swap looks clean while changing
    generated slugs — exactly what a gate must catch. The held-out oracle tests must

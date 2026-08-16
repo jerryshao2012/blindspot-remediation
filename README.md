@@ -2,8 +2,7 @@
 
 This README assumes you have never heard of any of this. It explains the
 problem, the idea, what is in this repository, and how the demo works, in
-that order. It is written to be read top to bottom in about fifteen minutes,
-and to be walked through out loud.
+that order. It is written to be read top to bottom in about fifteen minutes.
 
 ---
 
@@ -111,8 +110,8 @@ correctly).
 **Ironically, the scaffolding demonstrates on itself the very failure it was
 designed to catch:** two versions of the same prompt with no way to tell
 which was current, three copies of one component under two labels, the same
-concept ("gate outcome") defined nine incompatible ways. That is good
-presentation material.
+concept ("gate outcome") defined nine incompatible ways. Keep that in mind
+when someone asks why any of this is necessary.
 
 ### 3b. The demo — a minimum working version of the two lanes
 
@@ -162,7 +161,7 @@ indistinguishable, and every verdict is noise.
 Today the default is `text-unidecode`; a different library, `Unidecode`, is
 offered as an optional extra. Task X1: make `Unidecode` the required backend
 and drop `text-unidecode`. Two lines in `setup.py`, one import in the source.
-Mechanical. Layer 1. It is K's literal example.
+Mechanical. Layer 1. It is the textbook "change package x to y".
 
 **Why this task, specifically.** The two backends agree on almost every input
 — all 82 existing tests pass under both. So the swap *looks* clean and *tests*
@@ -262,7 +261,7 @@ were done (their evidence is in `demo/runs/control*/`):
 | 3 — a tool removed from the venv (`mypy`) | broken infrastructure | **NEEDS_HUMAN** | — | escalated |
 | 4 — `test.py` modified | tampering with evidence | **FAIL** (scope) | — | good_catch |
 
-Control 2 is the one to talk about tomorrow. The lazy candidate passes every
+Control 2 is the one to understand. The lazy candidate passes every
 visible check — the 82 tests are green under both backends, so the gate has
 no evidence against it — and the hidden oracle catches it. **That is a false
 release, measured.** It is exactly the box the whole design exists to count,
@@ -271,7 +270,7 @@ and the gate as built *cannot* catch it on its own; only a stronger check
 would. Which is the honest lesson: the visible test suite is weaker evidence
 than it looks, and knowing *how much* weaker is what the offline lane is for.
 
-Control 3 is the second one to talk about: with a tool missing, the gate said
+Control 3 is the other one to understand: with a tool missing, the gate said
 NEEDS_HUMAN, not PASS. That is fail-closed working. (Its first attempt on
 this machine actually failed closed on a *real* fault — the `timeout` command
 does not exist on macOS — before any control was planted. Good.)
@@ -309,7 +308,7 @@ bash demo/setup_workbench.sh reset
 ## 7. What the numbers will and will not tell you
 
 Run 1 proves the plumbing. Runs 2–5 give an average for minutes and tokens per
-run — the cost estimate K asked for.
+run — the cost estimate.
 
 Five runs are **not** evidence the pipeline works. If every one of five runs
 is clean, the true failure rate could still be as high as 43%. This is the

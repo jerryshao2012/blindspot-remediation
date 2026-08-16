@@ -1,8 +1,8 @@
 # Your first run — do this yourself
 
 This is a walkthrough for **run 1**, the one you drive by hand. Every step says
-what to type, what you should see, and *why* — because tomorrow you have to
-explain each of these to someone else. Budget 30–40 minutes.
+what to type, what you should see, and *why*, so that by the end you understand
+each piece well enough to explain it to someone else. Budget 30–40 minutes.
 
 You will need: a terminal, this repository, and GitHub Copilot CLI (step 2
 installs it). Keep a notepad open: you will write down two numbers.
@@ -113,8 +113,8 @@ Watch what it does. Two things to write down:
    report token counts, represent that explicitly rather than inventing
    values").
 
-Also note, in a sentence, *what it changed* — you will want this tomorrow.
-`git diff --stat` in the workbench shows you.
+Also note, in a sentence, *what it changed*. `git diff --stat` in the workbench
+shows you; you will want this when you read the run afterwards.
 
 When it is done, quit Copilot (`/exit`) and `cd` back to the repository root.
 
@@ -189,16 +189,17 @@ The four boxes:
 
 Open `demo/runs/RUNLOG.md`. One row. That row is the first real data point in
 this whole project — the first time the online lane and the offline lane of
-K's diagram have touched.
+the HLD have touched.
 
 Then look at the *patch*, `demo/runs/run-01/candidate.patch`, and ask: did
 Copilot do the whole task, or the lazy version? The most likely lazy version
 is: it edited `setup.py` but left the `try/except ImportError` fallback in
 `slugify/slugify.py`. That candidate **passes the gate and fails the oracle**
-— a FALSE_RELEASE, and it is exactly what happened when I planted that
-candidate as a control before you ran anything (see the README, "The gate can
-be fooled"). If your row says `FALSE_RELEASE`, you have not done anything
-wrong. You have measured the thing this whole project exists to measure.
+— a FALSE_RELEASE, and it is exactly what happened when that candidate was
+planted as a control before any real run (see the README, section 5, "The
+gate has already been shown to fail — on purpose"). If your row says
+`FALSE_RELEASE`, you have not done anything wrong. You have measured the thing
+this whole project exists to measure.
 
 ---
 
@@ -209,7 +210,7 @@ bash demo/setup_workbench.sh reset
 ```
 
 Runs 2–5 are the same seven steps. After five rows you have an honest average
-for minutes and tokens per run — K's cost estimate — and that number decides
+for minutes and tokens per run — the cost estimate — and that number decides
 whether 30 or 100 runs are affordable.
 
 ---
