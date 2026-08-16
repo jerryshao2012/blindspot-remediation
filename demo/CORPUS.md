@@ -93,12 +93,6 @@ Pinned commits are what the setup script must check out.
 
 ## What is deliberately not in the corpus yet
 
-- **`superpowers`** (suggested by Jerry): a markdown skills framework with no
-  pytest suite. Nothing for the gate to run. It fits as the *mechanism* for
-  packaging the gate as a Copilot-CLI skill, which `demo/gate/SKILL.md`
-  follows. If it was meant as a benchmark repo, that is a different and later
-  problem — gating changes to prompts, where the "test suite" is itself a
-  noisy eval. To be confirmed with Jerry.
 - **Anything service-shaped or I/O-heavy.** All three admitted repos are pure
   libraries. That is a known gap, and it is exactly what the diversity mapper
   (E1/E2) is for: run it over the corpus and let it say what kinds of code the

@@ -173,7 +173,7 @@ none of it directly, and inherits two modules and five ideas.
 
 ## 10. What we still need to build
 
-1. **The gate as a skill** (triggerable by Copilot CLI; superpowers-style packaging).
+1. **The gate as a skill** (triggerable by Copilot CLI).
    Layers: run the repo's test suite, coverage with a hard floor, type check, lint,
    secret scan — every check fail-closed (a check that cannot run is a failure, not a
    skip), emitting a small evidence file per run.
@@ -187,10 +187,7 @@ none of it directly, and inherits two modules and five ideas.
    Measured and admitted (see `demo/CORPUS.md` for the full table of 25
    candidates): `python-slugify` (X1), `itsdangerous` (X2 — a SHA-1→SHA-256
    default swap that silently rejects every existing token; verified live), and
-   `cachetools` (X3 candidate). Jerry's `superpowers` suggestion is a markdown
-   skills framework with no pytest suite, so it fits as the skill-packaging
-   mechanism rather than a benchmark repo — to confirm with him. Admission
-   rule: **if the baseline is not green, the repo is out** — otherwise "the AI
+   `cachetools` (X3). Admission rule: **if the baseline is not green, the repo is out** — otherwise "the AI
    broke it" cannot be told apart from "it was already broken."
 4. **The run log.** For every run: task id, repo, wall time, tokens (if the tool does
    not report token counts, record that explicitly rather than inventing values —
