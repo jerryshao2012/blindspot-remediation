@@ -168,10 +168,12 @@ candidate patch, and a log per check.
 ## Step 5 — Grade the run against the hidden oracle (30 seconds)
 
 ```bash
-bash demo/grade.sh run-NN <wall_seconds> <cost-or-unknown> <model-or-unknown>
+bash demo/grade.sh run-NN <wall_seconds> <cost-or-unknown> <model-or-unknown> <card> <human-step>
 ```
 
-For example `bash demo/grade.sh run-02 127 16.2-AIC claude-haiku-4.5`. Cost is
+For example `bash demo/grade.sh run-02 103 16.6-AIC claude-haiku-4.5 v2 none`.
+If this is a re-gate after you fixed something, use the suffixed id and say
+what you did: `bash demo/grade.sh run-01b same same same v1 "re-gate after pip install"`. Cost is
 whatever Copilot's footer shows ("AIC used") — take the difference between
 before and after the task. Model is what the footer shows next to "Auto →".
 

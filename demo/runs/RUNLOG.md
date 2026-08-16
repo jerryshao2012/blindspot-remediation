@@ -1,17 +1,26 @@
 # Run log
 
-One row per run. `cost` is what the tool reported, in the tool's own unit
+One row per **gate run**. A single AI session can produce more than one row:
+if the gate escalates (NEEDS_HUMAN), a human acts, and the gate is re-run,
+that re-gate is its own row with a suffix (`run-01b`) and the `human step`
+column says what the human did. Wall time and cost belong to the AI *session*,
+so a re-gate row repeats them as "(same)" rather than counting them twice.
+
+Columns: `card` is the task-card version the AI saw (`demo/tasks/X1_vN.md`);
+rows with different cards measure slightly different things and should not be
+averaged together. `human step` is `none` when the gate's first verdict stood
+on the AI's work alone. `cost` is what the tool reported, in its own unit
 (Copilot CLI shows "AIC used" in its footer, not tokens); `unknown` means it
 did not report one — never a guess. `model` is what the executor actually used
 (Copilot Free only offers Auto, so the model can differ between runs; recording
 it is what keeps runs comparable). `box` is the confusion-matrix cell.
 
-| run_id | task | gate verdict | truth (oracle) | box | wall_s (copilot) | cost | model |
-|---|---|---|---|---|---|---|---|
-| control2-lazy | X1 | PASS | wrong | FALSE_RELEASE | 0 | unknown | (planted by hand) |
-| run-01 | X1 | NEEDS_HUMAN | oracle_error | escalated | 127 | 16.2 AIC | claude-haiku-4.5 (Auto) |
-| run-01b | X1 | PASS | correct | good_pass | 127 | 16.2 AIC | claude-haiku-4.5 (Auto) |
-| run-02 | X1 | PASS | correct | good_pass | 103 | 16.6 AIC | claude-haiku-4.5 (Auto) |
+| run_id | task | card | gate verdict | truth (oracle) | box | human step | wall_s (copilot) | cost | model |
+|---|---|---|---|---|---|---|---|---|---|
+| control2-lazy | X1 | v1 | PASS | wrong | FALSE_RELEASE | (planted candidate, no AI) | 0 | unknown | — |
+| run-01 | X1 | v1 | NEEDS_HUMAN | oracle_error | escalated | none — as delivered | 127 | 16.2 AIC | claude-haiku-4.5 (Auto) |
+| run-01b | X1 | v1 | PASS | correct | good_pass | re-gate of run-01 after human `pip install Unidecode` | (same session as run-01) | (same) | (same) |
+| run-02 | X1 | v2 | PASS | correct | good_pass | none | 103 | 16.6 AIC | claude-haiku-4.5 (Auto) |
 
 ## Notes
 
