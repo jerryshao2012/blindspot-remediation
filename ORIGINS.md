@@ -184,12 +184,14 @@ none of it directly, and inherits two modules and five ideas.
    generated slugs — exactly what a gate must catch. The held-out oracle tests must
    be confirmed through `slugify()` itself before the first run.
 3. **The corpus: three small repos with green baselines from a clean clone.**
-   Measured so far: `cachetools` (312 tests, 4.4 s, zero deps, green) and
-   `python-slugify` (82 tests, 0.09 s, one dep, green). Third: to be decided —
-   Jerry's `superpowers` suggestion needs a check, since it is a markdown skills
-   framework with no pytest suite for a gate to run. Admission rule: **if the
-   baseline is not green, the repo is out** — otherwise "the AI broke it" cannot be
-   told apart from "it was already broken."
+   Measured and admitted (see `demo/CORPUS.md` for the full table of 25
+   candidates): `python-slugify` (X1), `itsdangerous` (X2 — a SHA-1→SHA-256
+   default swap that silently rejects every existing token; verified live), and
+   `cachetools` (X3 candidate). Jerry's `superpowers` suggestion is a markdown
+   skills framework with no pytest suite, so it fits as the skill-packaging
+   mechanism rather than a benchmark repo — to confirm with him. Admission
+   rule: **if the baseline is not green, the repo is out** — otherwise "the AI
+   broke it" cannot be told apart from "it was already broken."
 4. **The run log.** For every run: task id, repo, wall time, tokens (if the tool does
    not report token counts, record that explicitly rather than inventing values —
    `prompt_truncate`'s own rule), gate verdict, and correct/incorrect against the
