@@ -1,0 +1,946 @@
+I001 [*] Import block is un-sorted or un-formatted
+ --> demo/workbench/python-slugify/setup.py:3:1
+  |
+1 |   #!/usr/bin/env python
+2 |   # Learn more: https://github.com/un33k/setup.py
+3 | / import os
+4 | | import sys
+5 | |
+6 | | from shutil import rmtree
+7 | | from setuptools import setup
+  | |____________________________^
+help: Organize imports
+  |
+4 | import sys
+  -
+5 | from shutil import rmtree
+  - from setuptools import setup
+6 |
+7 + from setuptools import setup
+8 |
+  |
+
+S102 Use of `exec` detected
+  --> demo/workbench/python-slugify/setup.py:19:5
+   |
+17 | about = {}
+18 | with open(os.path.join(here, package, '__version__.py'), 'r', encoding='utf-8') as f:
+19 |     exec(f.read(), about)
+   |     ^^^^
+20 |
+21 | with open('README.md', 'r', encoding='utf-8') as f:
+   |
+
+UP030 Use implicit references for positional format fields
+  --> demo/workbench/python-slugify/setup.py:26:11
+   |
+25 | def status(s):
+26 |     print('\033[1m{0}\033[0m'.format(s))
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: Remove explicit positional indices
+
+UP032 [*] Use f-string instead of `format` call
+  --> demo/workbench/python-slugify/setup.py:26:11
+   |
+25 | def status(s):
+26 |     print('\033[1m{0}\033[0m'.format(s))
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: Convert to f-string
+   |
+25 | def status(s):
+   -     print('\033[1m{0}\033[0m'.format(s))
+26 +     print(f'\033[1m{s}\033[0m')
+27 |
+   |
+
+UP030 Use implicit references for positional format fields
+  --> demo/workbench/python-slugify/setup.py:38:15
+   |
+37 |     status('Building Source and Wheel (universal) distribution…')
+38 |     os.system('{0} setup.py sdist bdist_wheel --universal'.format(sys.executable))
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+39 |
+40 |     status('Uploading the package to PyPI via Twine…')
+   |
+help: Remove explicit positional indices
+
+UP032 [*] Use f-string instead of `format` call
+  --> demo/workbench/python-slugify/setup.py:38:15
+   |
+37 |     status('Building Source and Wheel (universal) distribution…')
+38 |     os.system('{0} setup.py sdist bdist_wheel --universal'.format(sys.executable))
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+39 |
+40 |     status('Uploading the package to PyPI via Twine…')
+   |
+help: Convert to f-string
+   |
+37 |     status('Building Source and Wheel (universal) distribution…')
+   -     os.system('{0} setup.py sdist bdist_wheel --universal'.format(sys.executable))
+38 +     os.system(f'{sys.executable} setup.py sdist bdist_wheel --universal')
+39 |
+   |
+
+UP030 Use implicit references for positional format fields
+  --> demo/workbench/python-slugify/setup.py:44:15
+   |
+43 |     status('Pushing git tags…')
+44 |     os.system('git tag v{0}'.format(about['__version__']))
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+45 |     os.system('git push --tags')
+46 |     sys.exit()
+   |
+help: Remove explicit positional indices
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> demo/workbench/python-slugify/slugify/__init__.py:1:1
+   |
+ 1 | / from .special import *
+ 2 | | from .slugify import *
+ 3 | | from .__version__ import __title__
+ 4 | | from .__version__ import __author__
+ 5 | | from .__version__ import __author_email__
+ 6 | | from .__version__ import __description__
+ 7 | | from .__version__ import __url__
+ 8 | | from .__version__ import __license__
+ 9 | | from .__version__ import __copyright__
+10 | | from .__version__ import __version__
+   | |____________________________________^
+help: Organize imports
+   |
+   - from .special import *
+1  + from .__version__ import (
+2  +     __author__,
+3  +     __author_email__,
+4  +     __copyright__,
+5  +     __description__,
+6  +     __license__,
+7  +     __title__,
+8  +     __url__,
+9  +     __version__,
+10 + )
+11 | from .slugify import *
+   - from .__version__ import __title__
+   - from .__version__ import __author__
+   - from .__version__ import __author_email__
+   - from .__version__ import __description__
+   - from .__version__ import __url__
+   - from .__version__ import __license__
+   - from .__version__ import __copyright__
+   - from .__version__ import __version__
+12 + from .special import *
+   |
+
+F401 `.__version__.__title__` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> demo/workbench/python-slugify/slugify/__init__.py:3:26
+  |
+1 | from .special import *
+2 | from .slugify import *
+3 | from .__version__ import __title__
+  |                          ^^^^^^^^^
+4 | from .__version__ import __author__
+5 | from .__version__ import __author_email__
+  |
+help: Use an explicit re-export: `__title__ as __title__`
+
+F401 `.__version__.__author__` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> demo/workbench/python-slugify/slugify/__init__.py:4:26
+  |
+2 | from .slugify import *
+3 | from .__version__ import __title__
+4 | from .__version__ import __author__
+  |                          ^^^^^^^^^^
+5 | from .__version__ import __author_email__
+6 | from .__version__ import __description__
+  |
+help: Use an explicit re-export: `__author__ as __author__`
+
+F401 `.__version__.__author_email__` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> demo/workbench/python-slugify/slugify/__init__.py:5:26
+  |
+3 | from .__version__ import __title__
+4 | from .__version__ import __author__
+5 | from .__version__ import __author_email__
+  |                          ^^^^^^^^^^^^^^^^
+6 | from .__version__ import __description__
+7 | from .__version__ import __url__
+  |
+help: Use an explicit re-export: `__author_email__ as __author_email__`
+
+F401 `.__version__.__description__` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> demo/workbench/python-slugify/slugify/__init__.py:6:26
+  |
+4 | from .__version__ import __author__
+5 | from .__version__ import __author_email__
+6 | from .__version__ import __description__
+  |                          ^^^^^^^^^^^^^^^
+7 | from .__version__ import __url__
+8 | from .__version__ import __license__
+  |
+help: Use an explicit re-export: `__description__ as __description__`
+
+F401 `.__version__.__url__` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> demo/workbench/python-slugify/slugify/__init__.py:7:26
+  |
+5 | from .__version__ import __author_email__
+6 | from .__version__ import __description__
+7 | from .__version__ import __url__
+  |                          ^^^^^^^
+8 | from .__version__ import __license__
+9 | from .__version__ import __copyright__
+  |
+help: Use an explicit re-export: `__url__ as __url__`
+
+F401 `.__version__.__license__` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> demo/workbench/python-slugify/slugify/__init__.py:8:26
+   |
+ 6 | from .__version__ import __description__
+ 7 | from .__version__ import __url__
+ 8 | from .__version__ import __license__
+   |                          ^^^^^^^^^^^
+ 9 | from .__version__ import __copyright__
+10 | from .__version__ import __version__
+   |
+help: Use an explicit re-export: `__license__ as __license__`
+
+F401 `.__version__.__copyright__` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> demo/workbench/python-slugify/slugify/__init__.py:9:26
+   |
+ 7 | from .__version__ import __url__
+ 8 | from .__version__ import __license__
+ 9 | from .__version__ import __copyright__
+   |                          ^^^^^^^^^^^^^
+10 | from .__version__ import __version__
+   |
+help: Use an explicit re-export: `__copyright__ as __copyright__`
+
+F401 `.__version__.__version__` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> demo/workbench/python-slugify/slugify/__init__.py:10:26
+   |
+ 8 | from .__version__ import __license__
+ 9 | from .__version__ import __copyright__
+10 | from .__version__ import __version__
+   |                          ^^^^^^^^^^^
+help: Use an explicit re-export: `__version__ as __version__`
+
+I001 [*] Import block is un-sorted or un-formatted
+ --> demo/workbench/python-slugify/slugify/__main__.py:1:1
+  |
+1 | / from __future__ import annotations
+2 | |
+3 | | import argparse
+4 | | import sys
+5 | | from typing import Any
+6 | |
+7 | | from .slugify import slugify, DEFAULT_SEPARATOR
+  | |_______________________________________________^
+help: Organize imports
+  |
+6 |
+  - from .slugify import slugify, DEFAULT_SEPARATOR
+7 + from .slugify import DEFAULT_SEPARATOR, slugify
+8 |
+  |
+
+UP032 [*] Use f-string instead of `format` call
+  --> demo/workbench/python-slugify/slugify/__main__.py:53:30
+   |
+51 |             SEP = '->'
+52 |             if SEP not in repl:
+53 |                 parser.error("Replacements must be of the form: ORIGINAL{SEP}REPLACED".format(SEP=SEP))
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+54 |             return repl.split(SEP, 1)
+55 |         args.replacements = [split_check(repl) for repl in args.replacements]
+   |
+help: Convert to f-string
+   |
+52 |             if SEP not in repl:
+   -                 parser.error("Replacements must be of the form: ORIGINAL{SEP}REPLACED".format(SEP=SEP))
+53 +                 parser.error(f"Replacements must be of the form: ORIGINAL{SEP}REPLACED")
+54 |             return repl.split(SEP, 1)
+   |
+
+C408 Unnecessary `dict()` call (rewrite as a literal)
+  --> demo/workbench/python-slugify/slugify/__main__.py:69:12
+   |
+68 |   def slugify_params(args: argparse.Namespace) -> dict[str, Any]:
+69 |       return dict(
+   |  ____________^
+70 | |         text=args.input_string,
+71 | |         entities=args.entities,
+72 | |         decimal=args.decimal,
+73 | |         hexadecimal=args.hexadecimal,
+74 | |         max_length=args.max_length,
+75 | |         word_boundary=args.word_boundary,
+76 | |         save_order=args.save_order,
+77 | |         separator=args.separator,
+78 | |         stopwords=args.stopwords,
+79 | |         lowercase=args.lowercase,
+80 | |         replacements=args.replacements,
+81 | |         allow_unicode=args.allow_unicode
+82 | |     )
+   | |_____^
+help: Rewrite as a literal
+
+UP031 Use format specifiers instead of percent format
+  --> demo/workbench/python-slugify/slugify/slugify.py:16:34
+   |
+16 | CHAR_ENTITY_PATTERN = re.compile(r'&(%s);' % '|'.join(name2codepoint))
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+17 | DECIMAL_PATTERN = re.compile(r'&#(\d+);')
+18 | HEX_PATTERN = re.compile(r'&#x([\da-fA-F]+);')
+   |
+help: Replace with format specifiers
+
+UP032 [*] Use f-string instead of `format` call
+  --> demo/workbench/python-slugify/slugify/slugify.py:63:30
+   |
+61 |             next_len = len(truncated) + len(word)
+62 |             if next_len < max_length:
+63 |                 truncated += '{}{}'.format(word, separator)
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+64 |             elif next_len == max_length:
+65 |                 truncated += '{}'.format(word)
+   |
+help: Convert to f-string
+   |
+62 |             if next_len < max_length:
+   -                 truncated += '{}{}'.format(word, separator)
+63 +                 truncated += f'{word}{separator}'
+64 |             elif next_len == max_length:
+   |
+
+UP032 [*] Use f-string instead of `format` call
+  --> demo/workbench/python-slugify/slugify/slugify.py:65:30
+   |
+63 |                 truncated += '{}{}'.format(word, separator)
+64 |             elif next_len == max_length:
+65 |                 truncated += '{}'.format(word)
+   |                              ^^^^^^^^^^^^^^^^^
+66 |                 break
+67 |             else:
+   |
+help: Convert to f-string
+   |
+64 |             elif next_len == max_length:
+   -                 truncated += '{}'.format(word)
+65 +                 truncated += f'{word}'
+66 |                 break
+   |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> demo/workbench/python-slugify/slugify/slugify.py:139:9
+    |
+137 |           try:
+138 |               text = DECIMAL_PATTERN.sub(lambda m: chr(int(m.group(1))), text)
+139 | /         except Exception:
+140 | |             pass
+    | |________________^
+141 |
+142 |       # hexadecimal character reference
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> demo/workbench/python-slugify/slugify/slugify.py:139:16
+    |
+137 |         try:
+138 |             text = DECIMAL_PATTERN.sub(lambda m: chr(int(m.group(1))), text)
+139 |         except Exception:
+    |                ^^^^^^^^^
+140 |             pass
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> demo/workbench/python-slugify/slugify/slugify.py:146:9
+    |
+144 |           try:
+145 |               text = HEX_PATTERN.sub(lambda m: chr(int(m.group(1), 16)), text)
+146 | /         except Exception:
+147 | |             pass
+    | |________________^
+148 |
+149 |       # re normalize text
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> demo/workbench/python-slugify/slugify/slugify.py:146:16
+    |
+144 |         try:
+145 |             text = HEX_PATTERN.sub(lambda m: chr(int(m.group(1), 16)), text)
+146 |         except Exception:
+    |                ^^^^^^^^^
+147 |             pass
+    |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:19:6
+   |
+18 | _CYRILLIC = [      # package defaults:
+19 |     (u'ё', u'e'),    # io / yo
+   |      ^^^^
+20 |     (u'я', u'ya'),   # ia
+21 |     (u'х', u'h'),    # kh
+   |
+help: Remove unicode prefix
+   |
+18 | _CYRILLIC = [      # package defaults:
+   -     (u'ё', u'e'),    # io / yo
+19 +     ('ё', u'e'),    # io / yo
+20 |     (u'я', u'ya'),   # ia
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:19:12
+   |
+18 | _CYRILLIC = [      # package defaults:
+19 |     (u'ё', u'e'),    # io / yo
+   |            ^^^^
+20 |     (u'я', u'ya'),   # ia
+21 |     (u'х', u'h'),    # kh
+   |
+help: Remove unicode prefix
+   |
+18 | _CYRILLIC = [      # package defaults:
+   -     (u'ё', u'e'),    # io / yo
+19 +     (u'ё', 'e'),    # io / yo
+20 |     (u'я', u'ya'),   # ia
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:20:6
+   |
+18 | _CYRILLIC = [      # package defaults:
+19 |     (u'ё', u'e'),    # io / yo
+20 |     (u'я', u'ya'),   # ia
+   |      ^^^^
+21 |     (u'х', u'h'),    # kh
+22 |     (u'у', u'y'),    # u
+   |
+help: Remove unicode prefix
+   |
+19 |     (u'ё', u'e'),    # io / yo
+   -     (u'я', u'ya'),   # ia
+20 +     ('я', u'ya'),   # ia
+21 |     (u'х', u'h'),    # kh
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:20:12
+   |
+18 | _CYRILLIC = [      # package defaults:
+19 |     (u'ё', u'e'),    # io / yo
+20 |     (u'я', u'ya'),   # ia
+   |            ^^^^^
+21 |     (u'х', u'h'),    # kh
+22 |     (u'у', u'y'),    # u
+   |
+help: Remove unicode prefix
+   |
+19 |     (u'ё', u'e'),    # io / yo
+   -     (u'я', u'ya'),   # ia
+20 +     (u'я', 'ya'),   # ia
+21 |     (u'х', u'h'),    # kh
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:21:6
+   |
+19 |     (u'ё', u'e'),    # io / yo
+20 |     (u'я', u'ya'),   # ia
+21 |     (u'х', u'h'),    # kh
+   |      ^^^^
+22 |     (u'у', u'y'),    # u
+23 |     (u'щ', u'sch'),  # sch
+   |
+help: Remove unicode prefix
+   |
+20 |     (u'я', u'ya'),   # ia
+   -     (u'х', u'h'),    # kh
+21 +     ('х', u'h'),    # kh
+22 |     (u'у', u'y'),    # u
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:21:12
+   |
+19 |     (u'ё', u'e'),    # io / yo
+20 |     (u'я', u'ya'),   # ia
+21 |     (u'х', u'h'),    # kh
+   |            ^^^^
+22 |     (u'у', u'y'),    # u
+23 |     (u'щ', u'sch'),  # sch
+   |
+help: Remove unicode prefix
+   |
+20 |     (u'я', u'ya'),   # ia
+   -     (u'х', u'h'),    # kh
+21 +     (u'х', 'h'),    # kh
+22 |     (u'у', u'y'),    # u
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:22:6
+   |
+20 |     (u'я', u'ya'),   # ia
+21 |     (u'х', u'h'),    # kh
+22 |     (u'у', u'y'),    # u
+   |      ^^^^
+23 |     (u'щ', u'sch'),  # sch
+24 |     (u'ю', u'u'),    # iu / yu
+   |
+help: Remove unicode prefix
+   |
+21 |     (u'х', u'h'),    # kh
+   -     (u'у', u'y'),    # u
+22 +     ('у', u'y'),    # u
+23 |     (u'щ', u'sch'),  # sch
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:22:12
+   |
+20 |     (u'я', u'ya'),   # ia
+21 |     (u'х', u'h'),    # kh
+22 |     (u'у', u'y'),    # u
+   |            ^^^^
+23 |     (u'щ', u'sch'),  # sch
+24 |     (u'ю', u'u'),    # iu / yu
+   |
+help: Remove unicode prefix
+   |
+21 |     (u'х', u'h'),    # kh
+   -     (u'у', u'y'),    # u
+22 +     (u'у', 'y'),    # u
+23 |     (u'щ', u'sch'),  # sch
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:23:6
+   |
+21 |     (u'х', u'h'),    # kh
+22 |     (u'у', u'y'),    # u
+23 |     (u'щ', u'sch'),  # sch
+   |      ^^^^
+24 |     (u'ю', u'u'),    # iu / yu
+25 | ]
+   |
+help: Remove unicode prefix
+   |
+22 |     (u'у', u'y'),    # u
+   -     (u'щ', u'sch'),  # sch
+23 +     ('щ', u'sch'),  # sch
+24 |     (u'ю', u'u'),    # iu / yu
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:23:12
+   |
+21 |     (u'х', u'h'),    # kh
+22 |     (u'у', u'y'),    # u
+23 |     (u'щ', u'sch'),  # sch
+   |            ^^^^^^
+24 |     (u'ю', u'u'),    # iu / yu
+25 | ]
+   |
+help: Remove unicode prefix
+   |
+22 |     (u'у', u'y'),    # u
+   -     (u'щ', u'sch'),  # sch
+23 +     (u'щ', 'sch'),  # sch
+24 |     (u'ю', u'u'),    # iu / yu
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:24:6
+   |
+22 |     (u'у', u'y'),    # u
+23 |     (u'щ', u'sch'),  # sch
+24 |     (u'ю', u'u'),    # iu / yu
+   |      ^^^^
+25 | ]
+26 | CYRILLIC = add_uppercase_char(_CYRILLIC)
+   |
+help: Remove unicode prefix
+   |
+23 |     (u'щ', u'sch'),  # sch
+   -     (u'ю', u'u'),    # iu / yu
+24 +     ('ю', u'u'),    # iu / yu
+25 | ]
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:24:12
+   |
+22 |     (u'у', u'y'),    # u
+23 |     (u'щ', u'sch'),  # sch
+24 |     (u'ю', u'u'),    # iu / yu
+   |            ^^^^
+25 | ]
+26 | CYRILLIC = add_uppercase_char(_CYRILLIC)
+   |
+help: Remove unicode prefix
+   |
+23 |     (u'щ', u'sch'),  # sch
+   -     (u'ю', u'u'),    # iu / yu
+24 +     (u'ю', 'u'),    # iu / yu
+25 | ]
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:29:6
+   |
+28 | _GERMAN = [        # package defaults:
+29 |     (u'ä', u'ae'),   # a
+   |      ^^^^
+30 |     (u'ö', u'oe'),   # o
+31 |     (u'ü', u'ue'),   # u
+   |
+help: Remove unicode prefix
+   |
+28 | _GERMAN = [        # package defaults:
+   -     (u'ä', u'ae'),   # a
+29 +     ('ä', u'ae'),   # a
+30 |     (u'ö', u'oe'),   # o
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:29:12
+   |
+28 | _GERMAN = [        # package defaults:
+29 |     (u'ä', u'ae'),   # a
+   |            ^^^^^
+30 |     (u'ö', u'oe'),   # o
+31 |     (u'ü', u'ue'),   # u
+   |
+help: Remove unicode prefix
+   |
+28 | _GERMAN = [        # package defaults:
+   -     (u'ä', u'ae'),   # a
+29 +     (u'ä', 'ae'),   # a
+30 |     (u'ö', u'oe'),   # o
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:30:6
+   |
+28 | _GERMAN = [        # package defaults:
+29 |     (u'ä', u'ae'),   # a
+30 |     (u'ö', u'oe'),   # o
+   |      ^^^^
+31 |     (u'ü', u'ue'),   # u
+32 | ]
+   |
+help: Remove unicode prefix
+   |
+29 |     (u'ä', u'ae'),   # a
+   -     (u'ö', u'oe'),   # o
+30 +     ('ö', u'oe'),   # o
+31 |     (u'ü', u'ue'),   # u
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:30:12
+   |
+28 | _GERMAN = [        # package defaults:
+29 |     (u'ä', u'ae'),   # a
+30 |     (u'ö', u'oe'),   # o
+   |            ^^^^^
+31 |     (u'ü', u'ue'),   # u
+32 | ]
+   |
+help: Remove unicode prefix
+   |
+29 |     (u'ä', u'ae'),   # a
+   -     (u'ö', u'oe'),   # o
+30 +     (u'ö', 'oe'),   # o
+31 |     (u'ü', u'ue'),   # u
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:31:6
+   |
+29 |     (u'ä', u'ae'),   # a
+30 |     (u'ö', u'oe'),   # o
+31 |     (u'ü', u'ue'),   # u
+   |      ^^^^
+32 | ]
+33 | GERMAN = add_uppercase_char(_GERMAN)
+   |
+help: Remove unicode prefix
+   |
+30 |     (u'ö', u'oe'),   # o
+   -     (u'ü', u'ue'),   # u
+31 +     ('ü', u'ue'),   # u
+32 | ]
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:31:12
+   |
+29 |     (u'ä', u'ae'),   # a
+30 |     (u'ö', u'oe'),   # o
+31 |     (u'ü', u'ue'),   # u
+   |            ^^^^^
+32 | ]
+33 | GERMAN = add_uppercase_char(_GERMAN)
+   |
+help: Remove unicode prefix
+   |
+30 |     (u'ö', u'oe'),   # o
+   -     (u'ü', u'ue'),   # u
+31 +     (u'ü', 'ue'),   # u
+32 | ]
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:36:6
+   |
+35 | _GREEK = [         # package defaults:
+36 |     (u'χ', u'ch'),   # kh
+   |      ^^^^
+37 |     (u'Ξ', u'X'),    # Ks
+38 |     (u'ϒ', u'Y'),    # U
+   |
+help: Remove unicode prefix
+   |
+35 | _GREEK = [         # package defaults:
+   -     (u'χ', u'ch'),   # kh
+36 +     ('χ', u'ch'),   # kh
+37 |     (u'Ξ', u'X'),    # Ks
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:36:12
+   |
+35 | _GREEK = [         # package defaults:
+36 |     (u'χ', u'ch'),   # kh
+   |            ^^^^^
+37 |     (u'Ξ', u'X'),    # Ks
+38 |     (u'ϒ', u'Y'),    # U
+   |
+help: Remove unicode prefix
+   |
+35 | _GREEK = [         # package defaults:
+   -     (u'χ', u'ch'),   # kh
+36 +     (u'χ', 'ch'),   # kh
+37 |     (u'Ξ', u'X'),    # Ks
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:37:6
+   |
+35 | _GREEK = [         # package defaults:
+36 |     (u'χ', u'ch'),   # kh
+37 |     (u'Ξ', u'X'),    # Ks
+   |      ^^^^
+38 |     (u'ϒ', u'Y'),    # U
+39 |     (u'υ', u'y'),    # u
+   |
+help: Remove unicode prefix
+   |
+36 |     (u'χ', u'ch'),   # kh
+   -     (u'Ξ', u'X'),    # Ks
+37 +     ('Ξ', u'X'),    # Ks
+38 |     (u'ϒ', u'Y'),    # U
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:37:12
+   |
+35 | _GREEK = [         # package defaults:
+36 |     (u'χ', u'ch'),   # kh
+37 |     (u'Ξ', u'X'),    # Ks
+   |            ^^^^
+38 |     (u'ϒ', u'Y'),    # U
+39 |     (u'υ', u'y'),    # u
+   |
+help: Remove unicode prefix
+   |
+36 |     (u'χ', u'ch'),   # kh
+   -     (u'Ξ', u'X'),    # Ks
+37 +     (u'Ξ', 'X'),    # Ks
+38 |     (u'ϒ', u'Y'),    # U
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:38:6
+   |
+36 |     (u'χ', u'ch'),   # kh
+37 |     (u'Ξ', u'X'),    # Ks
+38 |     (u'ϒ', u'Y'),    # U
+   |      ^^^^
+39 |     (u'υ', u'y'),    # u
+40 |     (u'ύ', u'y'),
+   |
+help: Remove unicode prefix
+   |
+37 |     (u'Ξ', u'X'),    # Ks
+   -     (u'ϒ', u'Y'),    # U
+38 +     ('ϒ', u'Y'),    # U
+39 |     (u'υ', u'y'),    # u
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:38:12
+   |
+36 |     (u'χ', u'ch'),   # kh
+37 |     (u'Ξ', u'X'),    # Ks
+38 |     (u'ϒ', u'Y'),    # U
+   |            ^^^^
+39 |     (u'υ', u'y'),    # u
+40 |     (u'ύ', u'y'),
+   |
+help: Remove unicode prefix
+   |
+37 |     (u'Ξ', u'X'),    # Ks
+   -     (u'ϒ', u'Y'),    # U
+38 +     (u'ϒ', 'Y'),    # U
+39 |     (u'υ', u'y'),    # u
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:39:6
+   |
+37 |     (u'Ξ', u'X'),    # Ks
+38 |     (u'ϒ', u'Y'),    # U
+39 |     (u'υ', u'y'),    # u
+   |      ^^^^
+40 |     (u'ύ', u'y'),
+41 |     (u'ϋ', u'y'),
+   |
+help: Remove unicode prefix
+   |
+38 |     (u'ϒ', u'Y'),    # U
+   -     (u'υ', u'y'),    # u
+39 +     ('υ', u'y'),    # u
+40 |     (u'ύ', u'y'),
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:39:12
+   |
+37 |     (u'Ξ', u'X'),    # Ks
+38 |     (u'ϒ', u'Y'),    # U
+39 |     (u'υ', u'y'),    # u
+   |            ^^^^
+40 |     (u'ύ', u'y'),
+41 |     (u'ϋ', u'y'),
+   |
+help: Remove unicode prefix
+   |
+38 |     (u'ϒ', u'Y'),    # U
+   -     (u'υ', u'y'),    # u
+39 +     (u'υ', 'y'),    # u
+40 |     (u'ύ', u'y'),
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:40:6
+   |
+38 |     (u'ϒ', u'Y'),    # U
+39 |     (u'υ', u'y'),    # u
+40 |     (u'ύ', u'y'),
+   |      ^^^^
+41 |     (u'ϋ', u'y'),
+42 |     (u'ΰ', u'y'),
+   |
+help: Remove unicode prefix
+   |
+39 |     (u'υ', u'y'),    # u
+   -     (u'ύ', u'y'),
+40 +     ('ύ', u'y'),
+41 |     (u'ϋ', u'y'),
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:40:12
+   |
+38 |     (u'ϒ', u'Y'),    # U
+39 |     (u'υ', u'y'),    # u
+40 |     (u'ύ', u'y'),
+   |            ^^^^
+41 |     (u'ϋ', u'y'),
+42 |     (u'ΰ', u'y'),
+   |
+help: Remove unicode prefix
+   |
+39 |     (u'υ', u'y'),    # u
+   -     (u'ύ', u'y'),
+40 +     (u'ύ', 'y'),
+41 |     (u'ϋ', u'y'),
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:41:6
+   |
+39 |     (u'υ', u'y'),    # u
+40 |     (u'ύ', u'y'),
+41 |     (u'ϋ', u'y'),
+   |      ^^^^
+42 |     (u'ΰ', u'y'),
+43 | ]
+   |
+help: Remove unicode prefix
+   |
+40 |     (u'ύ', u'y'),
+   -     (u'ϋ', u'y'),
+41 +     ('ϋ', u'y'),
+42 |     (u'ΰ', u'y'),
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:41:12
+   |
+39 |     (u'υ', u'y'),    # u
+40 |     (u'ύ', u'y'),
+41 |     (u'ϋ', u'y'),
+   |            ^^^^
+42 |     (u'ΰ', u'y'),
+43 | ]
+   |
+help: Remove unicode prefix
+   |
+40 |     (u'ύ', u'y'),
+   -     (u'ϋ', u'y'),
+41 +     (u'ϋ', 'y'),
+42 |     (u'ΰ', u'y'),
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:42:6
+   |
+40 |     (u'ύ', u'y'),
+41 |     (u'ϋ', u'y'),
+42 |     (u'ΰ', u'y'),
+   |      ^^^^
+43 | ]
+44 | GREEK = add_uppercase_char(_GREEK)
+   |
+help: Remove unicode prefix
+   |
+41 |     (u'ϋ', u'y'),
+   -     (u'ΰ', u'y'),
+42 +     ('ΰ', u'y'),
+43 | ]
+   |
+
+UP025 [*] Remove unicode literals from strings
+  --> demo/workbench/python-slugify/slugify/special.py:42:12
+   |
+40 |     (u'ύ', u'y'),
+41 |     (u'ϋ', u'y'),
+42 |     (u'ΰ', u'y'),
+   |            ^^^^
+43 | ]
+44 | GREEK = add_uppercase_char(_GREEK)
+   |
+help: Remove unicode prefix
+   |
+41 |     (u'ϋ', u'y'),
+   -     (u'ΰ', u'y'),
+42 +     (u'ΰ', 'y'),
+43 | ]
+   |
+
+Found 58 errors.
+[*] 40 fixable with the `--fix` option (5 hidden fixes can be enabled with the `--unsafe-fixes` option).

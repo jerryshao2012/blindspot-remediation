@@ -1,0 +1,25 @@
+............F..                                                          [100%]
+=================================== FAILURES ===================================
+______________ test_text_unidecode_is_no_longer_imported_anywhere ______________
+
+    def test_text_unidecode_is_no_longer_imported_anywhere():
+        """A kept fallback import means the swap is not real; behaviour would depend
+        on which libraries happen to be installed."""
+        module = importlib.import_module("slugify.slugify")
+        source = open(module.__file__, encoding="utf-8").read()
+>       assert "text_unidecode" not in source
+E       AssertionError: assert 'text_unidecode' not in 'from __futu...eturn text\n'
+E         
+E         'text_unidecode' is contained here:
+E         ?           ^^^^
+E              import text_unidecode as unidecode  # type: ignore[import-untyped, no-redef]
+E         ?           ^^^^^          +++++++++++++
+E           
+E           __all__ = ['slugify', 'smart_truncate']...
+E         
+E         ...Full output truncated (184 lines hidden), use '-vv' to show
+
+demo/oracle/test_x1_oracle.py:96: AssertionError
+=========================== short test summary info ============================
+FAILED demo/oracle/test_x1_oracle.py::test_text_unidecode_is_no_longer_imported_anywhere
+1 failed, 14 passed in 0.07s
