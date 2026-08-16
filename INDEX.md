@@ -7,6 +7,9 @@ This document uses Simplified Technical English (ASD-STE100).
 
 Open questions and findings to discuss are in [NOTES.md](NOTES.md).
 
+New to this repository? Read [ORIGINS.md](ORIGINS.md) first. It explains where the
+artifacts came from, which parts the current plan uses, and what still must be built.
+
 ## The original build flow
 
 ```

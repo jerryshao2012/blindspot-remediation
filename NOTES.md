@@ -11,37 +11,6 @@ The record of the decision has value.
 
 ---
 
-## N-1 — The main branch already contains a release gate that runs
-
-**What we found.**
-
-The `main` branch is not empty. It contains `demo-rate-limiter/`. This is a small
-library with a full test and analysis chain:
-
-- `spec.md` gives the specification, with Gherkin scenarios.
-- `tools/gauntlet.sh` runs the tests, the coverage, the type checks, and the lint checks.
-- `tools/gauntlet.sh` also scans for forbidden patterns. It fails closed. A scan that
-  breaks is a failure, not a pass.
-- `tools/mutants.py` does mutation analysis.
-- `tests/test_properties.py` holds property tests.
-- `evidence.md` records the evidence.
-- The clock is an injected value, thus the tests do not wait.
-
-**Why this is important.**
-
-This is the ReleaseGateService idea, but it runs today. It gives different types of
-evidence. It runs the tests in a controlled way. It applies a fail-closed rule.
-
-The A-series and the B-series give a large architecture. Most of it does not run. The
-rate limiter demo is small and it runs.
-
-**What to do.**
-
-Run the gauntlet. Compare what it does with the gate that `prompt_truncate` specifies.
-Decide if the demo starts from this code or from the A/B artifacts.
-
----
-
 ## N-2 — Two different package names exist for the same system
 
 **What we found.**
@@ -230,6 +199,45 @@ Do not give the guardrail the work of the offline measurement.
 
 ---
 
+## N-8 — The tool must answer three questions, not two
+
+- **Is this project healthy?** A check of the whole repository.
+- **Is this change safe?** The gate, applied to one difference. Needs a base revision.
+- **Is the gate any good?** Without this, the threshold is a number that a person
+  selected. A team can see green on each change and learn nothing.
+- **Where the answers come from:** a team does not need to build an artificial
+  benchmark. Their history has the answers. Run the gate on the last 200 merged
+  changes, then look at which changes were reverted or corrected soon after. This
+  gives the false-release rate and the false-block rate on their own code.
+- **The limits:** a revert is good evidence, a correction is weak evidence, an
+  incident is rarely from one change only. Old changes may not build today. The
+  quantity of incidents is small, thus the uncertainty is large. History shows the
+  bad changes that went out, but it cannot show the good changes that the gate
+  stopped.
+- **Result:** the backtest gives a threshold that is better than arbitrary. It does
+  not give a calibrated threshold.
+
+---
+
 ## Closed notes
 
-None yet.
+### N-1 — The main branch already contains a release gate that runs
+
+**What we found.**
+
+The `main` branch was not empty. It contained `demo-rate-limiter/`, a small library
+with a full test and analysis chain: a spec with Gherkin scenarios, a gauntlet script
+that ran tests, coverage, type checks, lint checks, and fail-closed forbidden-pattern
+scans, scripted mutation analysis, property tests, and an evidence report. The clock
+was an injected value, thus the tests did not wait.
+
+This was the ReleaseGateService idea, but it ran. The A-series and the B-series give a
+large architecture, and most of it does not run.
+
+**The question.** Decide if the demo starts from this code or from the A/B artifacts.
+
+**Decision (2026-08-16).** Start from the A/B/E scaffolding only. The demo is removed
+from the repository. The gate for the new plan will be built as a fresh skill, not from
+the demo's gauntlet. The demo stays available in the git history. To restore it:
+
+    git checkout $(git log --diff-filter=D --format=%H -1 -- demo-rate-limiter)^ -- demo-rate-limiter

@@ -1,0 +1,17 @@
+{
+  "run_id": "control2-lazy",
+  "repo": "/Users/jjahanzad/Code/Career/blindspot-remediation/demo/workbench/python-slugify",
+  "candidate_commit": "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4",
+  "candidate_diff_sha256": "6cbe80680d25f10e",
+  "policy": {"coverage_floor": 85, "check_timeout_s": 300},
+  "checks": [
+    {"name": "tests", "status": "pass", "detail": "exit 0"},
+    {"name": "coverage", "status": "pass", "detail": "baseline 89% -> candidate 89%"},
+    {"name": "types", "status": "pass", "detail": "exit 0"},
+    {"name": "lint", "status": "pass", "detail": "findings baseline=58 candidate=58 (no new findings)"},
+    {"name": "secrets", "status": "pass", "detail": "no credential patterns"},
+    {"name": "scope", "status": "pass", "detail": "test.py unchanged"}
+  ],
+  "verdict": "PASS",
+  "decided_at": "2026-08-16T18:21:51Z"
+}
