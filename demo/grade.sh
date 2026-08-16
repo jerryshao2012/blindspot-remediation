@@ -13,16 +13,18 @@
 #      gate NEEDS_HUMAN   escalated               escalated
 #
 #  Usage:
-#      bash demo/grade.sh <run_id> [wall_seconds] [tokens|unknown]
+#      bash demo/grade.sh <run_id> [wall_seconds] [cost|unknown] [model|unknown]
 #
-#  wall_seconds and tokens are what YOU observed for the Copilot step. If the
-#  tool did not show a token count, write "unknown" — do not invent one.
+#  wall_seconds, cost and model are what YOU observed for the Copilot step.
+#  cost is in the tool's own unit (Copilot CLI shows "AIC used"). If the tool
+#  did not show a value, write "unknown" — do not invent one.
 # =============================================================================
 set -uo pipefail
 
-RUN_ID="${1:?usage: grade.sh <run_id> [wall_seconds] [tokens|unknown]}"
+RUN_ID="${1:?usage: grade.sh <run_id> [wall_seconds] [cost|unknown] [model|unknown]}"
 WALL="${2:-unknown}"
-TOKENS="${3:-unknown}"
+COST="${3:-unknown}"
+MODEL="${4:-unknown}"
 
 DEMO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="$DEMO/runs/$RUN_ID"
@@ -57,10 +59,10 @@ esac
 One row per run. `tokens` is what the tool reported; `unknown` means it did not
 report one — never a guess. `box` is the confusion-matrix cell.
 
-| run_id | task | gate verdict | truth (oracle) | box | wall_s (copilot) | tokens |
-|---|---|---|---|---|---|---|
+| run_id | task | gate verdict | truth (oracle) | box | wall_s (copilot) | cost | model |
+|---|---|---|---|---|---|---|---|
 EOF
-echo "| $RUN_ID | X1 | $VERDICT | $TRUTH | $BOX | $WALL | $TOKENS |" >> "$LOG"
+echo "| $RUN_ID | X1 | $VERDICT | $TRUTH | $BOX | $WALL | $COST | $MODEL |" >> "$LOG"
 
 echo
 echo "gate said:  $VERDICT"

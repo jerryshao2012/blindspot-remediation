@@ -158,10 +158,10 @@ candidate patch, and a log per check.
 ## Step 5 — Grade the run against the hidden oracle (30 seconds)
 
 ```bash
-bash demo/grade.sh run-01 <wall_seconds> <tokens-or-unknown>
+bash demo/grade.sh run-01 <wall_seconds> <cost-or-unknown> <model-or-unknown>
 ```
 
-For example `bash demo/grade.sh run-01 412 unknown`.
+For example `bash demo/grade.sh run-01 127 16.2-AIC claude-haiku-4.5`.
 
 This runs the tests in `demo/oracle/` — the ones Copilot never saw — and
 prints:
