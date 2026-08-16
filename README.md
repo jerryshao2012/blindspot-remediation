@@ -120,7 +120,10 @@ Directory `demo/`. Small, and it runs. Everything below is about this.
 ```
 demo/
 ├── setup_workbench.sh    clone python-slugify at a pinned green commit; reset between runs
-├── tasks/X1.md           the task card — what the AI is told (and nothing more)
+├── tasks/
+│   ├── X1.md             the task card — what the AI is told (and nothing more); says which version is live
+│   ├── X1_v1.md, X1_v2.md  frozen copies of each version — diff them to see the real change
+│   └── X1-CHANGES.md     why each version changed, and which runs used it
 ├── gate/
 │   ├── gate.sh           THE GATE  (~200 lines of shell, read top to bottom)
 │   └── SKILL.md          wrapper so GitHub Copilot CLI can trigger the gate as a "skill"
