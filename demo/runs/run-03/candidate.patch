@@ -1,0 +1,113 @@
+diff --git a/README.md b/README.md
+index e5123f1..f9a27f0 100644
+--- a/README.md
++++ b/README.md
+@@ -12,9 +12,7 @@
+ 
+ # Notice
+ 
+-This module, by default installs and uses [text-unidecode](https://github.com/kmike/text-unidecode) _(GPL & Perl Artistic)_ for its decoding needs.
+-
+-However, there is an alternative decoding package called [Unidecode](https://github.com/avian2/unidecode) _(GPL)_. It can be installed as `python-slugify[unidecode]` for those who prefer it. `Unidecode` is believed to be more [advanced](https://github.com/un33k/python-slugify/wiki/Python-Slugify-Wiki#notes-on-unidecode).
++This module uses [Unidecode](https://github.com/avian2/unidecode) _(GPL)_ for its decoding needs.
+ 
+ ### `Official` Support Matrix
+ 
+@@ -28,10 +26,6 @@ However, there is an alternative decoding package called [Unidecode](https://git
+ 
+     pip install python-slugify
+ 
+-    # OR
+-
+-    pip install python-slugify[unidecode]
+-
+ # Options
+ 
+ ```python
+@@ -200,8 +194,7 @@ Please read the ([wiki](https://github.com/un33k/python-slugify/wiki/Python-Slug
+ Released under a ([MIT](LICENSE)) license.
+ 
+ ### Notes on GPL dependencies
+-Though the dependencies may be GPL licensed, `python-slugify` itself is not considered a derivative work and will remain under the MIT license.  
+-If you wish to avoid installation of any GPL licensed packages, please note that the default dependency `text-unidecode` explicitly lets you choose to use the [Artistic License](https://opensource.org/license/artistic-perl-1-0-2/) instead. Use without concern.
++Though the dependency may be GPL licensed, `python-slugify` itself is not considered a derivative work and will remain under the MIT license.
+ 
+ # Version
+ 
+diff --git a/setup.py b/setup.py
+index 32f44dd..8d2b7ae 100755
+--- a/setup.py
++++ b/setup.py
+@@ -11,8 +11,8 @@ package = 'slugify'
+ python_requires = ">=3.10"
+ here = os.path.abspath(os.path.dirname(__file__))
+ 
+-install_requires = ['text-unidecode>=1.3']
+-extras_requires = {'unidecode': ['Unidecode>=1.1.1']}
++install_requires = ['Unidecode>=1.1.1']
++extras_requires = {}
+ 
+ about = {}
+ with open(os.path.join(here, package, '__version__.py'), 'r', encoding='utf-8') as f:
+diff --git a/slugify/slugify.py b/slugify/slugify.py
+index 9b5f27f..dbf1abd 100644
+--- a/slugify/slugify.py
++++ b/slugify/slugify.py
+@@ -5,10 +5,7 @@ import unicodedata
+ from collections.abc import Iterable
+ from html.entities import name2codepoint
+ 
+-try:
+-    import unidecode
+-except ImportError:
+-    import text_unidecode as unidecode  # type: ignore[import-untyped, no-redef]
++import unidecode
+ 
+ __all__ = ['slugify', 'smart_truncate']
+ 
+diff --git a/tox.ini b/tox.ini
+index 0c16f5e..3c7027f 100644
+--- a/tox.ini
++++ b/tox.ini
+@@ -1,8 +1,8 @@
+ [tox]
+ env_list =
+     coverage-erase
+-    py{3.10, 3.11, 3.12, 3.13, 3.14}-{unidecode, text_unidecode}
+-    pypy{3.11}-{unidecode, text_unidecode}
++    py{3.10, 3.11, 3.12, 3.13, 3.14}
++    pypy{3.11}
+     coverage-report
+     coverage-html
+     mypy
+@@ -10,16 +10,12 @@ env_list =
+ 
+ [testenv]
+ depends =
+-    py{3.10, 3.11, 3.12, 3.13, 3.14}-{unidecode, text_unidecode}: coverage-erase
+-    pypy{3.11}-{unidecode, text_unidecode}: coverage-erase
++    py{3.10, 3.11, 3.12, 3.13, 3.14}: coverage-erase
++    pypy{3.11}: coverage-erase
+ deps =
+     coverage[toml]
+     pytest
+-    unidecode: pip
+-    unidecode: unidecode
+-commands_pre:
+-    # If testing unidecode, ensure text_unidecode is unavailable.
+-    unidecode: pip uninstall --yes text_unidecode
++    unidecode
+ commands =
+     coverage run -m pytest test.py
+ 
+@@ -35,8 +31,8 @@ commands =
+ [testenv:coverage-report]
+ base = coverage_base
+ depends =
+-    py{3.10, 3.11, 3.12, 3.13, 3.14}-{unidecode, text_unidecode}
+-    pypy{3.11}-{unidecode, text_unidecode}
++    py{3.10, 3.11, 3.12, 3.13, 3.14}
++    pypy{3.11}
+ commands_pre =
+     - coverage combine
+ commands =

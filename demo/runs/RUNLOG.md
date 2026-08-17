@@ -21,6 +21,9 @@ it is what keeps runs comparable). `box` is the confusion-matrix cell.
 | run-01 | X1 | v1 | NEEDS_HUMAN | oracle_error | escalated | none — as delivered | 127 | 16.2 AIC | claude-haiku-4.5 (Auto) |
 | run-01b | X1 | v1 | PASS | correct | good_pass | re-gate of run-01 after human `pip install Unidecode` | (same session as run-01) | (same) | (same) |
 | run-02 | X1 | v2 | PASS | correct | good_pass | none | 103 | 16.6 AIC | claude-haiku-4.5 (Auto) |
+| run-03 | X1 | v2 | PASS | correct | good_pass | none | 90 | 10.4 AIC | claude-haiku-4.5 (Auto) |
+| run-04 | X1 | v2 | PASS | correct | good_pass | none | 92 | 11.4 AIC | claude-haiku-4.5 (Auto) |
+| run-05 | X1 | v2 | PASS | correct | good_pass | none | 69 | 9.0 AIC | claude-haiku-4.5 (Auto) |
 
 ## Notes
 
@@ -64,6 +67,54 @@ escalation and a clean pass was two paragraphs on the task card telling the
 AI which interpreter to use and to install what it declared. The AI's edits
 were identical. That is a finding about task specification, not about the
 model — and it is why the card is versioned.
+
+### runs 03–05 (2026-08-16) — repetition on card v2; the first five-run summary
+
+Runs 3, 4 and 5 repeated card v2 exactly (reset → paste `X1_v2.md` → gate →
+grade). All three: PASS on six checks, oracle 15/15, good_pass, no human step,
+Auto → claude-haiku-4.5 every time.
+
+**The cost estimate (four v2 sessions, runs 02–05):**
+
+| | wall (s) | cost (AIC) |
+|---|---|---|
+| runs 02, 03, 04, 05 | 103, 90, 92, 69 | 16.6, 10.4, 11.4, 9.0 |
+| mean | **88 s** | **11.8 AIC** |
+| range | 69–103 | 9.0–16.6 |
+
+So one X1 run on Copilot Free costs about a minute and a half and ~12 AIC.
+Twenty runs ≈ 30 min and ~240 AIC; a hundred ≈ 2.5 h and ~1,200 AIC. Those
+are the numbers that decide whether the next campaign is affordable — and
+they are the reason five runs were worth doing before twenty.
+
+**What five clean runs do and do not say.** 4/4 good_pass on v2 (5/5
+counting run-01b, which needed a human). By B5's own Wilson interval, zero
+failures in n=4 still leaves the true failure rate possibly as high as
+**49%**; n=5, 43%; n=20, 16%; n=30, 11%. Five runs size the bill. They do
+not qualify the pipeline. (Computed with
+`B5-evaluation-campaign/…/statistics.py` — the first time a scaffolding
+module has done real work in this repo.)
+
+**Where the variance showed up — and where nothing could see it.** The
+*code* change (`setup.py` + `slugify/slugify.py`) was byte-identical across
+runs 3, 4 and 5 (same diff fingerprints). The variance was all in the
+"consistency" step: runs 2 and 3 updated `tox.ini`; **runs 4 and 5 left it
+alone**, still naming `text_unidecode` in the test matrix. The card's step 3
+asks for exactly that update. Neither the gate nor the oracle can see this,
+because both judge the code and a stale `tox.ini` line breaks nothing that
+runs. So runs 4 and 5 are correctly graded good_pass on the code — and
+slightly incomplete on the task. README wording also differed run to run
+("installs and uses" vs "uses"). This is the honest shape of LLM
+non-determinism here: **stable where it is checked, variable where it is
+not.**
+
+That points at a real gap: the card's own "Done when" says
+`grep -rn text_unidecode slugify/ setup.py` — a scope the gate could run
+verbatim, and could widen to the whole repo (excluding CHANGELOG, which is
+history). Cheap to add; would have flagged runs 4 and 5 as incomplete
+rather than passing them silently. Recorded as a candidate gate check, not
+added mid-campaign — changing the gate between runs 3 and 4 would have made
+the five rows incomparable.
 
 ### Is this "continuous monitoring and improvement"? Half of it is.
 
