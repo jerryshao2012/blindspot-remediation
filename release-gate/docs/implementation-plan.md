@@ -64,8 +64,10 @@ do not silently extend the contract.
 - [ ] Test the closed `inherit_environment` list separately from literal
   `environment`: literal-over-inherited precedence, missing host names,
   platform-list replacement and literal overlay, POSIX case sensitivity,
-  Windows case-insensitive collisions/canonicalization, and rejection of all
-  reserved home/temp names and the `RELEASE_GATE_` prefix.
+  Windows case-insensitive collisions/canonicalization, all-platform `HOME`
+  reservation, POSIX `TMPDIR`, the additional Windows
+  `USERPROFILE`/`HOMEDRIVE`/`HOMEPATH`/`TEMP`/`TMP` names, and the
+  `RELEASE_GATE_` prefix.
 - [ ] Test common and all three platform overlays, including the semantic rule
   that every directly invoked repository-local launcher is covered by
   `review_required_paths`.
@@ -127,10 +129,12 @@ do not silently extend the contract.
 - [ ] Write failing helper-process tests for pass/fail/error/unlisted exits,
   negative POSIX signal returns, Windows 32-bit statuses through 4,294,967,295,
   spawn failure, timeout, direct argv with spaces, minimal environment,
-  temporary `HOME`, and clone-contained `cwd`.
+  clone-specific `HOME` on every operating system, POSIX `TMPDIR`, consistent
+  Windows home/temp aliases, and clone-contained `cwd`.
 - [ ] Verify no host variable, including `PATH`, is inherited unless listed;
   requested missing names are `ERROR`; literal values win over inherited
-  values; and engine-owned HOME/temp variables win and are clone-specific.
+  values; engine-owned home/temp variables win and are clone-specific; and
+  Windows reserved-name and collision checks are case-insensitive.
 - [ ] Add stream tests at, below, and above 1 MiB and 10 MiB, proving both pipes
   are drained, full-stream and retained digests differ correctly, and no
   deadlock occurs.

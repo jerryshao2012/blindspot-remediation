@@ -60,10 +60,13 @@ allowed and the literal wins; case-colliding duplicates within a list or map
 are invalid. Platform literal values overlay common values, while a platform
 inherit list replaces the common list.
 
-The engine injects clone-specific home/temp values after both configured
-layers. Policies cannot inherit or set POSIX `HOME`/`TMPDIR`, Windows
-`USERPROFILE`/`HOMEDRIVE`/`HOMEPATH`/`TEMP`/`TMP`, or any name with the
-`RELEASE_GATE_` prefix. The engine never adds `.` or a clone path to `PATH`.
+The engine injects a clone-specific `HOME` on every platform after both
+configured layers. It additionally injects clone-specific `TMPDIR` on POSIX
+and consistent clone-specific `USERPROFILE`/`HOMEDRIVE`/`HOMEPATH`/`TEMP`/`TMP`
+values on Windows. Policies cannot inherit or set any of those engine-owned
+names or any name with the `RELEASE_GATE_` prefix. Windows applies this rule
+case-insensitively and rejects case-colliding configured names. The engine
+never adds `.` or a clone path to `PATH`.
 
 Configuration has no environment-variable interpolation or secret reference
 feature. Do not put secrets in `.release-gate.yaml`: the effective policy is

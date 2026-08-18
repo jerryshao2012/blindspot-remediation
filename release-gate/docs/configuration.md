@@ -137,12 +137,18 @@ The effective environment is built in this order:
 
 On Linux and macOS names and duplicates are case-sensitive. On Windows they
 are compared case-insensitively and canonicalized to uppercase in evidence;
-case-colliding entries in one list or map are invalid. POSIX reserves `HOME`
-and `TMPDIR`; Windows reserves `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `TEMP`,
-and `TMP`; every platform also reserves the `RELEASE_GATE_` prefix. Reserved
-names are invalid in both environment fields. The engine sets them to
-clone-specific locations. In particular, `PATH` is inherited only when it is
-listed; the engine never adds the repository or `.` to `PATH`.
+case-colliding entries in one list or map are invalid. Every platform reserves
+`HOME` and the `RELEASE_GATE_` prefix. POSIX additionally reserves `TMPDIR`;
+Windows additionally reserves `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `TEMP`,
+and `TMP`. Reserved-name comparison follows those platform identity rules, so
+every case variant of a reserved name or prefix is reserved on Windows.
+
+Reserved names are invalid in both environment fields. The engine injects a
+clone-specific `HOME` on every platform after configured values. It also
+injects clone-specific `TMPDIR` on POSIX and consistent clone-specific
+`USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `TEMP`, and `TMP` values on Windows.
+In particular, `PATH` is inherited only when it is listed; the engine never
+adds the repository or `.` to `PATH`.
 
 ## Platform overrides
 

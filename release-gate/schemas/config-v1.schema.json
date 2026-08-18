@@ -90,7 +90,7 @@
     "environment": {
       "type": "object",
       "propertyNames": {
-        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        "$ref": "#/$defs/environmentName"
       },
       "additionalProperties": {
         "type": "string"
@@ -99,7 +99,18 @@
     },
     "environmentName": {
       "type": "string",
-      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      "description": "Environment name. Exact all-platform engine-owned names are rejected here; platform-specific and Windows case-insensitive reservations are semantic validation rules.",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "not": {
+        "anyOf": [
+          {
+            "const": "HOME"
+          },
+          {
+            "pattern": "^RELEASE_GATE_"
+          }
+        ]
+      }
     },
     "inheritEnvironment": {
       "type": "array",
