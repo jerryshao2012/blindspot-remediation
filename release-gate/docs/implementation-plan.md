@@ -16,7 +16,8 @@ clones on a trusted host. No A/B package, plugin, adapter, or demo runtime is a
 dependency.
 
 **Tech stack:** Python 3.11+, `argparse`, `subprocess`, `pathlib`, `dataclasses`,
-PyYAML, jsonschema, defusedxml, pytest, pytest-cov, Ruff, mypy, and Git CLI.
+PyYAML, jsonschema, defusedxml, `pathspec==1.1.1` (Git wildmatch), pytest,
+pytest-cov, Ruff, mypy, and Git CLI.
 
 ---
 
@@ -52,11 +53,22 @@ do not silently extend the contract.
 `release-gate/src/release_gate/models.py`, and
 `release-gate/tests/test_config.py`.
 
-- [ ] Write failing parameterized tests for YAML/schema errors, unknown keys,
-  POSIX/drive/UNC/traversal paths, duplicate/reserved IDs, overlapping and
-  out-of-range exit classes, uncovered local launchers, invalid assertion
-  report references, candidate/baseline mode mismatches, defaults, limits, and
-  all three platform overlays.
+- [ ] Write failing parameterized tests proving the exact
+  `allowed_paths`/`forbidden_paths`/`review_required_paths` keys work and the
+  legacy key spellings are rejected, plus YAML/schema errors, unknown keys,
+  POSIX/drive/UNC/traversal paths, overlapping/out-of-range exit classes,
+  invalid assertion references/modes, defaults, and limits.
+- [ ] Test `prepare` as an ordered array, required IDs, duplicate IDs within
+  preparation and globally across preparation/checks, stable ordering, and
+  base-required/candidate-always workspace selection.
+- [ ] Test the closed `inherit_environment` list separately from literal
+  `environment`: literal-over-inherited precedence, missing host names,
+  platform-list replacement and literal overlay, POSIX case sensitivity,
+  Windows case-insensitive collisions/canonicalization, and rejection of all
+  reserved home/temp names and the `RELEASE_GATE_` prefix.
+- [ ] Test common and all three platform overlays, including the semantic rule
+  that every directly invoked repository-local launcher is covered by
+  `review_required_paths`.
 - [ ] Run `python -m pytest tests/test_config.py -q`; expect the first case to
   fail because `load_config` is absent.
 - [ ] Implement safe YAML loading, bundled-schema validation, immutable typed
@@ -74,8 +86,9 @@ do not silently extend the contract.
 `release-gate/tests/test_git_capture.py`.
 
 - [ ] Write failing repository-fixture tests proving policy comes from the
-  peeled base commit, candidate policy edits cannot take effect, and invalid or
-  missing base policy is rejected before evaluation.
+  peeled base commit; candidate add/modify/rename/delete of
+  `.release-gate.yaml` cannot take effect, triggers `POLICY_FILE_CHANGED`, and
+  is distinguished from invalid or missing base policy.
 - [ ] Add cases for staged, unstaged, deleted, renamed, executable-mode,
   binary, Unicode/space-containing, non-ignored untracked, and ignored files;
   snapshot index bytes and `git status` before capture.
@@ -115,6 +128,9 @@ do not silently extend the contract.
   negative POSIX signal returns, Windows 32-bit statuses through 4,294,967,295,
   spawn failure, timeout, direct argv with spaces, minimal environment,
   temporary `HOME`, and clone-contained `cwd`.
+- [ ] Verify no host variable, including `PATH`, is inherited unless listed;
+  requested missing names are `ERROR`; literal values win over inherited
+  values; and engine-owned HOME/temp variables win and are clone-specific.
 - [ ] Add stream tests at, below, and above 1 MiB and 10 MiB, proving both pipes
   are drained, full-stream and retained digests differ correctly, and no
   deadlock occurs.
@@ -150,15 +166,27 @@ do not silently extend the contract.
 **Files:** create `release-gate/src/release_gate/policy.py` and
 `release-gate/tests/test_policy.py`.
 
-- [ ] Write failing table-driven tests for path-glob semantics, rename old/new
-  paths, allowed/forbidden/review overlaps, changed directly invoked launchers,
-  candidate/differential exit rules, all severities, prepare failure, and
-  skipped blocking checks.
+- [ ] Write pathspec Git-wildmatch conformance tests for `*`, `?`, bracket
+  classes, slashless basename matching, slash anchoring, trailing `/`,
+  including nested `x/foo/file` matching `foo/`, `**/x`, `a/**/b`, `a/**`,
+  dotfiles, case sensitivity, rename old/new paths, deletion old paths, and
+  symlinks without traversal. Reject leading `!/#`, trailing whitespace,
+  backslash, drive/UNC, empty, `.`, and `..` components.
+- [ ] Write the full verdict matrix: blocking `FAIL` -> `FAIL`; advisory
+  `FAIL` -> `NEEDS_HUMAN`; informational `FAIL` is recorded only; every
+  timeout, missing tool/environment, signal, unclassified exit, preparation
+  failure, required-report problem, assertion operand error, and required
+  `SKIPPED` -> `NEEDS_HUMAN` for every severity.
+- [ ] Cover `allowed_paths`/`forbidden_paths`/`review_required_paths` overlaps,
+  candidate/differential exit rules, preparation failure, and simultaneous
+  `FAIL`/`ERROR` to prove `NEEDS_HUMAN` precedence.
 - [ ] Prove a changed common or platform-specific local launcher prevents every
   repository command from running and produces `NEEDS_HUMAN` with
   `CONTROL_LAUNCHER_REVIEW`.
-- [ ] Exhaustively test aggregation, including simultaneous blocking `FAIL` and
-  `ERROR`/review to prove `NEEDS_HUMAN` always outranks `FAIL`.
+- [ ] Prove an early blocking/advisory classified failure still runs the other
+  differential side and every later check in declaration order. Separately
+  prove policy/launcher preflight review and preparation failure skip all
+  remaining configured commands with reason-coded `SKIPPED` results.
 - [ ] Run `python -m pytest tests/test_policy.py -q`; expect failure.
 - [ ] Implement pure deterministic policy functions and stable uppercase reason
   codes; keep precedence and scope enforcement non-configurable.
@@ -172,10 +200,16 @@ do not silently extend the contract.
 `release-gate/tests/test_evidence.py`.
 
 - [ ] Write failing tests for the exact documented tree, restrictive creation,
-  normalized unique paths, artifact hashes/sizes, base/candidate/config/engine
-  identity, commands, durations, metrics, timestamps, and reason codes.
+  artifact hashes/sizes, base/candidate/config/engine identity, commands,
+  durations, metrics, timestamps, environment names, and reason codes.
 - [ ] Verify `result.json` and `manifest.json` against bundled schemas and add a
-  tamper test for changed, missing, extra, and duplicate artifacts.
+  tamper test proving `result.json`, `candidate.patch`, `effective-config.json`,
+  and `trace.json` appear exactly once, `manifest.json` never self-inventories,
+  and changed/missing/extra/duplicate artifacts fail verification.
+- [ ] Reject artifact aliases `./x`, `a//b`, `a/./b`, `a/../b`, trailing `/`,
+  absolute/drive/UNC/device/backslash paths, non-NFC strings, duplicate paths,
+  NFC+Unicode-casefold collisions such as `Log.txt`/`log.txt`, and every
+  NFC+casefold alias of the reserved `manifest.json` path.
 - [ ] Test stream truncation metadata, total 200 MiB exhaustion using injected
   small test limits, existing-run refusal, atomic rename, interrupted
   finalization, `.incomplete`, and manifest-last ordering.
@@ -194,6 +228,13 @@ do not silently extend the contract.
 - [ ] Write failing end-to-end tests for `init`, `validate`, and `run`, stable
   stdout lines, stderr diagnostics, no-overwrite behavior, base-policy loading,
   generic/Python/Node policies, and complete result paths.
+- [ ] Prove candidate add/modify/rename/delete of `.release-gate.yaml` and a
+  changed covered launcher execute zero repository commands, mark every
+  preparation/check control `SKIPPED`, finalize `NEEDS_HUMAN`, and use base
+  policy.
+- [ ] Prove multiple preparation IDs execute base then candidate per item in
+  declaration order, skip base when no differential check exists, and stop all
+  remaining work after any preparation non-pass.
 - [ ] Cover exits 0/1/2/3/4 and assert a schema-valid result for every 0/1/2
   path; inject finalization failure to distinguish exit 4 from
   `NEEDS_HUMAN`.
@@ -213,7 +254,8 @@ do not silently extend the contract.
 
 - [ ] Write a failing test that checks the skill invokes the standalone binary,
   requires an explicit base, consumes `result.json`, preserves all three
-  verdict spellings, and never edits/retries/reinterprets policy or results.
+  verdict spellings, never edits/retries/reinterprets policy or results, and
+  never performs or authorizes merge/deployment after `PASS`.
 - [ ] Run `python -m pytest tests/test_skill_contract.py -q`; expect failure.
 - [ ] Write the minimal portable skill with no machine-specific paths and no
   dependency on `demo/gate` or a plugin.
@@ -249,8 +291,9 @@ and update canonical `release-gate/docs/adoption.md` with measured results.
 - [ ] Create intentionally tracked generic, Python, and Node fixture repos with
   deterministic local dependencies and policies derived from the examples.
 - [ ] For each fixture, prove untouched PASS, planted blocking FAIL,
-  broken-tool/timeout NEEDS_HUMAN, review-scope NEEDS_HUMAN, candidate policy
-  tamper judged under base policy, and evidence tamper detection.
+  advisory FAIL/timeout/broken-tool NEEDS_HUMAN, informational ordinary FAIL
+  non-contribution, review-required scope NEEDS_HUMAN, candidate policy tamper
+  under base policy with zero commands, and evidence tamper detection.
 - [ ] Reproduce the legacy demo's untouched, lazy, missing-tool, and
   scope-tamper control semantics without changing legacy files.
 - [ ] Record gate version, config digest, base commit, candidate tree, result

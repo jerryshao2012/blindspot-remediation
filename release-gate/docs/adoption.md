@@ -4,8 +4,9 @@
 
 1. Install the independent Python 3.11+ CLI in a dedicated environment.
 2. Run `release-gate init --profile generic|python|node`.
-3. Replace example scope patterns, commands, exit classes, reports, and
-   assertions with repository-owned policy.
+3. Replace example `allowed_paths`, `forbidden_paths`,
+   `review_required_paths`, commands, inherited-environment names, exit
+   classes, reports, and assertions with repository-owned policy.
 4. Run `release-gate validate` and review the effective platform command.
 5. Commit `.release-gate.yaml` and every script it invokes. The first run must
    select a base commit containing that policy.
@@ -50,6 +51,9 @@ It never edits candidate files or policy, retries until a pass, maps
 `NEEDS_HUMAN` to `FAIL`, or claims that local execution is isolated. V1 ships
 no plugin. Plugin packaging is deferred until managed distribution, hooks, or
 external integrations justify the additional lifecycle.
+
+The skill treats `PASS` only as recorded policy eligibility. It never performs
+or authorizes a merge or deployment.
 
 ## Existing blindspot demo
 

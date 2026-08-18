@@ -49,10 +49,13 @@ temporary index. Invalid refs, invalid/missing policy, ambiguous input, patch
 reconstruction failure, or an unsafe evidence path exit 3 before a candidate
 verdict.
 
-Scope preflight also compares every directly invoked repository-local launcher
-with the base. A changed launcher is valid candidate input but requires review:
-no repository command runs, a complete `NEEDS_HUMAN` result is finalized, and
-the command exits 2.
+After capture, preflight compares `.release-gate.yaml` and every directly
+invoked repository-local launcher with the base. Any candidate add, modify,
+rename, or delete of the policy, or change to a covered launcher, is valid
+candidate input but requires review: no configured preparation/check command
+runs, all controls are recorded `SKIPPED`, a complete `NEEDS_HUMAN` result is
+finalized, and the command exits 2. Policy scope and severity cannot weaken
+this rule.
 
 After preflight, expected check/tool/report failures are finalized in
 `result.json` and map to a candidate verdict. Normal stdout ends with these

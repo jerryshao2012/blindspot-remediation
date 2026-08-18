@@ -11,18 +11,21 @@ The document is YAML whose data model MUST validate against
 ```yaml
 version: 1
 scope:
-  allowed: ["src/**", "tests/**"]
-  forbidden: [".release-gate.yaml", ".github/**"]
-  review: ["SECURITY.md", "LICENSE*"]
+  allowed_paths: ["src/**", "tests/**"]
+  forbidden_paths: [".github/**"]
+  review_required_paths: [".release-gate.yaml", "SECURITY.md", "LICENSE*"]
 prepare:
-  argv: ["python3", "-m", "pip", "install", "-e", ".[test]"]
-  cwd: "."
-  timeout: 600
-  environment: {CI: "true"}
-  exit_classes: {pass: [0], fail: [1], error: []}
-  platform:
-    windows:
-      argv: ["py", "-3", "-m", "pip", "install", "-e", ".[test]"]
+  - id: dependencies
+    argv: ["python3", "-m", "pip", "install", "-e", ".[test]"]
+    cwd: "."
+    timeout: 600
+    inherit_environment: ["PATH"]
+    environment: {PIP_DISABLE_PIP_VERSION_CHECK: "1"}
+    exit_classes: {pass: [0], fail: [1], error: []}
+    platform:
+      windows:
+        argv: ["py", "-3", "-m", "pip", "install", "-e", ".[test]"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
 limits:
   stream_bytes: 1048576
   report_bytes: 5242880
@@ -34,11 +37,13 @@ checks:
     argv: ["python3", "-m", "pytest", "--junitxml=junit.xml"]
     cwd: "."
     timeout: 600
+    inherit_environment: ["PATH"]
     environment: {CI: "true"}
     exit_classes: {pass: [0], fail: [1], error: [2, 3, 4, 5]}
     platform:
       windows:
         argv: ["py", "-3", "-m", "pytest", "--junitxml=junit.xml"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
     reports:
       - id: junit
         parser: junit-xml
@@ -59,48 +64,101 @@ platform-resolved policy used by the run.
 
 ## Scope
 
-Changed paths are Git repository-relative paths with `/` separators. Patterns
-support `*` and `?` within a segment, character classes, and `**` across
-segments. Patterns MUST NOT be absolute, contain `..` segments or backslashes,
-begin with `!`, or have a Windows drive prefix such as `C:`. Leading `/`, UNC
-and device paths, drive-absolute and drive-relative paths, and traversal are
-invalid. A path matches a list when it matches any pattern.
+Changed paths are Git repository-relative paths with `/` separators. V1 uses
+`pathspec==1.1.1` and
+`pathspec.PathSpec.from_lines("gitwildmatch", patterns)`. Matching is
+case-sensitive on every host and uses the following closed subset of Git
+wildmatch:
 
-- `allowed` is a required allowlist. A changed path outside it is blocking.
-- `forbidden` is a blocking denylist, even if the path is also allowed.
-- `review` requires human review, even if the path is allowed.
+- `*`, `?`, and bracket classes do not cross `/`; dotfiles are not special.
+- A pattern with no `/`, such as `*.md`, matches a basename at any depth.
+- A pattern containing a non-terminal `/`, such as `src/*.py`, is anchored to
+  repository root.
+- A trailing `/` is directory-only and covers that directory's descendants,
+  not a same-named regular file. Its terminal slash does not itself anchor the
+  pattern, so `docs/` matches directories named `docs` at any depth.
+- `**/name` matches `name` at any depth including root; `a/**/b` matches zero
+  or more complete directory segments; `dir/**` matches descendants below
+  `dir` but not the directory entry itself.
+- Pattern lists are an unordered OR. Negation is not supported.
+
+Patterns beginning `/`, `!`, or `#`, ending in whitespace,
+absolute/drive/UNC/device paths, backslashes, `.` or `..` components, and empty
+path components are invalid. The single terminal separator that gives a
+directory pattern its trailing `/` semantics is the only permitted empty
+component. These restrictions remove Git-ignore comments, negation, escaping,
+trailing-space normalization, and host-dependent path interpretation while
+retaining the matching rules above.
+
+- `allowed_paths` is a required allowlist. A changed path outside it is
+  blocking.
+- `forbidden_paths` is a blocking denylist, even if the path is also allowed.
+- `review_required_paths` requires human review, even when the path is allowed.
 
 All applicable matches are retained. Because `NEEDS_HUMAN` outranks `FAIL`, a
 review match dominates a simultaneous forbidden/out-of-scope failure in the
 final verdict. Renames evaluate both old and new paths; deletions evaluate the
 old path. Symlinks are matched as paths and are not traversed.
 
-## Commands and platform overrides
+Any candidate change to `.release-gate.yaml` is an invariant preflight
+`NEEDS_HUMAN`, even if a policy omits it from `review_required_paths`. All
+examples include it to make the invariant visible. No configured command runs
+after this condition is found.
 
-`prepare` is optional and runs once in each clean clone. Repositories needing
-multiple preparation steps SHOULD call a checked-in script. A preparation
-result other than `pass` prevents complete evaluation and yields
-`NEEDS_HUMAN`.
+## Preparation and commands
+
+`prepare` is an optional ordered array. Every item requires a unique `id` and
+an ordinary command specification. IDs are unique across preparation items
+and checks and are stable evidence directory names. The engine needs the base
+workspace if any check is differential and always needs the candidate
+workspace. For each item in declaration order, it runs base first when
+required and candidate second before advancing to the next item. A preparation
+result other than `pass` stops later preparation and checks and yields
+`NEEDS_HUMAN` regardless of exit classification.
 
 Every check requires a unique `id`, `mode`, `severity`, and non-empty `argv`.
-The ID `prepare` is reserved. `argv` is passed directly to a process without a
-shell; shell operators, expansion, and quoting have no special meaning.
-`cwd` is relative to the clone root and cannot escape it. `environment` is a
-literal string map overlaid on the engine's minimal environment; there is no
-variable interpolation.
+`argv` is passed directly to a process without a shell; shell operators,
+expansion, and quoting have no special meaning. `cwd` is relative to the clone
+root and cannot escape it.
+
+## Environment
+
+No host variable is inherited implicitly. `inherit_environment` is the closed,
+explicit allowlist of host environment names for that command. A requested
+name absent on the execution host is an evidence error, not an empty value.
+`environment` is a literal string map; values have no interpolation and SHOULD
+NOT contain secrets because the effective configuration is retained.
+
+The effective environment is built in this order:
+
+1. copy only present, explicitly named `inherit_environment` variables;
+2. overlay literal `environment` values, which win on the same name; and
+3. inject engine-owned home and temporary-directory values, which always win.
+
+On Linux and macOS names and duplicates are case-sensitive. On Windows they
+are compared case-insensitively and canonicalized to uppercase in evidence;
+case-colliding entries in one list or map are invalid. POSIX reserves `HOME`
+and `TMPDIR`; Windows reserves `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `TEMP`,
+and `TMP`; every platform also reserves the `RELEASE_GATE_` prefix. Reserved
+names are invalid in both environment fields. The engine sets them to
+clone-specific locations. In particular, `PATH` is inherited only when it is
+listed; the engine never adds the repository or `.` to `PATH`.
+
+## Platform overrides
 
 `platform` may contain `linux`, `macos`, and `windows`. For the current host,
-provided `argv`, `cwd`, `timeout`, and `exit_classes` replace their common
-values; environment keys merge over the common map. Unspecified fields retain
-the common value. The resulting command must still validate.
+provided `argv`, `cwd`, `timeout`, `exit_classes`, and `inherit_environment`
+replace their common values; literal `environment` keys overlay the common
+map. Unspecified fields retain the common value. The resulting command must
+still validate.
 
 A directly invoked repository-local launcher is an effective `argv[0]` that
 resolves inside the clone rather than through the host `PATH`. Every such
-common or platform-specific launcher MUST match `scope.review`. Scope is
-evaluated before command execution. If a candidate changes a launcher, no
-prepare/check command runs and the result is `NEEDS_HUMAN`; the changed bytes
-are not executed. This rule does not make candidate source or test inputs
-trusted.
+common or platform-specific launcher MUST match
+`scope.review_required_paths`. Scope is evaluated before command execution. If
+a candidate changes a launcher, no configured command runs and the result is
+`NEEDS_HUMAN`; the changed bytes are not executed. This rule does not make
+candidate source or test inputs trusted.
 
 Timeout defaults to 600 seconds and cannot exceed 86,400 seconds. Exit-class
 integers use the inclusive range -2,147,483,648 through 4,294,967,295 so the
@@ -119,10 +177,19 @@ on either side is `ERROR`; otherwise the exit-class dimension fails only when
 the candidate regresses from `pass` to `fail`. Assertions may independently
 fail it.
 
-`blocking` failures affect the verdict, and blocking errors or skipped checks
-require human review. `advisory` and `informational` statuses are retained but
-do not affect the verdict; advisory failures are highlighted above purely
-informational observations.
+An ordinary classified failure never short-circuits the other differential
+side or later checks. When the host and evidence budget remain usable, a
+check-level error also does not suppress later independent checks.
+
+| Severity | ordinary `FAIL` | `ERROR` or required `SKIPPED` |
+|---|---|---|
+| `blocking` | `FAIL` | `NEEDS_HUMAN` |
+| `advisory` | `NEEDS_HUMAN` | `NEEDS_HUMAN` |
+| `informational` | recorded only | `NEEDS_HUMAN` |
+
+Timeout, missing tool or inherited variable, signal, unclassified exit,
+preparation failure, required-report problem, invalid assertion operand, and
+required skip always produce `NEEDS_HUMAN` regardless of severity.
 
 ## Reports and assertions
 
@@ -147,10 +214,11 @@ is `eq`, `ne`, `gt`, `gte`, `lt`, or `lte`. Ordered comparisons require
 compatible finite numbers; invalid or unavailable operands are `ERROR`.
 
 Report IDs are unique within a check, and every assertion must reference a
-declared report. Those rules, pairwise-disjoint exit codes, and mode/comparison
-compatibility, negative codes outside the error class, and uncovered local
-launchers are semantic validation errors (exit 3), even where JSON Schema
-cannot express them.
+declared report. Preparation/check IDs are globally unique. Those rules,
+pairwise-disjoint exit codes, mode/comparison compatibility, negative codes
+outside the error class, platform-resolved environment-name collisions or
+reserved names, and uncovered local launchers are semantic validation errors
+(exit 3), even where JSON Schema cannot express them.
 
 ## Evidence budgets
 

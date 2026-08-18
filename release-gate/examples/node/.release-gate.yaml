@@ -1,34 +1,41 @@
 version: 1
 
 scope:
-  allowed:
+  allowed_paths:
     - "src/**"
     - "test/**"
     - "tests/**"
     - "package.json"
     - "package-lock.json"
     - "README.md"
-  forbidden:
-    - ".release-gate.yaml"
+  forbidden_paths:
     - ".github/**"
-  review:
+  review_required_paths:
+    - ".release-gate.yaml"
     - "SECURITY.md"
     - "LICENSE*"
 
 prepare:
-  argv: ["npm", "ci", "--ignore-scripts"]
-  cwd: "."
-  timeout: 600
-  environment:
-    npm_config_audit: "false"
-    npm_config_fund: "false"
-  exit_classes:
-    pass: [0]
-    fail: [1]
-    error: []
-  platform:
-    windows:
-      argv: ["npm.cmd", "ci", "--ignore-scripts"]
+  - id: install-dependencies
+    argv: ["npm", "ci", "--ignore-scripts"]
+    cwd: "."
+    timeout: 600
+    inherit_environment:
+      - "PATH"
+    environment:
+      npm_config_audit: "false"
+      npm_config_fund: "false"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: []
+    platform:
+      windows:
+        argv: ["npm.cmd", "ci", "--ignore-scripts"]
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"
 
 limits:
   stream_bytes: 1048576
@@ -48,6 +55,8 @@ checks:
       - "--reporters=jest-junit"
     cwd: "."
     timeout: 600
+    inherit_environment:
+      - "PATH"
     environment:
       CI: "true"
       JEST_JUNIT_OUTPUT_FILE: "junit.xml"
@@ -64,6 +73,10 @@ checks:
           - "--runInBand"
           - "--reporters=default"
           - "--reporters=jest-junit"
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"
     reports:
       - id: junit
         parser: junit-xml
@@ -87,6 +100,8 @@ checks:
     argv: ["node", "node_modules/eslint/bin/eslint.js", "src", "test", "tests", "--no-cache"]
     cwd: "."
     timeout: 600
+    inherit_environment:
+      - "PATH"
     environment:
       CI: "true"
     exit_classes:
@@ -96,3 +111,7 @@ checks:
     platform:
       windows:
         argv: ["node.exe", "node_modules/eslint/bin/eslint.js", "src", "test", "tests", "--no-cache"]
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"

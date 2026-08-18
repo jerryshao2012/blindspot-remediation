@@ -26,9 +26,12 @@ The engine MUST:
 
 - resolve the base to an immutable commit before policy loading;
 - never load policy or check definitions from candidate-modified bytes;
-- require directly invoked repository-local launchers to match `scope.review`,
-  evaluate scope before execution, and execute no repository command when a
-  candidate changes one of those launchers;
+- treat any candidate change to `.release-gate.yaml` as non-configurable
+  preflight `NEEDS_HUMAN`, using base policy and executing no configured
+  command;
+- require directly invoked repository-local launchers to match
+  `scope.review_required_paths`, evaluate scope before execution, and execute
+  no configured command when a candidate changes one of those launchers;
 - capture the candidate with a temporary Git index without changing the real
   index or source working tree;
 - use distinct clean base and candidate clones and keep evidence outside them;
@@ -45,11 +48,22 @@ All other non-ignored untracked files are candidates and are included.
 
 ## Environment and secrets
 
-Checks receive a minimal platform environment plus literal entries declared in
-the trusted policy. The engine provides a temporary `HOME` and temporary-file
-directory per clone and does not automatically forward CI tokens, cloud
-credentials, SSH agents, credential-helper sockets, or the full developer
-environment. A minimal `PATH` is retained so approved host tools can run.
+Checks receive no implicit host environment. Each command copies only names in
+its closed `inherit_environment` list, then overlays literal `environment`
+values. A requested inherited name that is absent is an evidence error. The
+engine does not automatically forward `PATH`, CI tokens, cloud credentials,
+SSH agents, credential-helper sockets, or the full developer environment.
+
+On POSIX, names are case-sensitive; on Windows, identity is case-insensitive
+and evidence names are uppercased. Same-name inherited/literal overlap is
+allowed and the literal wins; case-colliding duplicates within a list or map
+are invalid. Platform literal values overlay common values, while a platform
+inherit list replaces the common list.
+
+The engine injects clone-specific home/temp values after both configured
+layers. Policies cannot inherit or set POSIX `HOME`/`TMPDIR`, Windows
+`USERPROFILE`/`HOMEDRIVE`/`HOMEPATH`/`TEMP`/`TMP`, or any name with the
+`RELEASE_GATE_` prefix. The engine never adds `.` or a clone path to `PATH`.
 
 Configuration has no environment-variable interpolation or secret reference
 feature. Do not put secrets in `.release-gate.yaml`: the effective policy is
@@ -67,12 +81,19 @@ submodule surprises not represented by the base, and ambiguous case-folding
 collisions on the host. The source repository, its index, and its refs remain
 read-only to the engine.
 
-Artifact paths use POSIX separators in contracts and native paths only after
-validated joining. Report collection opens only regular files whose resolved
-location remains inside the appropriate clone. FIFOs, devices, sockets, and
-escaping symlinks are rejected as evidence errors. Contract paths reject
-leading `/`, UNC/device syntax, Windows drive prefixes (including `C:relative`
-forms), backslashes, and `..` traversal before native path conversion.
+Artifact paths use Unicode NFC and POSIX separators in contracts and native
+paths only after validated joining. They reject leading `/`, UNC/device
+syntax, Windows drive prefixes (including `C:relative` forms), backslashes,
+empty/`.`/`..` components, leading `./`, and trailing `/`. Each lexical path
+appears exactly once. On every host the verifier also rejects two paths whose
+NFC forms have the same Unicode `casefold()`, preventing Windows case-fold
+aliases in evidence transported across platforms. That portable key is also
+compared with `manifest.json`; case variants and non-ASCII casefold aliases of
+the manifest name are forbidden artifact paths.
+
+Report collection opens only regular files whose resolved location remains
+inside the appropriate clone. FIFOs, devices, sockets, and escaping symlinks
+are rejected as evidence errors.
 
 ## Evidence claims
 
@@ -92,4 +113,5 @@ Pin and review the gate version, review base-policy changes like production
 code, keep dependency installation deterministic, and select an explicit base
 commit. In CI, use an ephemeral low-privilege runner without unrelated secrets.
 Archive evidence before deleting the workspace. A `PASS` is a policy result,
-not a guarantee of security, correctness, or authorization to deploy.
+not a guarantee of security or correctness; the gate neither performs nor
+authorizes a merge or deployment.

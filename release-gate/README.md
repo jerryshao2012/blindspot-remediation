@@ -50,9 +50,9 @@ files are not silently reinterpreted.
 candidate verdict exits 3. An unrecoverable internal failure before complete
 result/evidence finalization exits 4.
 
-`PASS` means eligible under the recorded gate policy. It is not deployment
-authorization, a security attestation, or proof that the software is defect
-free.
+`PASS` means eligible under the recorded gate policy. The gate neither performs
+nor authorizes a merge or deployment. It is not a security attestation or
+proof that the software is defect free.
 
 ## Existing demo
 

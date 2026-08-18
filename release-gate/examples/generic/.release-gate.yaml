@@ -1,19 +1,21 @@
 version: 1
 
 scope:
-  allowed:
+  allowed_paths:
     - "src/**"
     - "tests/**"
     - "tools/**"
     - "README.md"
-  forbidden:
-    - ".release-gate.yaml"
+  forbidden_paths:
     - ".github/**"
-  review:
+  review_required_paths:
+    - ".release-gate.yaml"
     - "SECURITY.md"
     - "LICENSE*"
     - "tools/project-gate-check"
     - "tools/project-gate-check.exe"
+
+prepare: []
 
 limits:
   stream_bytes: 1048576
@@ -27,6 +29,8 @@ checks:
     argv: ["./tools/project-gate-check", "--metrics", "gate-metrics.json"]
     cwd: "."
     timeout: 600
+    inherit_environment:
+      - "PATH"
     environment:
       CI: "true"
     exit_classes:
@@ -36,6 +40,10 @@ checks:
     platform:
       windows:
         argv: ["tools/project-gate-check.exe", "--metrics", "gate-metrics.json"]
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"
     reports:
       - id: metrics
         parser: json-metrics

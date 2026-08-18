@@ -21,9 +21,12 @@ Every completed run has this exact layout:
             └── reports/...
 ```
 
-Candidate-only checks omit `base/`. The reserved check ID `prepare` stores
-preparation executions. A configured report retains its bytes below
-`reports/<report-id>` with a safe extension derived from the source path.
+Candidate-only checks omit `base/`. Each ordered preparation item uses its own
+configured `id` in the same globally unique namespace as check IDs; its phase
+is `prepare` in the manifest. The manifest field named `check_id` carries that
+preparation ID when `phase` is `prepare`; it is the control ID for both phases.
+A configured report retains its bytes below `reports/<report-id>` with a safe
+extension derived from the source path.
 Absent or truncated artifacts are represented by reason codes in the result,
 trace, and manifest; empty stand-in files are not fabricated.
 
@@ -35,7 +38,8 @@ machine interface. It contains:
 - contract version, run ID, verdict, corresponding exit code, and reason codes;
 - base commit, reconstructed candidate tree, patch digest, and policy digest;
 - start/end timestamps and duration;
-- scope findings;
+- scope findings as `changed_paths`, `outside_allowed_paths`,
+  `forbidden_paths`, and `review_required_paths`;
 - each check's mode, severity, status, reason codes, and assertion outcomes; and
 - the relative `manifest.json` path.
 
@@ -47,8 +51,10 @@ the recorded policy.
 ## Manifest and verification
 
 `manifest.json`, validated by `schemas/manifest-v1.schema.json`, is written
-last. It hashes every retained artifact other than itself with SHA-256 and
-records:
+last. Its artifact array MUST contain `result.json`, `candidate.patch`,
+`effective-config.json`, and `trace.json` exactly once, plus every retained
+control log/report exactly once. It MUST NOT inventory `manifest.json`, because
+a file cannot contain its own final digest. It records:
 
 - the resolved base commit and reconstructed candidate tree;
 - candidate patch and effective-configuration digests;
@@ -65,11 +71,20 @@ through 4,294,967,295, covering negative POSIX signal return codes and unsigned
 Windows 32-bit statuses. Signal termination still classifies as an evidence
 error.
 
-Artifact paths are relative, normalized, unique, and cannot escape the run
-directory. Verification rejects missing, extra, duplicate, changed-size, or
-changed-digest retained artifacts. Because a manifest cannot recursively hash
-itself, callers that transport evidence SHOULD hash or sign the complete
-directory with an external system.
+Artifact paths are Unicode NFC, repository-style relative paths. They cannot
+start `./`, contain empty, `.` or `..` components, end `/`, use backslashes,
+or be absolute/drive/UNC/device paths. Each retained artifact has exactly one
+entry. Semantic validation rejects duplicate lexical paths and any pair whose
+NFC strings have equal Unicode `casefold()` values, even on a case-sensitive
+host, so a Windows verifier cannot alias them. It also reserves the manifest's
+own NFC-plus-casefold key: no artifact path may be equal under that comparison
+to `manifest.json`, including `Manifest.json` and non-ASCII casefold aliases.
+
+Verification walks the run directory (excluding `manifest.json`) and rejects
+missing, extra, aliased, duplicate, changed-size, or changed-digest retained
+artifacts. The exclusion is the same NFC-plus-casefold manifest key, not only
+an exact-case spelling. Callers that transport evidence SHOULD hash or sign
+the complete directory with an external system.
 
 Local evidence is **tamper-evident, not immutable**. The manifest detects
 changes relative to the manifest, but anyone able to rewrite both artifacts

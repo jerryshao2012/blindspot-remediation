@@ -56,15 +56,19 @@ tree object, and records that tree ID. A patch that cannot be reconstructed
 unambiguously is invalid candidate input (exit 3). The real index, working
 tree, and base repository are never mutated.
 
-Candidate edits to `.release-gate.yaml` never change the policy used for the
-current run. Other repository scripts are judged by their configured scope;
-directly invoked launchers have the stronger rule below.
+Any candidate addition, modification, rename, or deletion of
+`.release-gate.yaml` is a non-configurable preflight review condition. The
+engine still uses policy from the base, executes no configured preparation or
+check command, marks every configured control `SKIPPED` with
+`POLICY_FILE_CHANGED`, and finalizes `NEEDS_HUMAN`. Scope configuration cannot
+weaken this invariant.
 
 Every directly invoked repository-local prepare/check launcher, including a
-launcher selected by a platform override, MUST be covered by `scope.review`.
-This is a semantic configuration requirement. Scope is evaluated before any
-repository process starts. If the candidate changes one of those launchers,
-the engine runs no prepare or check command, marks them `SKIPPED` with
+launcher selected by a platform override, MUST be covered by
+`scope.review_required_paths`. This is a semantic configuration requirement.
+Scope is evaluated before any repository process starts. If the candidate
+changes one of those launchers, the engine runs no preparation or check
+command, marks every configured control `SKIPPED` with
 `CONTROL_LAUNCHER_REVIEW`, and returns `NEEDS_HUMAN`. Candidate-modified
 launcher bytes are never executed. Candidate source, tests, and other command
 inputs remain the code under evaluation and may execute on the trusted host.
@@ -76,8 +80,8 @@ source repository
   -> resolve base + load/validate base policy
   -> capture working-tree patch through temporary index
   -> create independent base and candidate clones
-  -> evaluate scope and stop on a changed repository-local launcher
-  -> run optional prepare command in each required clone
+  -> evaluate invariant policy/launcher tamper and configured scope
+  -> run ordered preparation steps in each required clone
   -> run configured checks
   -> parse bounded reports and evaluate assertions
   -> aggregate verdict (NEEDS_HUMAN > FAIL > PASS)
@@ -91,10 +95,18 @@ order. A differential check runs base first and candidate second; a candidate
 check runs only in the candidate clone. V1 deliberately provides no plugin or
 adapter hook that can alter this flow.
 
-The optional `prepare` command runs independently in both clones before any
-check. Any prepare spawn failure, timeout, non-pass exit, or interrupted run
-means required evidence is unavailable and produces `NEEDS_HUMAN` with a
-finalized result. Checks that could not run are marked `SKIPPED`.
+`prepare` is an optional ordered array of explicitly identified command
+specifications. The base workspace is required when at least one differential
+check exists; the candidate workspace is always required. For each preparation
+item in declaration order, the engine runs base first when required and
+candidate second before advancing to the next item. Its `id` is the stable
+evidence ID under `controls/<id>/<side>/`, and all preparation and check IDs
+are unique together.
+
+Any preparation `fail` or `error`, spawn failure, timeout, missing inherited
+environment variable, or interruption yields `NEEDS_HUMAN`, stops remaining
+preparation and all checks, and records the unrun required controls as
+`SKIPPED`. Preparation is infrastructure setup and never produces `FAIL`.
 
 ## Check evaluation
 
@@ -108,6 +120,14 @@ candidate `fail` is a check failure only when the base was `pass`. A candidate
 that stays at `fail` or improves to `pass` has not regressed on the exit-class
 dimension. Assertions can still fail the check.
 
+An ordinary classified `fail` never short-circuits the other differential
+side or any later check. Both sides and subsequent checks still run so a later
+evidence error can correctly outrank a failure. A check-level `ERROR` also does
+not stop later checks when the host and evidence budget remain usable. The
+only scheduling stops are preflight policy/launcher review, preparation
+failure, global evidence-budget exhaustion, operator interruption, or an
+unrecoverable engine/host failure.
+
 Report assertions select a normalized metric from the candidate, baseline,
 or numeric candidate-minus-baseline value and compare it with a literal using
 `eq`, `ne`, `gt`, `gte`, `lt`, or `lte`. Invalid metric types or unavailable
@@ -115,22 +135,31 @@ required operands are evidence errors, not candidate failures.
 
 ## Severity and verdict aggregation
 
-- `blocking`: `FAIL` contributes `FAIL`; `ERROR` or `SKIPPED` contributes
-  `NEEDS_HUMAN`.
-- `advisory`: status and reasons are prominently recorded but do not affect
-  the verdict.
-- `informational`: observations are recorded but do not affect the verdict.
+| Severity | `PASS` | ordinary classified `FAIL` | `ERROR` or required `SKIPPED` |
+|---|---|---|---|
+| `blocking` | no effect | contributes `FAIL` | contributes `NEEDS_HUMAN` |
+| `advisory` | no effect | contributes `NEEDS_HUMAN` | contributes `NEEDS_HUMAN` |
+| `informational` | no effect | recorded only | contributes `NEEDS_HUMAN` |
+
+Timeout, missing tool, signal termination, unclassified exit, preparation
+failure, missing/invalid/oversized required report, assertion operand error,
+and required skip always contribute `NEEDS_HUMAN`, regardless of severity.
+Severity can soften an ordinary informational failure; it cannot turn missing
+required assurance into a pass.
 
 Scope is an engine invariant and always contributes to the verdict. A changed
-path outside `scope.allowed` or matching `scope.forbidden` contributes
-`FAIL`. A path matching `scope.review` contributes `NEEDS_HUMAN`. All matches
-are retained, so a review requirement outranks a simultaneous failure.
+path outside `scope.allowed_paths` or matching `scope.forbidden_paths`
+contributes `FAIL`. A path matching `scope.review_required_paths` contributes
+`NEEDS_HUMAN`. All matches are retained, so a review requirement outranks a
+simultaneous failure.
 
 Aggregation is deterministic:
 
-1. any blocking evidence error, skipped blocking check, prepare error, or
-   review-scoped path -> `NEEDS_HUMAN`;
-2. otherwise any blocking check failure or scope violation -> `FAIL`;
+1. policy-file/launcher preflight review, any required-evidence error or skip,
+   preparation failure, advisory failure, or review-required path ->
+   `NEEDS_HUMAN`;
+2. otherwise any blocking check failure or forbidden/out-of-scope path ->
+   `FAIL`;
 3. otherwise -> `PASS`.
 
 This precedence is not configurable.

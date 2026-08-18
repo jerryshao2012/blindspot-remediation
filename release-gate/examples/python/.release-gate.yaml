@@ -1,31 +1,38 @@
 version: 1
 
 scope:
-  allowed:
+  allowed_paths:
     - "src/**"
     - "tests/**"
     - "pyproject.toml"
     - "README.md"
-  forbidden:
-    - ".release-gate.yaml"
+  forbidden_paths:
     - ".github/**"
-  review:
+  review_required_paths:
+    - ".release-gate.yaml"
     - "SECURITY.md"
     - "LICENSE*"
 
 prepare:
-  argv: ["python3", "-m", "pip", "install", "--target", ".release-gate-deps", ".[test]"]
-  cwd: "."
-  timeout: 600
-  environment:
-    PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  exit_classes:
-    pass: [0]
-    fail: [1]
-    error: []
-  platform:
-    windows:
-      argv: ["py", "-3", "-m", "pip", "install", "--target", ".release-gate-deps", ".[test]"]
+  - id: install-dependencies
+    argv: ["python3", "-m", "pip", "install", "--target", ".release-gate-deps", ".[test]"]
+    cwd: "."
+    timeout: 600
+    inherit_environment:
+      - "PATH"
+    environment:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: []
+    platform:
+      windows:
+        argv: ["py", "-3", "-m", "pip", "install", "--target", ".release-gate-deps", ".[test]"]
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"
 
 limits:
   stream_bytes: 1048576
@@ -45,6 +52,8 @@ checks:
       - "--cov-report=json:coverage.json"
     cwd: "."
     timeout: 600
+    inherit_environment:
+      - "PATH"
     environment:
       CI: "true"
       PYTHONPATH: ".release-gate-deps"
@@ -62,6 +71,10 @@ checks:
           - "--junitxml=junit.xml"
           - "--cov=src"
           - "--cov-report=json:coverage.json"
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"
     reports:
       - id: junit
         parser: junit-xml
@@ -99,6 +112,8 @@ checks:
     argv: ["python3", "-m", "mypy", "src"]
     cwd: "."
     timeout: 600
+    inherit_environment:
+      - "PATH"
     environment:
       PYTHONPATH: ".release-gate-deps"
     exit_classes:
@@ -108,3 +123,7 @@ checks:
     platform:
       windows:
         argv: ["py", "-3", "-m", "mypy", "src"]
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"

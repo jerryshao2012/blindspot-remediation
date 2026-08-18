@@ -167,9 +167,9 @@
         "status",
         "reason_codes",
         "changed_paths",
-        "outside_allowed",
-        "forbidden",
-        "review"
+        "outside_allowed_paths",
+        "forbidden_paths",
+        "review_required_paths"
       ],
       "properties": {
         "status": {
@@ -181,13 +181,13 @@
         "changed_paths": {
           "$ref": "#/$defs/pathArray"
         },
-        "outside_allowed": {
+        "outside_allowed_paths": {
           "$ref": "#/$defs/pathArray"
         },
-        "forbidden": {
+        "forbidden_paths": {
           "$ref": "#/$defs/pathArray"
         },
-        "review": {
+        "review_required_paths": {
           "$ref": "#/$defs/pathArray"
         }
       }
