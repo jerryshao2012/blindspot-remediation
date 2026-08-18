@@ -15,6 +15,7 @@ DEMO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WB="$DEMO/workbench"
 REPO="$WB/python-slugify"
 VENV="$WB/venv"
+GATE_TOOLS=(pytest pytest-cov mypy ruff)
 
 # Pinned baseline: verified 82/82 green on 2026-08-16.
 SHA=7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4
@@ -28,7 +29,6 @@ if [[ "${1:-}" == "reset" ]]; then
   # (try/except import). If a previous run installed it, the next baseline
   # would silently use the wrong backend. Remove it.
   "$VENV/bin/pip" uninstall -q -y Unidecode 2>/dev/null || true
-  "$VENV/bin/pip" install -q -e "$REPO"
 else
   mkdir -p "$WB"
   if [[ ! -d "$REPO/.git" ]]; then
@@ -42,8 +42,9 @@ else
   fi
   # NOTE: deliberately does NOT install Unidecode — the baseline backend
   # must be text-unidecode, which the package itself declares.
-  "$VENV/bin/pip" install -q -e "$REPO" pytest
 fi
+
+"$VENV/bin/pip" install -q -e "$REPO" "${GATE_TOOLS[@]}"
 
 echo "== baseline check: the suite must be green BEFORE any change =="
 "$VENV/bin/python" -m pytest "$REPO/test.py" -q

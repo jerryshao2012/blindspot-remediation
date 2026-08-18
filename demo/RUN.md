@@ -233,10 +233,14 @@ Five sizes the bill; it does not prove the pipeline works.
 
 ## If something goes wrong
 
-- **Gate says NEEDS_HUMAN with `tool:… not installed`.** Run
-  `demo/workbench/venv/bin/pip install pytest pytest-cov mypy ruff` and re-run
-  step 4. That is the gate refusing to grade without its tools — correct
-  behaviour, boring cause.
+- **Gate says NEEDS_HUMAN with `tool:… not installed`.** Setup and reset
+  normally install all four gate tools. If one goes missing during an
+  evaluation, restore it without touching the candidate:
+  `demo/workbench/venv/bin/pip install pytest pytest-cov mypy ruff`, then
+  re-run step 4. That is the gate refusing to grade without its tools —
+  correct fail-closed behaviour, boring infrastructure cause. Do not run
+  `bash demo/setup_workbench.sh reset` here: reset discards candidate changes;
+  use it only before or after a run.
 - **Baseline check in step 1 is not 82 passed.** Stop. Do not run anything on
   a broken baseline. Delete `demo/workbench/` and run `bash
   demo/setup_workbench.sh` (without `reset`) to rebuild it from scratch.

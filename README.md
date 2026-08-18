@@ -285,7 +285,6 @@ does not exist on macOS — before any control was planted. Good.)
 
 ```bash
 bash demo/setup_workbench.sh
-demo/workbench/venv/bin/pip install pytest-cov mypy ruff
 ```
 
 **One run, driven by hand — follow [demo/RUN.md](demo/RUN.md).** In short:
