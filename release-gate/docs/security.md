@@ -32,6 +32,11 @@ The engine MUST:
 - require directly invoked repository-local launchers to match
   `scope.review_required_paths`, evaluate scope before execution, and execute
   no configured command when a candidate changes one of those launchers;
+- canonically resolve the evidence root and proposed run directory before
+  candidate capture, reject symlink/containment aliases into the source except
+  for the exact default, always reject aliases into the absolute per-worktree
+  `--git-dir`, shared `--git-common-dir`, or execution clones, and recheck
+  identity after creation;
 - capture the candidate with a temporary Git index without changing the real
   index or source working tree;
 - use distinct clean base and candidate clones and keep evidence outside them;
@@ -43,8 +48,18 @@ The engine MUST:
   and
 - treat unavailable required evidence as `NEEDS_HUMAN`, never as a pass.
 
-The engine-owned `.release-gate/runs` path is excluded from candidate capture.
-All other non-ignored untracked files are candidates and are included.
+Only the canonical default `.release-gate/runs` is an engine-owned
+in-repository exception and only that exact repository-relative subtree is
+excluded from candidate capture. A custom root whose normalized spelling or
+any existing-prefix identity encountered during canonical resolution enters
+the source repository, per-worktree Git directory, or shared Git common
+directory is rejected, not excluded; all other non-ignored untracked files
+remain candidates. This catches symlinks that enter and then leave a protected
+tree. The default exception never permits Git-metadata or clone containment.
+A custom root may be an ancestor of a protected path only when its final run
+directory is disjoint from every protected path. Checks use component-aware
+containment with native Windows case behavior, not textual prefixes, and are
+repeated after creating previously nonexistent components.
 
 ## Environment and secrets
 
@@ -85,14 +100,18 @@ collisions on the host. The source repository, its index, and its refs remain
 read-only to the engine.
 
 Artifact paths use Unicode NFC and POSIX separators in contracts and native
-paths only after validated joining. They reject leading `/`, UNC/device
-syntax, Windows drive prefixes (including `C:relative` forms), backslashes,
-empty/`.`/`..` components, leading `./`, and trailing `/`. Each lexical path
-appears exactly once. On every host the verifier also rejects two paths whose
-NFC forms have the same Unicode `casefold()`, preventing Windows case-fold
-aliases in evidence transported across platforms. That portable key is also
-compared with `manifest.json`; case variants and non-ASCII casefold aliases of
-the manifest name are forbidden artifact paths.
+paths only after validated joining. Each component is 1-128 Unicode code
+points and rejects ASCII controls, Windows-illegal `<>:"/\|?*`, a trailing
+dot or space, empty/dot/dotdot names, and case-insensitive DOS device basenames
+`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, and `LPT1`-`LPT9`, including with
+extensions. Paths have at most 32 components and 1,024 code points total, so
+leading `/`, UNC/device syntax, drive forms, leading `./`, and trailing `/`
+are also invalid. Each lexical path appears exactly once. On every host the
+verifier rejects non-NFC components and two paths whose NFC forms have the
+same Unicode `casefold()`, preventing aliases in evidence transported across
+platforms. That portable key is also compared with `manifest.json`; case
+variants and non-ASCII casefold aliases of the manifest name are forbidden
+artifact paths.
 
 Report collection opens only regular files whose resolved location remains
 inside the appropriate clone. FIFOs, devices, sockets, and escaping symlinks

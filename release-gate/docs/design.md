@@ -35,6 +35,28 @@ virtual environments, dependency directories, and reports inside the relevant
 clone; a trusted policy can otherwise defeat this separation by naming a
 shared or absolute location.
 
+## Evidence destination preflight
+
+Before candidate capture, the engine canonically resolves the source worktree,
+its `.git` entry, the absolute per-worktree `--git-dir`, the absolute shared
+`--git-common-dir`, the selected evidence root, and the proposed run directory
+through existing ancestors and symlinks. A relative custom root is anchored to
+the invocation working directory. Containment uses path components and native
+case rules rather than string prefixes, and the engine checks both normalized
+spellings and every existing-prefix identity encountered during resolution.
+It re-resolves after directory creation to detect an alias or identity change.
+
+The canonical default `<repo>/.release-gate/runs` is the sole engine-owned
+in-repository exception. A canonical alias of that exact directory has the
+same identity; no other in-repository spelling or target is accepted. This
+exception permits containment only in the source worktree, never in Git
+metadata or a clone. A custom root may not equal or be below the source, either
+Git metadata directory, or a clone. It may be an ancestor of a protected path
+only when its final `<run-id>` directory is disjoint from every protected path.
+The engine chooses clone locations that are also disjoint from the effective
+evidence root and rechecks before any repository command. An unsafe destination
+is invalid input (exit 3), not a candidate verdict.
+
 ## Candidate reconstruction
 
 `run` resolves `--base` to a commit before executing anything. It reads
@@ -47,7 +69,8 @@ developer's real index, the engine:
 1. creates a temporary Git index;
 2. populates it with the base tree using `git read-tree`;
 3. stages the current working tree into that temporary index with
-   `git add -A`, including non-ignored untracked files and deletions; and
+   `git add -A`, including non-ignored untracked files and deletions but
+   excluding only the exact default `.release-gate/runs/` subtree; and
 4. emits a binary-safe staged diff against the base commit.
 
 Ignored files and `.git/` are excluded by Git. The engine hashes the patch,
@@ -78,6 +101,7 @@ inputs remain the code under evaluation and may execute on the trusted host.
 ```text
 source repository
   -> resolve base + load/validate base policy
+  -> canonicalize and validate evidence destination
   -> capture working-tree patch through temporary index
   -> create independent base and candidate clones
   -> evaluate invariant policy/launcher tamper and configured scope
@@ -128,10 +152,12 @@ only scheduling stops are preflight policy/launcher review, preparation
 failure, global evidence-budget exhaustion, operator interruption, or an
 unrecoverable engine/host failure.
 
-Report assertions select a normalized metric from the candidate, baseline,
-or numeric candidate-minus-baseline value and compare it with a literal using
-`eq`, `ne`, `gt`, `gte`, `lt`, or `lte`. Invalid metric types or unavailable
-required operands are evidence errors, not candidate failures.
+Report assertions use an RFC 6901 pointer to select a normalized metric from
+the candidate, baseline, or numeric candidate-minus-baseline value and compare
+it with a literal using `eq`, `ne`, `gt`, `gte`, `lt`, or `lte`. The empty
+pointer selects the entire parsed report value; `/` selects an empty-key member.
+Invalid metric types or unavailable required operands are evidence errors, not
+candidate failures.
 
 ## Severity and verdict aggregation
 
@@ -174,13 +200,15 @@ engine defect or host failure that prevents complete evidence and
 
 The engine writes run artifacts to temporary names, fsyncs where supported,
 renames `result.json` only after it is complete, and writes `manifest.json`
-last. An existing run ID is never overwritten.
+last. An existing or portable-casefold-equivalent run ID is never overwritten.
 
 ## Portability
 
-Paths in policy and evidence use repository-relative POSIX separators.
-Commands use native argv without shell syntax. Platform overrides are explicit
-and limited to the three v1 operating-system families. Required verification
-covers Linux, macOS, and Windows, filenames with spaces and Unicode, binary
-patches, symlinks where Git supports them, timeouts, signals, and interrupted
-runs.
+Paths in policy and evidence use repository-relative POSIX separators. Every
+engine-created filesystem component follows the bounded portable grammar in
+the configuration, CLI, and evidence contracts; artifact components are NFC
+and are checked for Unicode-casefold collisions. Commands use native argv
+without shell syntax. Platform overrides are explicit and limited to the three
+v1 operating-system families. Required verification covers Linux, macOS, and
+Windows, filenames with spaces and Unicode, binary patches, symlinks where Git
+supports them, timeouts, signals, and interrupted runs.

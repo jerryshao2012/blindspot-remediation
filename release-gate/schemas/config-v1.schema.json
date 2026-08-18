@@ -36,7 +36,10 @@
   "$defs": {
     "id": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Portable preparation, check, or report identifier.",
+      "pattern": "^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$))[a-z](?:[a-z0-9._-]{0,62}[a-z0-9_-])?(?![\\s\\S])"
     },
     "relativePath": {
       "type": "string",
@@ -270,7 +273,7 @@
         },
         "metric": {
           "type": "string",
-          "pattern": "^(?:/(?:[^~/]|~[01])*)+$"
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*(?![\\s\\S])"
         },
         "comparison": {
           "enum": ["candidate", "baseline", "candidate-minus-baseline"]

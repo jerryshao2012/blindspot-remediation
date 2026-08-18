@@ -35,7 +35,9 @@ do not silently extend the contract.
 
 - [ ] Write tests that load all three schemas with
   `Draft202012Validator.check_schema`, validate every example, and reject
-  representative unknown fields and invalid versions.
+  representative unknown fields and invalid versions. Add shared contract
+  probes for portable run/control/report IDs, per-component artifact paths,
+  and the empty RFC 6901 root pointer.
 - [ ] Write an AST/import test proving `release_gate` imports no repository
   A-series/B-series modules and a filesystem test proving it does not depend
   on `demo/gate`.
@@ -61,6 +63,10 @@ do not silently extend the contract.
 - [ ] Test `prepare` as an ordered array, required IDs, duplicate IDs within
   preparation and globally across preparation/checks, stable ordering, and
   base-required/candidate-always workspace selection.
+- [ ] Test 1-64-character lowercase preparation/check/report IDs at both
+  length boundaries. Reject trailing dots, ASCII controls, Windows-illegal
+  characters, and case-insensitive `CON`/`PRN`/`AUX`/`NUL`/`COM1`-`COM9`/
+  `LPT1`-`LPT9` basenames with and without extensions.
 - [ ] Test the closed `inherit_environment` list separately from literal
   `environment`: literal-over-inherited precedence, missing host names,
   platform-list replacement and literal overlay, POSIX case sensitivity,
@@ -98,7 +104,8 @@ do not silently extend the contract.
   capture is absent.
 - [ ] Implement ref resolution, `git show` base-policy loading, an isolated
   temporary index initialized from base, `git add -A`, binary-safe patch
-  emission, and explicit exclusion of the engine evidence root.
+  emission, and exclusion of only the exact default `.release-gate/runs/`
+  subtree. Prove a custom in-repository path cannot create another exclusion.
 - [ ] Assert the real index/status are byte-for-byte unchanged and the patch
   digest is deterministic in repeated runs.
 - [ ] Run focused/full tests and commit with
@@ -112,6 +119,9 @@ do not silently extend the contract.
 - [ ] Write failing tests that require two different clone roots at the same
   base commit, apply the patch only to candidate, verify a candidate tree ID,
   and detect an unapplicable or escaping patch.
+- [ ] Require canonical component-aware disjointness among the effective run
+  directory, source/Git metadata, and both clones, including symlink aliases
+  and Windows case variants; retry clone placement or fail before execution.
 - [ ] Test that generated files in one clone never appear in the other and that
   both clones are removed after success and exceptions while evidence remains.
 - [ ] Run `python -m pytest tests/test_workspaces.py -q`; expect failure.
@@ -156,6 +166,9 @@ do not silently extend the contract.
 - [ ] Write failing golden tests for nested JUnit aggregation, coverage.py JSON,
   JSON Metrics plus RFC 6901 pointers, malformed data, non-finite values, XML
   entities, missing/escaping/special files, and 5 MiB/50 MiB boundaries.
+- [ ] Cover the empty pointer `""` selecting the whole document, `/` selecting
+  an empty-key member, `//`, and `~0`/`~1` escapes. Reject a bare name, `~2`,
+  and a dangling `~`; include scalar root `json-metrics` assertions.
 - [ ] Write a full comparison matrix for candidate, baseline,
   candidate-minus-baseline and `eq/ne/gt/gte/lt/lte`, including type and
   missing-operand errors.
@@ -211,9 +224,14 @@ do not silently extend the contract.
   and `trace.json` appear exactly once, `manifest.json` never self-inventories,
   and changed/missing/extra/duplicate artifacts fail verification.
 - [ ] Reject artifact aliases `./x`, `a//b`, `a/./b`, `a/../b`, trailing `/`,
-  absolute/drive/UNC/device/backslash paths, non-NFC strings, duplicate paths,
-  NFC+Unicode-casefold collisions such as `Log.txt`/`log.txt`, and every
-  NFC+casefold alias of the reserved `manifest.json` path.
+  absolute/drive/UNC/backslash paths, ASCII controls, Windows-illegal
+  `<>:"|?*`, trailing dot/space components, and all case variants of DOS
+  device basenames with extensions. Exercise 1/128/129-code-point component,
+  32/33-component, and 1,024/1,025-code-point path boundaries.
+- [ ] Reject non-NFC components, duplicate paths, NFC+Unicode-casefold
+  collisions such as `Log.txt`/`log.txt`, and every NFC+casefold alias of the
+  reserved `manifest.json` path. Prove the closed `.xml`/`.json` report-name
+  mapping keeps a maximum-length report ID within the component limit.
 - [ ] Test stream truncation metadata, total 200 MiB exhaustion using injected
   small test limits, existing-run refusal, atomic rename, interrupted
   finalization, `.incomplete`, and manifest-last ordering.
@@ -232,6 +250,18 @@ do not silently extend the contract.
 - [ ] Write failing end-to-end tests for `init`, `validate`, and `run`, stable
   stdout lines, stderr diagnostics, no-overwrite behavior, base-policy loading,
   generic/Python/Node policies, and complete result paths.
+- [ ] Test run IDs at 1 and 128 characters and reject 129 characters, trailing
+  dot, ASCII controls, Windows-illegal characters, DOS device basenames with
+  extensions, and an existing NFC-plus-casefold-equivalent sibling. Prove
+  generated separator-free timestamp IDs satisfy the same grammar.
+- [ ] Resolve a relative custom evidence root against the invocation working
+  directory before capture. Test the implicit/explicit canonical default
+  exception; custom roots equal to or below the source, `.git` entry, absolute
+  per-worktree `git rev-parse --git-dir`, or absolute shared
+  `git rev-parse --git-common-dir`; inside-to-outside and outside-to-inside
+  symlink aliases; nonexistent suffix re-resolution; a safe outside root; an
+  ancestor root with a disjoint run directory; and collision with either
+  execution clone.
 - [ ] Prove candidate add/modify/rename/delete of `.release-gate.yaml` and a
   changed covered launcher execute zero repository commands, mark every
   preparation/check control `SKIPPED`, finalize `NEEDS_HUMAN`, and use base
@@ -277,6 +307,9 @@ commands and supported versions after packaging is proven.
   `python -m ruff check src tests`.
 - [ ] On every OS, run black-box PASS, FAIL, NEEDS_HUMAN, invalid-config, and
   injected-internal-failure cases and archive their schema-valid evidence.
+- [ ] On every OS, exercise portable ID/artifact boundary cases and canonical
+  evidence-root containment, including native case behavior and symlinks or
+  junctions where the platform permits them.
 - [ ] Exercise each platform override and native timeout/process-tree cleanup;
   compare verdict and reason-code parity across operating systems.
 - [ ] Build wheel/sdist, install each into a clean environment, invoke all three

@@ -132,7 +132,15 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 128,
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+      "description": "Portable evidence-directory component.",
+      "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|$))[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9_-])?(?![\\s\\S])"
+    },
+    "controlId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Portable preparation, check, or report identifier.",
+      "pattern": "^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$))[a-z](?:[a-z0-9._-]{0,62}[a-z0-9_-])?(?![\\s\\S])"
     },
     "sha256": {
       "type": "string",
@@ -210,12 +218,11 @@
       ],
       "properties": {
         "report": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+          "$ref": "#/$defs/controlId"
         },
         "metric": {
           "type": "string",
-          "pattern": "^(?:/(?:[^~/]|~[01])*)+$"
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*(?![\\s\\S])"
         },
         "comparison": {
           "enum": ["candidate", "baseline", "candidate-minus-baseline"]
@@ -250,8 +257,7 @@
       ],
       "properties": {
         "id": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+          "$ref": "#/$defs/controlId"
         },
         "mode": {
           "enum": ["candidate", "differential"]

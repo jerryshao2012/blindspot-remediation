@@ -1,6 +1,7 @@
 # Evidence Contract
 
-Every completed run has this exact layout:
+At the default effective evidence root, every completed run has this exact
+layout:
 
 ```text
 .release-gate/runs/<run-id>/
@@ -10,7 +11,7 @@ Every completed run has this exact layout:
 ├── effective-config.json
 ├── trace.json
 └── controls/
-    └── <check-id>/
+    └── <control-id>/
         ├── base/
         │   ├── stdout.log
         │   ├── stderr.log
@@ -21,14 +22,43 @@ Every completed run has this exact layout:
             └── reports/...
 ```
 
-Candidate-only checks omit `base/`. Each ordered preparation item uses its own
-configured `id` in the same globally unique namespace as check IDs; its phase
-is `prepare` in the manifest. The manifest field named `check_id` carries that
-preparation ID when `phase` is `prepare`; it is the control ID for both phases.
+For an accepted custom `--evidence-root`, the subtree beginning with
+`<run-id>/` is identical; only the effective root replaces
+`.release-gate/runs`. The manifest stores paths relative to the run directory,
+so its contents do not depend on the host root.
+
+Candidate-only checks omit `base/`. A **control ID** is the globally unique
+configured `id` of either a preparation item or a check. Each preparation
+item's phase is `prepare` in the manifest. The historical manifest field named
+`check_id` carries the control ID for both phases.
 A configured report retains its bytes below `reports/<report-id>` with a safe
-extension derived from the source path.
+extension selected only by its parser: `.xml` for `junit-xml` and `.json` for
+`coverage-json` or `json-metrics`. The longest generated filename is therefore
+69 characters for a 64-character report ID and remains within the component
+limit. An arbitrary source suffix is never copied into the evidence name.
 Absent or truncated artifacts are represented by reason codes in the result,
 trace, and manifest; empty stand-in files are not fabricated.
+
+## Portable path components
+
+Run IDs are 1-128 ASCII characters, begin with an ASCII letter or digit, use
+only letters, digits, `.`, `_`, and `-`, and cannot end in `.`. Preparation,
+check, and report IDs use the stricter 1-64-character lowercase grammar in the
+configuration contract. Neither grammar permits a case-insensitive DOS device
+basename (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, or `LPT1`-`LPT9`), even
+with an extension. Default run IDs use a separator-free UTC timestamp and a
+random suffix that satisfy this grammar.
+
+Every other artifact path component is 1-128 Unicode code points in NFC. It
+MUST NOT contain ASCII controls U+0000-U+001F or U+007F, any of
+`< > : " / \ | ? *`, or end in an ASCII space or `.`. Empty, `.`, and `..`
+components and the same case-insensitive DOS device basenames, including with
+extensions, are invalid. An artifact path uses `/` separators, contains at
+most 32 components, and is at most 1,024 Unicode code points in total.
+
+Before filesystem access, the engine enforces this grammar and NFC. It rejects
+casefold-equivalent run-directory siblings and casefold-equivalent artifact
+paths so evidence remains portable to case-insensitive filesystems.
 
 ## Stable result
 
@@ -71,14 +101,15 @@ through 4,294,967,295, covering negative POSIX signal return codes and unsigned
 Windows 32-bit statuses. Signal termination still classifies as an evidence
 error.
 
-Artifact paths are Unicode NFC, repository-style relative paths. They cannot
-start `./`, contain empty, `.` or `..` components, end `/`, use backslashes,
-or be absolute/drive/UNC/device paths. Each retained artifact has exactly one
-entry. Semantic validation rejects duplicate lexical paths and any pair whose
-NFC strings have equal Unicode `casefold()` values, even on a case-sensitive
-host, so a Windows verifier cannot alias them. It also reserves the manifest's
-own NFC-plus-casefold key: no artifact path may be equal under that comparison
-to `manifest.json`, including `Manifest.json` and non-ASCII casefold aliases.
+Artifact paths follow the portable component grammar above and are
+repository-style relative paths. Thus leading `./`, empty/dot components,
+trailing `/`, absolute/drive/UNC/device forms, and backslashes are invalid.
+Each retained artifact has exactly one entry. Semantic validation rejects
+duplicate lexical paths and any pair whose NFC strings have equal Unicode
+`casefold()` values, even on a case-sensitive host, so a Windows verifier
+cannot alias them. It also reserves the manifest's own NFC-plus-casefold key:
+no artifact path may be equal under that comparison to `manifest.json`,
+including `Manifest.json` and non-ASCII casefold aliases.
 
 Verification walks the run directory (excluding `manifest.json`) and rejects
 missing, extra, aliased, duplicate, changed-size, or changed-digest retained
@@ -126,7 +157,8 @@ Files are created with restrictive permissions subject to host support and
 are written through same-directory temporary files. `result.json` is renamed
 into place only when complete; `manifest.json` is the final file. A completed
 directory has no `.incomplete` marker. Run IDs are append-only: reruns use new
-IDs and never overwrite prior evidence.
+IDs and never overwrite prior evidence, including an NFC-plus-casefold sibling
+on a case-sensitive host.
 
 V1 does not prescribe retention duration or remote storage. Organizations may
 copy, sign, or retain the package according to their own controls without

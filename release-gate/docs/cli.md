@@ -38,16 +38,50 @@ release-gate run --base REF [--repo PATH] [--run-id ID]
 ```
 
 `--repo` defaults to the current directory. `--base` is required and must
-resolve to a local commit. `--run-id` defaults to a UTC timestamp plus random
-suffix and is limited to portable filename characters. The default evidence
-root is `<repo>/.release-gate/runs`; it is engine-owned and excluded from
-candidate capture. An existing run directory is never overwritten.
+resolve to a local commit. `--run-id` defaults to a separator-free UTC
+timestamp plus random suffix. It is a 1-128-character ASCII component that
+begins with a letter or digit, then uses only letters, digits, `.`, `_`, and
+`-`, cannot end in `.`, and cannot have a case-insensitive DOS device basename
+`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, or `LPT1`-`LPT9`, even with an
+extension. This allowed set excludes ASCII controls, empty/dot/dotdot names,
+spaces, and Windows-illegal `<>:"/\|?*`. An existing or
+NFC-plus-casefold-equivalent sibling run directory is never overwritten.
+
+The default evidence root is `<repo>/.release-gate/runs`. A relative custom
+`--evidence-root` is anchored to the invocation working directory, not to
+`--repo`. Before candidate capture, the engine resolves the repository root,
+its `.git` entry, per-worktree Git directory from `git rev-parse --git-dir`,
+shared metadata directory from `git rev-parse --git-common-dir`, the evidence
+root, and the proposed `<root>/<run-id>` through every existing ancestor and
+symlink. Git-reported paths are first made absolute. Nonexistent suffixes are
+appended to the canonical nearest existing ancestor. The engine performs
+component-aware containment using native case rules, never string-prefix
+comparison, and repeats canonicalization after creating the directory; any
+identity change is exit 3.
+
+Only a root whose canonical identity equals the canonical default is the
+engine-owned in-repository exception, whether selected implicitly or by an
+equivalent spelling. Only the exact repository-relative
+`.release-gate/runs/` subtree is excluded from candidate capture. Every other
+custom root is rejected if either its normalized spelling or canonical target
+or any existing-prefix identity encountered while resolving it is equal to or
+below the source repository, its `.git` entry, its per-worktree Git directory,
+or its shared Git common directory. This catches an in-repository symlink that
+later resolves outward as well as an outside alias that resolves inward. The
+default exception permits only source-worktree containment: it is still
+rejected if its canonical root or run directory enters either Git metadata
+directory or an execution clone. A custom root that is an ancestor of a
+protected path is accepted only when the final run directory is disjoint from
+every protected path. The engine creates clones elsewhere and rechecks before
+executing commands. Symlink aliases do not bypass any containment check. A user
+therefore cannot hide candidate files by choosing another in-repository
+evidence path.
 
 Preflight resolves the base, reads `.release-gate.yaml` from it, validates the
-policy, checks the source repository, and captures the working tree through a
-temporary index. Invalid refs, invalid/missing policy, ambiguous input, patch
-reconstruction failure, or an unsafe evidence path exit 3 before a candidate
-verdict.
+policy, checks the source repository and evidence destination, and only then
+captures the working tree through a temporary index. Invalid refs,
+invalid/missing policy, ambiguous input, patch reconstruction failure, or an
+unsafe evidence path exit 3 before a candidate verdict.
 
 After capture, preflight compares `.release-gate.yaml` and every directly
 invoked repository-local launcher with the base. Any candidate add, modify,

@@ -62,6 +62,20 @@ Unknown keys are invalid. Defaults are applied only after schema and semantic
 validation; `effective-config.json` records the fully defaulted,
 platform-resolved policy used by the run.
 
+## Portable identifiers
+
+Preparation, check, and report `id` values are filesystem components in the
+evidence tree. They contain 1-64 ASCII characters, begin with `a`-`z`, use only
+lowercase letters, digits, `.`, `_`, and `-`, and cannot end in `.`. They MUST
+NOT have a case-insensitive DOS device basename: `CON`, `PRN`, `AUX`, `NUL`,
+`COM1` through `COM9`, or `LPT1` through `LPT9`, including before an extension
+(`con.json` is invalid). This stricter ASCII grammar also excludes control
+characters and every Windows-illegal component character.
+
+Preparation and check IDs share one global namespace. Report IDs are unique
+within their check. The implementation applies these rules before creating an
+evidence path.
+
 ## Scope
 
 Changed paths are Git repository-relative paths with `/` separators. V1 uses
@@ -213,7 +227,10 @@ V1 parsers expose these JSON-shaped metrics:
   `/excluded_lines`, and `/statements` from coverage.py totals.
 - `json-metrics`: the parsed JSON value itself; it must contain only JSON data.
 
-`metric` is an RFC 6901 JSON Pointer. `comparison` selects `candidate`,
+`metric` is an RFC 6901 JSON Pointer. The empty pointer `""` selects the entire
+parsed JSON value, which permits scalar-root `json-metrics` assertions while
+the ordinary assertion type rules still apply; `/` instead selects an object
+member whose key is the empty string. `comparison` selects `candidate`,
 `baseline`, or numeric `candidate-minus-baseline`. The last two are valid only
 for differential checks, and subtraction requires finite numbers. `operator`
 is `eq`, `ne`, `gt`, `gte`, `lt`, or `lte`. Ordered comparisons require

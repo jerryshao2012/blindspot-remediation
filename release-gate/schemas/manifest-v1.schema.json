@@ -148,7 +148,15 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 128,
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+      "description": "Portable evidence-directory component.",
+      "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|$))[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9_-])?(?![\\s\\S])"
+    },
+    "controlId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Portable preparation or check identifier.",
+      "pattern": "^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$))[a-z](?:[a-z0-9._-]{0,62}[a-z0-9_-])?(?![\\s\\S])"
     },
     "sha256": {
       "type": "string",
@@ -232,8 +240,7 @@
       ],
       "properties": {
         "check_id": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9._-]{0,63}$",
+          "$ref": "#/$defs/controlId",
           "description": "Globally unique control ID; carries a preparation item ID when phase is prepare."
         },
         "phase": {
@@ -297,7 +304,41 @@
     "artifactPath": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?![Mm][Aa][Nn][Ii][Ff][Ee][Ss][Tt]\\.[Jj][Ss][Oo][Nn]$)(?![A-Za-z]:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\]+(?:/[^/\\\\]+)*$"
+      "maxLength": 1024,
+      "description": "POSIX-separated artifact path with at most 32 components; each 1-128-code-point component obeys the portable grammar, while NFC and casefold rules are semantic.",
+      "pattern": "^[^/]+(?:/[^/]+){0,31}$",
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[<>:\"\\\\|?*\\u0000-\\u001F\\u007F]"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(?:^|/)\\.{1,2}(?:/|$)"
+          }
+        },
+        {
+          "not": {
+            "pattern": "[ .](?:/|$)"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:/|$)"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(?:^|/)[^/]{129}"
+          }
+        },
+        {
+          "not": {
+            "pattern": "^[Mm][Aa][Nn][Ii][Ff][Ee][Ss][Tt]\\.[Jj][Ss][Oo][Nn]$"
+          }
+        }
+      ]
     },
     "artifact": {
       "type": "object",

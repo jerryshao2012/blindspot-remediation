@@ -11,7 +11,8 @@
 5. Commit `.release-gate.yaml` and every script it invokes. The first run must
    select a base commit containing that policy.
 6. Run `release-gate run --base <trusted-commit>` and consume
-   `.release-gate/runs/<run-id>/result.json`.
+   `<effective-evidence-root>/<run-id>/result.json` (by default,
+   `.release-gate/runs/<run-id>/result.json`).
 
 Do not copy thresholds blindly. Calibrate blocking policy against known-good,
 known-bad, broken-tool, timeout, scope-tamper, and pre-existing-debt cases.
@@ -20,8 +21,10 @@ differential mode is appropriate when policy deliberately allows existing
 debt but forbids regression.
 
 Add `.release-gate/runs/` to the repository's ignore policy after reviewing
-that change. The engine excludes that path from candidate capture even before
-it is ignored, but evidence should not normally be committed.
+that change. The engine excludes only that exact default subtree from
+candidate capture even before it is ignored. A custom evidence root must
+resolve outside the repository and is never an additional capture exclusion;
+evidence should not normally be committed.
 
 ## CI use
 
