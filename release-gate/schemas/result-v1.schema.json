@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:release-gate:schema:result:v1",
+  "title": "Release Gate result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "run_id",
+    "verdict",
+    "exit_code",
+    "reason_codes",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "base_commit",
+    "candidate_tree",
+    "patch_sha256",
+    "config_sha256",
+    "scope",
+    "checks",
+    "manifest_path"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "run_id": {
+      "$ref": "#/$defs/runId"
+    },
+    "verdict": {
+      "enum": ["PASS", "FAIL", "NEEDS_HUMAN"]
+    },
+    "exit_code": {
+      "enum": [0, 1, 2]
+    },
+    "reason_codes": {
+      "$ref": "#/$defs/reasonCodes"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "base_commit": {
+      "$ref": "#/$defs/gitObject"
+    },
+    "candidate_tree": {
+      "$ref": "#/$defs/gitObject"
+    },
+    "patch_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "config_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "scope": {
+      "$ref": "#/$defs/scopeResult"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/checkResult"
+      }
+    },
+    "manifest_path": {
+      "const": "manifest.json"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["verdict"],
+        "properties": {
+          "verdict": {
+            "const": "PASS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["verdict"],
+        "properties": {
+          "verdict": {
+            "const": "FAIL"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["verdict"],
+        "properties": {
+          "verdict": {
+            "const": "NEEDS_HUMAN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 2
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "reasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      }
+    },
+    "pathArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
+      }
+    },
+    "scopeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason_codes",
+        "changed_paths",
+        "outside_allowed",
+        "forbidden",
+        "review"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["PASS", "FAIL", "NEEDS_HUMAN"]
+        },
+        "reason_codes": {
+          "$ref": "#/$defs/reasonCodes"
+        },
+        "changed_paths": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "outside_allowed": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "forbidden": {
+          "$ref": "#/$defs/pathArray"
+        },
+        "review": {
+          "$ref": "#/$defs/pathArray"
+        }
+      }
+    },
+    "scalar": {
+      "type": ["number", "string", "boolean", "null"]
+    },
+    "assertionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report",
+        "metric",
+        "comparison",
+        "operator",
+        "expected",
+        "actual",
+        "passed",
+        "reason_codes"
+      ],
+      "properties": {
+        "report": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+        },
+        "metric": {
+          "type": "string",
+          "pattern": "^(?:/(?:[^~/]|~[01])*)+$"
+        },
+        "comparison": {
+          "enum": ["candidate", "baseline", "candidate-minus-baseline"]
+        },
+        "operator": {
+          "enum": ["eq", "ne", "gt", "gte", "lt", "lte"]
+        },
+        "expected": {
+          "$ref": "#/$defs/scalar"
+        },
+        "actual": {
+          "$ref": "#/$defs/scalar"
+        },
+        "passed": {
+          "type": ["boolean", "null"]
+        },
+        "reason_codes": {
+          "$ref": "#/$defs/reasonCodes"
+        }
+      }
+    },
+    "checkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "mode",
+        "severity",
+        "status",
+        "reason_codes",
+        "assertions"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+        },
+        "mode": {
+          "enum": ["candidate", "differential"]
+        },
+        "severity": {
+          "enum": ["blocking", "advisory", "informational"]
+        },
+        "status": {
+          "enum": ["PASS", "FAIL", "ERROR", "SKIPPED"]
+        },
+        "reason_codes": {
+          "$ref": "#/$defs/reasonCodes"
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assertionResult"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,98 @@
+version: 1
+
+scope:
+  allowed:
+    - "src/**"
+    - "test/**"
+    - "tests/**"
+    - "package.json"
+    - "package-lock.json"
+    - "README.md"
+  forbidden:
+    - ".release-gate.yaml"
+    - ".github/**"
+  review:
+    - "SECURITY.md"
+    - "LICENSE*"
+
+prepare:
+  argv: ["npm", "ci", "--ignore-scripts"]
+  cwd: "."
+  timeout: 600
+  environment:
+    npm_config_audit: "false"
+    npm_config_fund: "false"
+  exit_classes:
+    pass: [0]
+    fail: [1]
+    error: []
+  platform:
+    windows:
+      argv: ["npm.cmd", "ci", "--ignore-scripts"]
+
+limits:
+  stream_bytes: 1048576
+  report_bytes: 5242880
+  total_bytes: 209715200
+
+checks:
+  - id: tests
+    mode: differential
+    severity: blocking
+    argv:
+      - "node"
+      - "node_modules/jest/bin/jest.js"
+      - "--ci"
+      - "--runInBand"
+      - "--reporters=default"
+      - "--reporters=jest-junit"
+    cwd: "."
+    timeout: 600
+    environment:
+      CI: "true"
+      JEST_JUNIT_OUTPUT_FILE: "junit.xml"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: []
+    platform:
+      windows:
+        argv:
+          - "node.exe"
+          - "node_modules/jest/bin/jest.js"
+          - "--ci"
+          - "--runInBand"
+          - "--reporters=default"
+          - "--reporters=jest-junit"
+    reports:
+      - id: junit
+        parser: junit-xml
+        path: junit.xml
+        required: true
+    assertions:
+      - report: junit
+        metric: /failures
+        comparison: candidate-minus-baseline
+        operator: lte
+        value: 0
+      - report: junit
+        metric: /errors
+        comparison: candidate-minus-baseline
+        operator: lte
+        value: 0
+
+  - id: lint
+    mode: candidate
+    severity: advisory
+    argv: ["node", "node_modules/eslint/bin/eslint.js", "src", "test", "tests", "--no-cache"]
+    cwd: "."
+    timeout: 600
+    environment:
+      CI: "true"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: []
+    platform:
+      windows:
+        argv: ["node.exe", "node_modules/eslint/bin/eslint.js", "src", "test", "tests", "--no-cache"]
