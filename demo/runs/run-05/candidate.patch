@@ -1,0 +1,68 @@
+diff --git a/README.md b/README.md
+index e5123f1..c107f20 100644
+--- a/README.md
++++ b/README.md
+@@ -12,9 +12,7 @@
+ 
+ # Notice
+ 
+-This module, by default installs and uses [text-unidecode](https://github.com/kmike/text-unidecode) _(GPL & Perl Artistic)_ for its decoding needs.
+-
+-However, there is an alternative decoding package called [Unidecode](https://github.com/avian2/unidecode) _(GPL)_. It can be installed as `python-slugify[unidecode]` for those who prefer it. `Unidecode` is believed to be more [advanced](https://github.com/un33k/python-slugify/wiki/Python-Slugify-Wiki#notes-on-unidecode).
++This module, by default installs and uses [Unidecode](https://github.com/avian2/unidecode) _(GPL)_ for its decoding needs.
+ 
+ ### `Official` Support Matrix
+ 
+@@ -28,10 +26,6 @@ However, there is an alternative decoding package called [Unidecode](https://git
+ 
+     pip install python-slugify
+ 
+-    # OR
+-
+-    pip install python-slugify[unidecode]
+-
+ # Options
+ 
+ ```python
+@@ -200,8 +194,8 @@ Please read the ([wiki](https://github.com/un33k/python-slugify/wiki/Python-Slug
+ Released under a ([MIT](LICENSE)) license.
+ 
+ ### Notes on GPL dependencies
+-Though the dependencies may be GPL licensed, `python-slugify` itself is not considered a derivative work and will remain under the MIT license.  
+-If you wish to avoid installation of any GPL licensed packages, please note that the default dependency `text-unidecode` explicitly lets you choose to use the [Artistic License](https://opensource.org/license/artistic-perl-1-0-2/) instead. Use without concern.
++Though the dependencies may be GPL licensed, `python-slugify` itself is not considered a derivative work and will remain under the MIT license.
++The default dependency `Unidecode` is GPL licensed.
+ 
+ # Version
+ 
+diff --git a/setup.py b/setup.py
+index 32f44dd..8d2b7ae 100755
+--- a/setup.py
++++ b/setup.py
+@@ -11,8 +11,8 @@ package = 'slugify'
+ python_requires = ">=3.10"
+ here = os.path.abspath(os.path.dirname(__file__))
+ 
+-install_requires = ['text-unidecode>=1.3']
+-extras_requires = {'unidecode': ['Unidecode>=1.1.1']}
++install_requires = ['Unidecode>=1.1.1']
++extras_requires = {}
+ 
+ about = {}
+ with open(os.path.join(here, package, '__version__.py'), 'r', encoding='utf-8') as f:
+diff --git a/slugify/slugify.py b/slugify/slugify.py
+index 9b5f27f..dbf1abd 100644
+--- a/slugify/slugify.py
++++ b/slugify/slugify.py
+@@ -5,10 +5,7 @@ import unicodedata
+ from collections.abc import Iterable
+ from html.entities import name2codepoint
+ 
+-try:
+-    import unidecode
+-except ImportError:
+-    import text_unidecode as unidecode  # type: ignore[import-untyped, no-redef]
++import unidecode
+ 
+ __all__ = ['slugify', 'smart_truncate']
+ 

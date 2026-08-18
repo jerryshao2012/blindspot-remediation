@@ -96,22 +96,20 @@ keeps `demo/oracle/` out of its reach.
 
 ## Step 3 — Give it the task, and time it (5–15 minutes)
 
-Have `demo/tasks/X1.md` open in another window. Note the time. Then paste this
-into Copilot:
-
-```
-Complete the following task in this repository. Do not modify test.py.
-
-<paste the full contents of demo/tasks/X1.md here>
-
-When you believe you are done, run the test command named in the task and
-show me the result. Then stop. Do not run anything else.
-```
+Open the **current frozen copy** of the task card — `demo/tasks/X1_v2.md` (the
+live `X1.md` says which version is current). Note the time, then **paste the
+entire file, as-is, into Copilot.** Nothing else — no wrapper, no
+introduction, no hints. The card is written to stand alone: it already says
+what to change, what not to touch, which interpreter to use, and how to know
+it is done. Paste from the frozen copy, not from `X1.md`, so the AI sees
+exactly the versioned text.
 
 The task card is the *whole* instruction. Do not add hints, and do not mention
 the oracle, the trap, or what you expect it to get wrong. What the card says
-is what the AI is being measured against, so the card is versioned: any change
-to it is recorded in `demo/tasks/X1-CHANGES.md` with the reason.
+is what the AI is being measured against, so the card is versioned: every
+version is frozen as `X1_vN.md`, and any change is recorded in
+`demo/tasks/X1-CHANGES.md` with the reason. `diff X1_v1.md X1_v2.md` shows
+exactly what changed between run 1 and run 2.
 
 Watch what it does. Two things to write down:
 
@@ -170,10 +168,12 @@ candidate patch, and a log per check.
 ## Step 5 — Grade the run against the hidden oracle (30 seconds)
 
 ```bash
-bash demo/grade.sh run-NN <wall_seconds> <cost-or-unknown> <model-or-unknown>
+bash demo/grade.sh run-NN <wall_seconds> <cost-or-unknown> <model-or-unknown> <card> <human-step>
 ```
 
-For example `bash demo/grade.sh run-02 127 16.2-AIC claude-haiku-4.5`. Cost is
+For example `bash demo/grade.sh run-02 103 16.6-AIC claude-haiku-4.5 v2 none`.
+If this is a re-gate after you fixed something, use the suffixed id and say
+what you did: `bash demo/grade.sh run-01b same same same v1 "re-gate after pip install"`. Cost is
 whatever Copilot's footer shows ("AIC used") — take the difference between
 before and after the task. Model is what the footer shows next to "Auto →".
 

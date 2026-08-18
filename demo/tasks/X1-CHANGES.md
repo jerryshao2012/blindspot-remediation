@@ -5,10 +5,16 @@ change to the experiment. Record each one here: what changed, why, and which
 runs used which version. This is the scaffolding's A11 idea (versioned task
 specifications) done with git and a table instead of a registry.
 
-| Version | Commit | Used by runs | What changed |
-|---|---|---|---|
-| v1 | `a47f02f` | run-01, run-01b | Original card. |
-| v2 | `d1d7d5f` | run-02 onward | Added an **Environment** section; "Done when" now names the venv interpreter and requires a reinstall. |
+| Version | Frozen copy | Commit | Used by runs | What changed |
+|---|---|---|---|---|
+| v1 | `X1_v1.md` | `a47f02f` | run-01, run-01b | Original card. |
+| v2 | `X1_v2.md` | `d1d7d5f` | run-02 onward | Added an **Environment** section; "Done when" now names the venv interpreter and requires a reinstall. |
+
+`X1.md` is always the live card (identical to the newest frozen copy). The
+frozen copies are byte-for-byte what the AI saw on those runs — `X1_v1.md`
+was extracted from commit `a47f02f`, not retyped. To see the real difference:
+
+    diff demo/tasks/X1_v1.md demo/tasks/X1_v2.md
 
 ## v1 → v2 — the change, and why
 
