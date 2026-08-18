@@ -21,10 +21,14 @@ differential mode is appropriate when policy deliberately allows existing
 debt but forbids regression.
 
 Add `.release-gate/runs/` to the repository's ignore policy after reviewing
-that change. The engine excludes only that exact default subtree from
-candidate capture even before it is ignored. A custom evidence root must
-resolve outside the repository and is never an additional capture exclusion;
-evidence should not normally be committed.
+that change. After no-follow verification, the engine excludes descendants of
+only that exact default subtree from candidate capture even before it is
+ignored. A custom evidence root must resolve outside the repository and is
+never an additional capture exclusion; evidence should not normally be
+committed. Keep `.release-gate` and its `runs` child as real directories: a
+symbolic link, Windows junction, or other reparse point at either location
+makes the default unsafe and the run exits 3 without following or replacing
+it.
 
 ## CI use
 

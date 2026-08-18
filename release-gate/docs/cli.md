@@ -47,38 +47,74 @@ extension. This allowed set excludes ASCII controls, empty/dot/dotdot names,
 spaces, and Windows-illegal `<>:"/\|?*`. An existing or
 NFC-plus-casefold-equivalent sibling run directory is never overwritten.
 
-The default evidence root is `<repo>/.release-gate/runs`. A relative custom
-`--evidence-root` is anchored to the invocation working directory, not to
-`--repo`. Before candidate capture, the engine resolves the repository root,
-its `.git` entry, per-worktree Git directory from `git rev-parse --git-dir`,
-shared metadata directory from `git rev-parse --git-common-dir`, the evidence
-root, and the proposed `<root>/<run-id>` through every existing ancestor and
-symlink. Git-reported paths are first made absolute. Nonexistent suffixes are
-appended to the canonical nearest existing ancestor. The engine performs
-component-aware containment using native case rules, never string-prefix
-comparison, and repeats canonicalization after creating the directory; any
-identity change is exit 3.
+The default evidence root is the literal path
+`<canonical-repo>/.release-gate/runs`. A relative custom `--evidence-root` is
+anchored to the invocation working directory, not to `--repo`. Before candidate
+capture, the engine first canonicalizes only the repository root, its `.git`
+entry, the per-worktree directory from `git rev-parse --git-dir`, and the
+shared metadata directory from `git rev-parse --git-common-dir`; Git-reported
+paths are first made absolute. It lexically normalizes the selected evidence
+spelling without resolving it and branches on whether it names the literal
+default under native filesystem case rules. A default candidate uses the
+no-follow procedure below before any evidence-root or run-directory
+canonicalization. Only a custom root and its proposed `<root>/<run-id>` are
+then canonically resolved through every existing ancestor. Their nonexistent
+suffixes are appended to the canonical nearest existing ancestor. Containment
+is component-aware and never uses string-prefix comparison.
 
-Only a root whose canonical identity equals the canonical default is the
-engine-owned in-repository exception, whether selected implicitly or by an
-equivalent spelling. Only the exact repository-relative
-`.release-gate/runs/` subtree is excluded from candidate capture. Every other
-custom root is rejected if either its normalized spelling or canonical target
-or any existing-prefix identity encountered while resolving it is equal to or
-below the source repository, its `.git` entry, its per-worktree Git directory,
-or its shared Git common directory. This catches an in-repository symlink that
-later resolves outward as well as an outside alias that resolves inward. The
-default exception permits only source-worktree containment: it is still
-rejected if its canonical root or run directory enters either Git metadata
-directory or an execution clone. A custom root that is an ancestor of a
-protected path is accepted only when the final run directory is disjoint from
-every protected path. The engine creates clones elsewhere and rechecks before
-executing commands. Symlink aliases do not bypass any containment check. A user
-therefore cannot hide candidate files by choosing another in-repository
-evidence path.
+The in-repository exception is stricter than ordinary canonical resolution.
+Starting from the already canonical repository directory, the engine inspects
+the existing `.release-gate` and `runs` entries without following them. Each
+MUST be a real directory, never a POSIX symbolic link or a Windows reparse
+point, including a junction; a non-directory is also invalid. Missing entries
+are allowed but are not created before capture. Relative or redundant-segment
+spellings qualify when they normalize to the literal default: every existing
+component must have the identity obtained by the no-follow walk, and an absent
+suffix is represented only by the remaining literal component names. The full
+identity is pinned after any missing components are created. A symlink alias
+is not an equivalent spelling, even if its target is the default directory.
+
+The no-follow inspection occurs immediately before capture and checks the
+`.release-gate/runs` node itself before enabling the exclusion. Consequently,
+a tracked or untracked candidate symlink, reparse point, or junction at either
+default component is rejected as unsafe input rather than hidden. Pre-capture
+validation is read-only: it does not create, delete, replace, or traverse a
+default component and an exit-3 rejection leaves source bytes, index, and
+status unchanged. Candidate capture then excludes descendants of only the
+verified-or-absent literal `.release-gate/runs/` path. The engine repeats the
+no-follow inspection immediately after capture and before creating anything.
+
+Only after the patch is complete may the engine create missing default
+components, one at a time with no-follow/no-reparse operations rooted at the
+verified repository directory. It verifies directory type and stable
+filesystem identity after each creation and after creating the run directory.
+If a pre-execution check fails, it removes only still-empty scaffolding that
+this invocation created; it never writes through, deletes, or replaces the
+unexpected entry. Evidence I/O remains relative to pinned directory handles,
+or an equivalent facility that cannot be redirected by a later path swap.
+Identities are rechecked after capture, after creation, after clone placement,
+before any configured preparation/check command, immediately before
+finalization, and after finalization before printing `RESULT`. Candidate
+evaluation begins only after capture, destination creation, clone placement,
+and a final identity check, immediately before invariant policy/launcher and
+scope evaluation. A mismatch before that transition is exit 3. A mismatch
+after it prevents a valid package, yields exit 4, and leaves `.incomplete`
+only when it can be written through a still verified handle.
+
+Every other custom root is rejected if either its normalized spelling,
+canonical target, or any existing-prefix identity encountered while resolving
+it is equal to or below the source repository, its `.git` entry, its
+per-worktree Git directory, or its shared Git common directory. This catches
+an in-repository symlink that later resolves outward as well as an outside
+alias that resolves inward. The default exception permits only the verified
+source-worktree directory chain and never Git metadata or an execution clone.
+A custom root that is an ancestor of a protected path is accepted only when
+the final run directory is disjoint from every protected path. The engine
+creates clones elsewhere and rechecks before executing commands. No custom
+root creates a capture exclusion or hides candidate files.
 
 Preflight resolves the base, reads `.release-gate.yaml` from it, validates the
-policy, checks the source repository and evidence destination, and only then
+policy, performs the read-only source/evidence checks above, and only then
 captures the working tree through a temporary index. Invalid refs,
 invalid/missing policy, ambiguous input, patch reconstruction failure, or an
 unsafe evidence path exit 3 before a candidate verdict.
@@ -115,8 +151,11 @@ printed.
 | 4 | Unrecoverable internal gate failure before complete evidence/result finalization. | No |
 
 `NEEDS_HUMAN` outranks `FAIL`: if both conditions occur, the command exits 2.
-Exit 4 is not a fourth verdict. If a partial run directory exists, it contains
-a `.incomplete` marker and MUST NOT be consumed as an evidence package.
+Exit 4 is not a fourth verdict. A partial run directory contains a
+`.incomplete` marker only when the engine can write it through a still verified
+safe handle; the marker is not guaranteed after destination identity loss. A
+partial directory with or without that marker MUST NOT be consumed as an
+evidence package.
 
 SIGINT, host shutdown, disk exhaustion, or an engine defect yields exit 4 when
 the engine cannot finalize a complete result. If a check process is interrupted

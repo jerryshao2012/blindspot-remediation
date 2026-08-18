@@ -32,13 +32,15 @@ The engine MUST:
 - require directly invoked repository-local launchers to match
   `scope.review_required_paths`, evaluate scope before execution, and execute
   no configured command when a candidate changes one of those launchers;
-- canonically resolve the evidence root and proposed run directory before
-  candidate capture, reject symlink/containment aliases into the source except
-  for the exact default, always reject aliases into the absolute per-worktree
-  `--git-dir`, shared `--git-common-dir`, or execution clones, and recheck
-  identity after creation;
+- canonicalize the repository and both Git metadata roots, then lexically
+  classify the selected evidence spelling before candidate capture; inspect a
+  default candidate without following it and canonically resolve only custom
+  evidence roots; always reject aliases into the absolute per-worktree
+  `--git-dir`, shared `--git-common-dir`, or execution clones; and pin and
+  recheck accepted filesystem identities through finalization;
 - capture the candidate with a temporary Git index without changing the real
-  index or source working tree;
+  index or candidate source bytes, and create no missing default evidence
+  component until capture is complete;
 - use distinct clean base and candidate clones and keep evidence outside them;
 - run argv directly with no shell and resolve `cwd` beneath the clone root;
 - reject report/evidence traversal, absolute paths, unsafe symlink targets,
@@ -48,18 +50,41 @@ The engine MUST:
   and
 - treat unavailable required evidence as `NEEDS_HUMAN`, never as a pass.
 
-Only the canonical default `.release-gate/runs` is an engine-owned
-in-repository exception and only that exact repository-relative subtree is
-excluded from candidate capture. A custom root whose normalized spelling or
-any existing-prefix identity encountered during canonical resolution enters
-the source repository, per-worktree Git directory, or shared Git common
-directory is rejected, not excluded; all other non-ignored untracked files
-remain candidates. This catches symlinks that enter and then leave a protected
-tree. The default exception never permits Git-metadata or clone containment.
-A custom root may be an ancestor of a protected path only when its final run
-directory is disjoint from every protected path. Checks use component-aware
-containment with native Windows case behavior, not textual prefixes, and are
-repeated after creating previously nonexistent components.
+Only the literal `<canonical-repo>/.release-gate/runs` path can be the
+engine-owned in-repository exception. Lexical normalization must produce that
+path under native filesystem case rules, and a no-follow inspection must show
+that each existing `.release-gate` and `runs` component is a real directory.
+POSIX symbolic links and every Windows reparse point, including junctions, are
+rejected even when they target the real default or a safe external directory.
+A missing component is not created before capture. The engine checks the node
+itself before enabling the descendant exclusion, so a tracked or untracked
+candidate redirect remains visible and produces exit 3. It repeats the check
+after capture, then creates missing components individually with
+no-follow/no-reparse semantics and verifies stable identity after each
+creation.
+
+No rejected redirect is followed, replaced, deleted, or written, and
+pre-capture validation leaves source bytes, index, and status unchanged. A
+pre-execution failure removes only still-empty default scaffolding created by
+that invocation. Evidence opens and atomic renames are relative to pinned
+directory handles, or a platform-equivalent primitive, rather than a
+re-resolved path string. Identities are checked before and after capture,
+after creation, after clone placement, before configured preparation/check
+commands, and before and after finalization. Candidate evaluation begins
+immediately before invariant policy/launcher and configured-scope evaluation,
+after the post-clone identity check. A mismatch before that transition is exit
+3; after it, identity loss yields exit 4 and no valid package. A late
+substitution cannot redirect a write.
+
+A custom root whose normalized spelling or any existing-prefix identity
+encountered during canonical resolution enters the source repository,
+per-worktree Git directory, or shared Git common directory is rejected, not
+excluded; all other non-ignored untracked files remain candidates. This
+catches symlinks that enter and then leave a protected tree. The default
+exception never permits Git-metadata or clone containment. A custom root may
+be an ancestor of a protected path only when its final run directory is
+disjoint from every protected path. Checks use component-aware containment
+with native Windows case behavior, not textual prefixes.
 
 ## Environment and secrets
 

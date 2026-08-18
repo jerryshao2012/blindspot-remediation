@@ -104,10 +104,15 @@ do not silently extend the contract.
   capture is absent.
 - [ ] Implement ref resolution, `git show` base-policy loading, an isolated
   temporary index initialized from base, `git add -A`, binary-safe patch
-  emission, and exclusion of only the exact default `.release-gate/runs/`
-  subtree. Prove a custom in-repository path cannot create another exclusion.
+  emission, and exclusion of descendants of only the literal default
+  `.release-gate/runs/` subtree after a no-follow inspection of the node and
+  its parent. Prove a tracked or untracked candidate symlink/reparse/junction
+  at `.release-gate` or `runs` is rejected rather than masked and a custom
+  in-repository path cannot create another exclusion.
 - [ ] Assert the real index/status are byte-for-byte unchanged and the patch
-  digest is deterministic in repeated runs.
+  digest is deterministic in repeated runs. Destination validation and every
+  exit-3 redirect rejection must not create, delete, replace, or follow a
+  source entry before capture.
 - [ ] Run focused/full tests and commit with
   `feat(release-gate): capture worktree from trusted base`.
 
@@ -234,7 +239,10 @@ do not silently extend the contract.
   mapping keeps a maximum-length report ID within the component limit.
 - [ ] Test stream truncation metadata, total 200 MiB exhaustion using injected
   small test limits, existing-run refusal, atomic rename, interrupted
-  finalization, `.incomplete`, and manifest-last ordering.
+  finalization, `.incomplete`, and manifest-last ordering. For the default
+  root, swap a verified component before each result/manifest rename and prove
+  pinned-handle I/O cannot be redirected, late identity loss exits 4, and an
+  incomplete marker is attempted only through a still-verified handle.
 - [ ] Run `python -m pytest tests/test_evidence.py -q`; expect failure.
 - [ ] Implement canonical JSON, SHA-256 inventory, atomic writes, verification,
   and cleanup without claiming immutability, signing, or attestation.
@@ -255,13 +263,33 @@ do not silently extend the contract.
   extensions, and an existing NFC-plus-casefold-equivalent sibling. Prove
   generated separator-free timestamp IDs satisfy the same grammar.
 - [ ] Resolve a relative custom evidence root against the invocation working
-  directory before capture. Test the implicit/explicit canonical default
-  exception; custom roots equal to or below the source, `.git` entry, absolute
-  per-worktree `git rev-parse --git-dir`, or absolute shared
+  directory before capture. Test the implicit/explicit literal default
+  exception, requiring normalized spelling of the literal default and real
+  no-follow `.release-gate`/`runs` directories; custom roots equal to or below
+  the source, `.git` entry, absolute per-worktree
+  `git rev-parse --git-dir`, or absolute shared
   `git rev-parse --git-common-dir`; inside-to-outside and outside-to-inside
   symlink aliases; nonexistent suffix re-resolution; a safe outside root; an
   ancestor root with a disjoint run directory; and collision with either
   execution clone.
+- [ ] Test implicit, relative, and redundant-segment spellings of the literal
+  default with neither, one, or both directory components initially missing;
+  verify existing component identities plus the literal missing suffix, then
+  the full identity after creation. At each component reject tracked and
+  untracked POSIX symlinks plus Windows junctions/reparse points targeting a
+  source subtree, `.git` entry, per-worktree Git directory, shared Git common
+  directory, either clone, an external directory, or the eventual real default
+  itself. A symlink alias that reaches the default must not earn the exception.
+- [ ] Inject substitutions immediately before and after capture, between
+  component creations, after run-directory creation, after clone placement,
+  immediately before and after the transition into candidate evaluation,
+  before the first configured preparation/check command, and before/after
+  finalization. Define that transition as immediately before invariant
+  policy/launcher and configured-scope evaluation. Assert stable pinned
+  identities, component-by-component no-follow creation, rollback of only
+  invocation-created empty scaffolding, exit 3 before the transition, exit 4
+  after it, and byte-for-byte unchanged source/index/status for every
+  precreation rejection.
 - [ ] Prove candidate add/modify/rename/delete of `.release-gate.yaml` and a
   changed covered launcher execute zero repository commands, mark every
   preparation/check control `SKIPPED`, finalize `NEEDS_HUMAN`, and use base
@@ -309,7 +337,9 @@ commands and supported versions after packaging is proven.
   injected-internal-failure cases and archive their schema-valid evidence.
 - [ ] On every OS, exercise portable ID/artifact boundary cases and canonical
   evidence-root containment, including native case behavior and symlinks or
-  junctions where the platform permits them.
+  junctions/reparse points where the platform permits them. Cover both default
+  path components, linked-worktree `--git-dir` and `--git-common-dir`, redirect
+  targets inside/outside protected trees, and checkpoint substitution races.
 - [ ] Exercise each platform override and native timeout/process-tree cleanup;
   compare verdict and reason-code parity across operating systems.
 - [ ] Build wheel/sdist, install each into a clean environment, invoke all three

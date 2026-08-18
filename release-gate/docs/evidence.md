@@ -27,6 +27,17 @@ For an accepted custom `--evidence-root`, the subtree beginning with
 `.release-gate/runs`. The manifest stores paths relative to the run directory,
 so its contents do not depend on the host root.
 
+The default root is eligible only when the literal `.release-gate` and `runs`
+components beneath the canonical repository root are absent or real
+directories inspected without following links. A POSIX symlink or any Windows
+reparse point/junction at either component is invalid, even if it resolves to
+the same directory or to an otherwise safe location. Missing default
+components are created only after candidate capture, one at a time with
+no-follow/no-reparse operations. The engine pins their identities for evidence
+I/O and rechecks them before and after capture, after creation, after clone
+placement, before commands, and around finalization. Thus only the actual,
+nonredirected default subtree receives the in-repository exception.
+
 Candidate-only checks omit `base/`. A **control ID** is the globally unique
 configured `id` of either a preparation item or a check. Each preparation
 item's phase is `prepare` in the manifest. The historical manifest field named
@@ -156,9 +167,14 @@ evidence incomplete and therefore yields `NEEDS_HUMAN`.
 Files are created with restrictive permissions subject to host support and
 are written through same-directory temporary files. `result.json` is renamed
 into place only when complete; `manifest.json` is the final file. A completed
-directory has no `.incomplete` marker. Run IDs are append-only: reruns use new
-IDs and never overwrite prior evidence, including an NFC-plus-casefold sibling
-on a case-sensitive host.
+directory has no `.incomplete` marker. For the default root, opens and renames
+are relative to pinned, no-follow-verified directory identities, which are
+rechecked immediately before and after these final renames. A substitution
+after evaluation starts yields exit 4 and no valid evidence package;
+`.incomplete` is written only when the engine still holds a verified safe
+directory. Run IDs are append-only: reruns use new IDs and never overwrite
+prior evidence, including an NFC-plus-casefold sibling on a case-sensitive
+host.
 
 V1 does not prescribe retention duration or remote storage. Organizations may
 copy, sign, or retain the package according to their own controls without

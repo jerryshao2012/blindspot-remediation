@@ -37,25 +37,51 @@ shared or absolute location.
 
 ## Evidence destination preflight
 
-Before candidate capture, the engine canonically resolves the source worktree,
-its `.git` entry, the absolute per-worktree `--git-dir`, the absolute shared
-`--git-common-dir`, the selected evidence root, and the proposed run directory
-through existing ancestors and symlinks. A relative custom root is anchored to
-the invocation working directory. Containment uses path components and native
-case rules rather than string prefixes, and the engine checks both normalized
-spellings and every existing-prefix identity encountered during resolution.
-It re-resolves after directory creation to detect an alias or identity change.
+Before candidate capture, the engine canonicalizes the source worktree, its
+`.git` entry, the absolute per-worktree `--git-dir`, and the absolute shared
+`--git-common-dir`. A relative custom root is anchored to the invocation
+working directory. The selected evidence spelling is lexically normalized
+without following it, then classified as the literal default candidate or a
+custom root. The default branch performs the no-follow walk below before any
+evidence-root or run-directory canonicalization. Only the custom branch
+canonically resolves those paths through existing ancestors. Containment uses
+path components and native case rules rather than string prefixes, and the
+engine checks both normalized spellings and every existing-prefix identity
+encountered during custom resolution.
 
-The canonical default `<repo>/.release-gate/runs` is the sole engine-owned
-in-repository exception. A canonical alias of that exact directory has the
-same identity; no other in-repository spelling or target is accepted. This
-exception permits containment only in the source worktree, never in Git
-metadata or a clone. A custom root may not equal or be below the source, either
-Git metadata directory, or a clone. It may be an ancestor of a protected path
-only when its final `<run-id>` directory is disjoint from every protected path.
-The engine chooses clone locations that are also disjoint from the effective
-evidence root and rechecks before any repository command. An unsafe destination
-is invalid input (exit 3), not a candidate verdict.
+The sole in-repository exception is the nonredirected directory chain formed
+by joining the literal `.release-gate` and `runs` components to the canonical
+repository root. Under native filesystem case rules, the selected spelling
+must normalize to that exact path. Each existing component is inspected
+without following it and must be a real directory, not a symbolic link,
+junction, or any other Windows reparse point. A symlink spelling or redirected
+component does not qualify merely because it canonically reaches the same
+target. Missing components remain absent until candidate capture is complete.
+
+The engine performs this no-follow inspection before capture, checks the
+default node itself before applying the descendant exclusion, and repeats the
+inspection immediately after capture. It therefore rejects tracked and
+untracked candidate redirects instead of masking them. These checks are
+read-only and an unsafe-destination exit 3 leaves the source, index, and status
+unchanged. After capture, missing components are created one at a time using
+no-follow/no-reparse operations rooted at a verified directory. The engine
+pins and revalidates their filesystem identities after creation, after clone
+placement, before configured preparation/check commands, and before and after
+finalization; all evidence operations are relative to those pinned identities.
+Empty scaffolding created by this invocation is rolled back on a pre-execution
+rejection.
+
+The default exception permits containment only in that verified source
+subtree, never in Git metadata or a clone. A custom root may not equal or be
+below the source, either Git metadata directory, or a clone. It may be an
+ancestor of a protected path only when its final `<run-id>` directory is
+disjoint from every protected path. The engine chooses clone locations that
+are also disjoint from the effective evidence root. Candidate evaluation
+begins immediately before invariant policy/launcher and configured-scope
+evaluation, after capture, destination creation, clone placement, and a final
+identity check. A destination failure before that exact transition is invalid
+input (exit 3). Identity loss after the transition makes safe finalization
+impossible (exit 4), never a candidate verdict.
 
 ## Candidate reconstruction
 
@@ -70,14 +96,17 @@ developer's real index, the engine:
 2. populates it with the base tree using `git read-tree`;
 3. stages the current working tree into that temporary index with
    `git add -A`, including non-ignored untracked files and deletions but
-   excluding only the exact default `.release-gate/runs/` subtree; and
+   excluding descendants of only the literal, no-follow-verified-or-absent
+   default `.release-gate/runs/` subtree; and
 4. emits a binary-safe staged diff against the base commit.
 
 Ignored files and `.git/` are excluded by Git. The engine hashes the patch,
 applies it to the clean candidate clone, writes the reconstructed candidate
 tree object, and records that tree ID. A patch that cannot be reconstructed
 unambiguously is invalid candidate input (exit 3). The real index, working
-tree, and base repository are never mutated.
+tree candidate bytes, and base repository are never mutated. Default evidence
+directories may be created only after capture and only through the verified
+nonredirected chain described above.
 
 Any candidate addition, modification, rename, or deletion of
 `.release-gate.yaml` is a non-configurable preflight review condition. The
@@ -101,15 +130,17 @@ inputs remain the code under evaluation and may execute on the trusted host.
 ```text
 source repository
   -> resolve base + load/validate base policy
-  -> canonicalize and validate evidence destination
+  -> read-only canonical/no-follow validation of evidence destination
   -> capture working-tree patch through temporary index
+  -> revalidate and safely create/pin evidence destination
   -> create independent base and candidate clones
+  -> revalidate and begin candidate evaluation
   -> evaluate invariant policy/launcher tamper and configured scope
   -> run ordered preparation steps in each required clone
   -> run configured checks
   -> parse bounded reports and evaluate assertions
   -> aggregate verdict (NEEDS_HUMAN > FAIL > PASS)
-  -> atomically finalize result.json, then manifest.json
+  -> revalidate, atomically finalize result.json then manifest.json, revalidate
 ```
 
 Commands are argv arrays and run without a shell. Relative `cwd` values are
@@ -195,8 +226,10 @@ This precedence is not configurable.
 Once candidate evaluation begins, expected operational failures are captured
 as evidence and yield `NEEDS_HUMAN`, not exit 4. Exit 4 is reserved for an
 engine defect or host failure that prevents complete evidence and
-`result.json` finalization. Partial directories are retained with a
-`.incomplete` marker and are not valid evidence packages.
+`result.json` finalization. A partial directory has a `.incomplete` marker only
+when the engine retains a verified safe handle through which to write it; no
+marker is guaranteed after destination identity loss. No partial directory is
+a valid evidence package.
 
 The engine writes run artifacts to temporary names, fsyncs where supported,
 renames `result.json` only after it is complete, and writes `manifest.json`
