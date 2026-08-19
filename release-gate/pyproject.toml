@@ -30,6 +30,7 @@ dev = [
   "pytest-cov>=6.2,<7",
   "ruff>=0.12,<1",
   "types-psutil>=7.0,<8",
+  "types-jsonschema>=4.25,<5",
   "types-PyYAML>=6.0,<7",
 ]
 
@@ -39,6 +40,9 @@ packages = ["src/release_gate"]
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"
 testpaths = ["tests"]
+filterwarnings = [
+  "ignore:GitWildMatchPattern .* is deprecated:DeprecationWarning:pathspec.*",
+]
 
 [tool.coverage.run]
 branch = true
