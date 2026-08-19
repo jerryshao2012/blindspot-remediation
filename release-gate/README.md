@@ -65,6 +65,62 @@ checksum review described in [Adoption](docs/adoption.md):
 npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-codex-0.2.3.tar.gz --global --copy --agent codex
 ```
 
+## Updating an existing installation
+
+Update only after the final GitHub release is published. Before replacing
+anything, complete the
+[checksum-first upgrade and rollback procedure](docs/adoption.md#upgrade-uninstall-and-rollback).
+Retain the previous wheel, host archive, and `SHA256SUMS` in a separate rollback
+directory. Never self-update or use an unpinned `skills update`.
+
+After verifying the new wheel and exactly one host archive, run exactly one
+matching host block:
+
+```bash
+npx --yes skills@1.5.23 remove release-gate --global --agent github-copilot --yes
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-copilot-0.2.3.tar.gz --global --copy --agent github-copilot
+npx --yes skills@1.5.23 list --global --agent github-copilot
+```
+
+```bash
+npx --yes skills@1.5.23 remove release-gate --global --agent codex --yes
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-codex-0.2.3.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 list --global --agent codex
+```
+
+```bash
+npx --yes skills@1.5.23 remove release-gate --global --agent claude-code --yes
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-claude-code-0.2.3.tar.gz --global --copy --agent claude-code
+npx --yes skills@1.5.23 list --global --agent claude-code
+```
+
+```bash
+npx --yes skills@1.5.23 remove release-gate --global --agent antigravity --yes
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 list --global --agent antigravity
+```
+
+```bash
+npx --yes skills@1.5.23 remove release-gate --global --agent antigravity-cli --yes
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz --global --copy --agent antigravity-cli
+npx --yes skills@1.5.23 list --global --agent antigravity-cli
+```
+
+The skill and CLI versions now differ temporarily. Do not invoke Release Gate
+while the skill and CLI versions differ. Replace the CLI from the verified
+local wheel and confirm the exact executable version:
+
+```bash
+uv tool uninstall release-gate
+uv tool install ./release_gate-0.2.3-py3-none-any.whl
+release-gate --version
+# required output: release-gate 0.2.3
+```
+
+For Copilot, Claude Code, and Antigravity, run `/release-gate --version`; for
+Codex, run `$release-gate --version`. Resume only when the bundled skill version
+and executable version match.
+
 Invoke the skill explicitly: `/release-gate init` in Copilot and Claude Code,
 `$release-gate init` in Codex, and `/release-gate init` in Antigravity. Codex
 does not support arbitrary custom slash commands; `/skills` can select the

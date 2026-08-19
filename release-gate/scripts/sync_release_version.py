@@ -32,7 +32,7 @@ MARKED_PATTERNS = (
 )
 
 MARKED_RELEASE_FILES = {
-    Path("release-gate/README.md"): (MARKED_PATTERNS, 10),
+    Path("release-gate/README.md"): (MARKED_PATTERNS, 22),
     Path("release-gate/demo/python-slugify/README.md"): (MARKED_PATTERNS, 1),
     Path("release-gate/docs/adoption.md"): (
         (

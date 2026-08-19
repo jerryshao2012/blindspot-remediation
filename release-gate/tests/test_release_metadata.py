@@ -173,6 +173,66 @@ def test_upgrade_commands_remove_then_install_verified_pinned_artifacts() -> Non
         ) in adoption
 
 
+def test_readme_documents_safe_updates_for_every_host() -> None:
+    readme = _read("README.md")
+    heading = "## Updating an existing installation"
+
+    assert heading in readme
+    upgrade = readme.split(heading, 1)[1].split("Invoke the skill explicitly", 1)[0]
+    normalized = " ".join(upgrade.split())
+    wheel = f"release_gate-{__version__}-py3-none-any.whl"
+
+    for phrase in (
+        "only after the final GitHub release is published",
+        "Retain the previous wheel, host archive, and `SHA256SUMS`",
+        "Never self-update or use an unpinned `skills update`",
+        "Do not invoke Release Gate while the skill and CLI versions differ",
+    ):
+        assert phrase.casefold() in normalized.casefold()
+
+    procedure = (
+        "[checksum-first upgrade and rollback procedure]"
+        "(docs/adoption.md#upgrade-uninstall-and-rollback)"
+    )
+    assert procedure in upgrade
+
+    host_targets = (
+        ("github-copilot", "copilot"),
+        ("codex", "codex"),
+        ("claude-code", "claude-code"),
+        ("antigravity", "antigravity"),
+        ("antigravity-cli", "antigravity"),
+    )
+    block_positions: list[int] = []
+    for agent, archive_host in host_targets:
+        archive = f"release-gate-skill-{archive_host}-{__version__}.tar.gz"
+        archive_url = f"{REPOSITORY}/releases/download/{RELEASE_TAG}/{archive}"
+        block = (
+            "```bash\n"
+            f"npx --yes skills@{SKILLS_VERSION} remove release-gate "
+            f"--global --agent {agent} --yes\n"
+            f"npx --yes skills@{SKILLS_VERSION} add {archive_url} "
+            f"--global --copy --agent {agent}\n"
+            f"npx --yes skills@{SKILLS_VERSION} list --global --agent {agent}\n"
+            "```"
+        )
+        assert block in upgrade
+        block_positions.append(upgrade.index(block))
+    assert block_positions == sorted(block_positions)
+
+    cli_block = (
+        "```bash\n"
+        "uv tool uninstall release-gate\n"
+        f"uv tool install ./{wheel}\n"
+        "release-gate --version\n"
+        f"# required output: release-gate {__version__}\n"
+        "```"
+    )
+    assert cli_block in upgrade
+    assert "/release-gate --version" in upgrade
+    assert "$release-gate --version" in upgrade
+
+
 def test_assistant_version_syntax_is_documented_as_informational() -> None:
     readme = _read("README.md")
     adoption = _read("docs/adoption.md")
