@@ -31,6 +31,7 @@ dev = [
   "ruff>=0.12,<1",
   "types-psutil>=7.0,<8",
   "types-jsonschema>=4.25,<5",
+  "types-defusedxml>=0.7,<1",
   "types-PyYAML>=6.0,<7",
 ]
 
