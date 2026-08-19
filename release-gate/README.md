@@ -77,30 +77,35 @@ After verifying the new wheel and exactly one host archive, run exactly one
 matching host block:
 
 ```bash
+# GitHub Copilot CLI
 npx --yes skills@1.5.23 remove release-gate --global --agent github-copilot --yes
 npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-copilot-0.2.3.tar.gz --global --copy --agent github-copilot
 npx --yes skills@1.5.23 list --global --agent github-copilot
 ```
 
 ```bash
+# Codex CLI and IDE
 npx --yes skills@1.5.23 remove release-gate --global --agent codex --yes
 npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-codex-0.2.3.tar.gz --global --copy --agent codex
 npx --yes skills@1.5.23 list --global --agent codex
 ```
 
 ```bash
+# Claude Code
 npx --yes skills@1.5.23 remove release-gate --global --agent claude-code --yes
 npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-claude-code-0.2.3.tar.gz --global --copy --agent claude-code
 npx --yes skills@1.5.23 list --global --agent claude-code
 ```
 
 ```bash
+# Antigravity IDE
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity --yes
 npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz --global --copy --agent antigravity
 npx --yes skills@1.5.23 list --global --agent antigravity
 ```
 
 ```bash
+# Antigravity CLI
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity-cli --yes
 npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz --global --copy --agent antigravity-cli
 npx --yes skills@1.5.23 list --global --agent antigravity-cli

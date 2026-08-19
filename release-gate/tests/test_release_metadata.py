@@ -198,20 +198,22 @@ def test_readme_documents_safe_updates_for_every_host() -> None:
         "(docs/adoption.md#upgrade-uninstall-and-rollback)"
     )
     assert procedure in upgrade
+    assert "## Upgrade, uninstall, and rollback" in _read("docs/adoption.md")
 
     host_targets = (
-        ("github-copilot", "copilot"),
-        ("codex", "codex"),
-        ("claude-code", "claude-code"),
-        ("antigravity", "antigravity"),
-        ("antigravity-cli", "antigravity"),
+        ("GitHub Copilot CLI", "github-copilot", "copilot"),
+        ("Codex CLI and IDE", "codex", "codex"),
+        ("Claude Code", "claude-code", "claude-code"),
+        ("Antigravity IDE", "antigravity", "antigravity"),
+        ("Antigravity CLI", "antigravity-cli", "antigravity"),
     )
     block_positions: list[int] = []
-    for agent, archive_host in host_targets:
+    for label, agent, archive_host in host_targets:
         archive = f"release-gate-skill-{archive_host}-{__version__}.tar.gz"
         archive_url = f"{REPOSITORY}/releases/download/{RELEASE_TAG}/{archive}"
         block = (
             "```bash\n"
+            f"# {label}\n"
             f"npx --yes skills@{SKILLS_VERSION} remove release-gate "
             f"--global --agent {agent} --yes\n"
             f"npx --yes skills@{SKILLS_VERSION} add {archive_url} "
