@@ -152,6 +152,11 @@ Human-readable progress goes to stderr. Automation MUST consume `result.json`,
 not parse progress text. The result is complete before the verdict lines are
 printed. Even when later work stops, its `checks` array contains one item per
 effective check in declaration order; unrun checks are reason-coded `SKIPPED`.
+Before those lines, the engine validates result and manifest with the bundled
+Draft 2020-12 schemas using an explicit `FormatChecker`, then applies the
+cross-document semantic checks, including the strict timestamp profile and
+execution lifecycle/order contract. Annotation-only `format` handling is not
+accepted.
 
 ## Exit codes
 

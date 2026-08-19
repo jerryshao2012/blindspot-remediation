@@ -95,6 +95,34 @@ Consumers decide from `verdict`, not from log text. Human messages and trace
 event wording may evolve within v1. A `PASS` result means only that the
 candidate satisfied the recorded policy.
 
+## Timestamp profile
+
+Every `created_at`, `started_at`, and `finished_at` value in result or manifest
+uses the Release Gate v1 RFC 3339 profile, a documented strict subset:
+
+```text
+YYYY-MM-DDTHH:MM:SS[.1-9-digits](Z|+HH:MM|-HH:MM)
+```
+
+The spelling is ASCII with a year from 0001 through 9999 and uppercase `T` and
+`Z`. The zone is mandatory.
+Numeric offsets range through `+14:00` and `-14:00`; an hour of 14 requires
+minutes `00`, and the RFC 3339 unknown-local-offset spelling `-00:00` is
+rejected. Seconds are `00`-`59`, so leap-second spellings are rejected.
+Month lengths and Gregorian leap years must be real. The engine emits UTC with
+`Z`; verifiers accept the other profile offsets without rewriting stored
+evidence.
+
+JSON Schema `format` is annotation-only unless a validator enables format
+assertion. Runtime validation therefore MUST use
+`Draft202012Validator(..., format_checker=FormatChecker())` with the
+distribution's `jsonschema[format]` dependency **and** a strict full-string
+profile parser that verifies calendar reality, fraction length, offset range,
+unknown offset, and leap-second rules. The custom profile parser is
+authoritative; using `FormatChecker` or a general-purpose datetime parser
+alone is insufficient. This validation applies while producing and while
+verifying evidence.
+
 ## V1 reason-code registry
 
 Reason-code arrays contain no duplicates and are sorted by ASCII code-point
@@ -112,8 +140,8 @@ a contract/schema version bump; v1 has no vendor-extension reason codes.
 | `COMMAND_EXIT_ERROR` | execution, check, root: exit was explicitly classified `error` |
 | `COMMAND_EXIT_UNCLASSIFIED` | execution, check, root: exit was in no configured class |
 | `COMMAND_FAILED` | execution, check, root: exit was an ordinary classified `fail` |
-| `COMMAND_SIGNALLED` | execution, check, root: process ended by signal or equivalent forced termination |
-| `COMMAND_SPAWN_FAILED` | execution, check, root: executable could not be started |
+| `COMMAND_SIGNALLED` | execution, check, root: subprocess returned a negative POSIX signal code |
+| `COMMAND_SPAWN_FAILED` | execution, check, root: executable, including a missing executable, could not be started |
 | `COMMAND_TIMED_OUT` | execution, check, root: configured timeout expired |
 | `CONTROL_LAUNCHER_REVIEW` | skipped execution/check, root: a directly invoked repository launcher changed |
 | `EVIDENCE_BUDGET_EXHAUSTED` | execution/check/skip, root: retained-evidence capacity prevented required work or evidence |
@@ -188,6 +216,47 @@ a file cannot contain its own final digest. It records:
 - exit classification, timestamps, durations, normalized metrics, and reason
   codes; and
 - artifact path, media type, retained size, digest, and any truncation facts.
+
+### Execution lifecycle
+
+Each scheduled preparation/check side has one manifest execution record in
+schedule order, even when it is skipped. Preparation items appear first in
+declaration order, base then candidate for each item when a base workspace is
+required and candidate only otherwise. Checks follow in declaration order;
+each differential check is base then candidate and each candidate check has
+only candidate. The `control_id`, `phase`, `side`, `argv`, `cwd`, and final
+environment-name set must equal the corresponding resolved effective-policy
+slot. Finalization and verification enforce that cross-document identity,
+cardinality, and order; JSON Schema cannot derive it from the manifest alone.
+
+The lifecycle fields have these closed correlations:
+
+| Classification/cause | `exit_code` | `timed_out` | Required lifecycle reason |
+|---|---:|---:|---|
+| `pass` | integer 0 through 4,294,967,295 | `false` | none |
+| `fail` | integer 0 through 4,294,967,295 | `false` | `COMMAND_FAILED` |
+| `error`, configured error exit | integer 0 through 4,294,967,295 | `false` | `COMMAND_EXIT_ERROR` |
+| `error`, unclassified exit | integer 0 through 4,294,967,295 | `false` | `COMMAND_EXIT_UNCLASSIFIED` |
+| `error`, POSIX signal | integer -2,147,483,648 through -1 | `false` | `COMMAND_SIGNALLED` |
+| `error`, spawn failure | `null` | `false` | `COMMAND_SPAWN_FAILED` |
+| `error`, inherited environment absent | `null` | `false` | `INHERITED_ENVIRONMENT_MISSING` |
+| `error`, safely finalized operator interruption | `null` | `false` | `OPERATOR_INTERRUPTED` |
+| `error`, timeout | `null` | `true` | `COMMAND_TIMED_OUT` |
+| `skipped` | `null` | `false` | applicable registered skip cause |
+
+The timeout record deliberately does not retain the return code produced by
+subsequent platform-specific process-tree termination. A negative subprocess
+return always uses the signal row, never a configured/unclassified-exit row.
+`EVIDENCE_BUDGET_EXHAUSTED` can arise before a process or after its exit, so it
+does not by itself choose between an integer and null exit field; a skipped
+budget-limited execution still follows the skipped row. At most one registered
+terminal cause appears, using the precedence in the reason-code section.
+
+Preparation and skipped executions always have an empty metrics map. Only a
+check-phase execution may carry report metrics or
+`OPTIONAL_REPORT_MISSING`. Passing/failing check executions may also carry
+`STREAM_TRUNCATED` without changing their lifecycle class. All other
+classification, reason, phase, side, and metric combinations are invalid.
 
 Each execution retains at most 64 assertion-referenced scalar metrics. Its key
 is `<report-id>#<RFC6901-pointer>`; an empty pointer therefore appears as, for

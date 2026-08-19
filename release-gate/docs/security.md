@@ -48,6 +48,9 @@ The engine MUST:
 - reject report/evidence traversal, absolute paths, unsafe symlink targets,
   duplicate normalized paths, and existing run destinations;
 - parse XML without DTDs, external entities, or network retrieval;
+- validate evidence timestamps with the strict Release Gate RFC 3339 profile,
+  including calendar reality and mandatory zones, rather than treating JSON
+  Schema `format` as self-enforcing;
 - bound command time, retained streams, individual reports, policy shape, and
   total evidence; reserve bounded finalization before candidate evaluation;
   and

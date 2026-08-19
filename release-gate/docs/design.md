@@ -190,6 +190,19 @@ Each process exit is classified by `exit_classes` as `pass`, `fail`, or
 required report, or any present declared report that is unsafe, oversized, or
 unparsable is `ERROR`.
 
+Execution evidence uses a single normalized lifecycle. `pass` and `fail`
+records carry a nonnegative integer exit status and are not timed out.
+Configured-error and unclassified exits also carry their nonnegative status.
+A negative subprocess return is recorded as `COMMAND_SIGNALLED`; timeout is
+normalized to `COMMAND_TIMED_OUT`, `exit_code: null`, and `timed_out: true`,
+irrespective of the platform's later kill status. Spawn failure (including a
+missing executable), missing inherited environment, safely finalized operator
+interruption, and skipped work have no child status and use `exit_code: null`
+and `timed_out: false`. Skipped work has no metrics. Status, reason, timeout,
+phase, and side correlations are part of evidence validation, not merely log
+conventions. Evidence timestamps use the strict RFC 3339 profile and two-layer
+runtime validation defined in the evidence contract.
+
 For `candidate` mode, the candidate exit class is the initial check status.
 For `differential` mode, `error` on either side is `ERROR`; otherwise a
 candidate `fail` is a check failure only when the base was `pass`. A candidate

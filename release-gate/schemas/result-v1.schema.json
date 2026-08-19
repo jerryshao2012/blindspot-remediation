@@ -38,14 +38,10 @@
       "$ref": "#/$defs/runReasonCodes"
     },
     "started_at": {
-      "type": "string",
-      "maxLength": 64,
-      "format": "date-time"
+      "$ref": "#/$defs/timestamp"
     },
     "finished_at": {
-      "type": "string",
-      "maxLength": 64,
-      "format": "date-time"
+      "$ref": "#/$defs/timestamp"
     },
     "duration_ms": {
       "type": "integer",
@@ -157,6 +153,14 @@
       "maxLength": 64,
       "description": "Portable preparation, check, or report identifier.",
       "pattern": "^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$))[a-z](?:[a-z0-9._-]{0,62}[a-z0-9_-])?(?![\\s\\S])"
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 35,
+      "format": "date-time",
+      "description": "Release Gate RFC 3339 profile (a strict subset); calendar reality and the full profile are also enforced by the required semantic validator.",
+      "pattern": "^(?!0000-)[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,9})?(?:Z|\\+(?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00)|-(?!00:00)(?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))(?![\\s\\S])"
     },
     "sha256": {
       "type": "string",

@@ -16,8 +16,9 @@ clones on a trusted host. No A/B package, plugin, adapter, or demo runtime is a
 dependency.
 
 **Tech stack:** Python 3.11+, `argparse`, `subprocess`, `pathlib`, `dataclasses`,
-PyYAML, jsonschema, defusedxml, `pathspec==1.1.1` (Git wildmatch), pytest,
-pytest-cov, Ruff, mypy, and Git CLI.
+PyYAML, `jsonschema[format]`, defusedxml, `pathspec==1.1.1` (Git wildmatch),
+pytest, pytest-cov, Ruff, mypy, and Git CLI. JSON Schema format checking is an
+explicit dependency but does not replace the gate's strict timestamp parser.
 
 ---
 
@@ -38,7 +39,9 @@ do not silently extend the contract.
   representative unknown fields and invalid versions. Add shared contract
   probes for portable run/control/report IDs, per-component artifact paths,
   and the empty RFC 6901 root pointer. Prove result/manifest reason-code enums
-  have the documented parity and reject unknown or wrong-context codes.
+  have the documented parity and reject unknown or wrong-context codes. Pass
+  an explicit `FormatChecker` for every schema validation path and include a
+  regression demonstration that `format` is otherwise annotation-only.
 - [ ] Write an AST/import test proving `release_gate` imports no repository
   A-series/B-series modules and a filesystem test proving it does not depend
   on `demo/gate`.
@@ -166,6 +169,14 @@ do not silently extend the contract.
   spawn failure, timeout, direct argv with spaces, minimal environment,
   clone-specific `HOME` on every operating system, POSIX `TMPDIR`, consistent
   Windows home/temp aliases, and clone-contained `cwd`.
+- [ ] Exercise the complete normalized lifecycle matrix: pass/fail and
+  configured/unclassified exits retain nonnegative integers with
+  `timed_out: false`; a negative return becomes `COMMAND_SIGNALLED`; timeout
+  discards the termination return and uses null/true; missing executable maps
+  to `COMMAND_SPAWN_FAILED` with null/false; missing inherited environment and
+  safely finalized interruption also use null/false; and skipped records use
+  null/false with empty metrics. Reject every mismatched reason,
+  classification, exit, and timeout combination.
 - [ ] Verify no host variable, including `PATH`, is inherited unless listed;
   requested missing names are `ERROR`; literal values win over inherited
   values; engine-owned home/temp variables win and are clone-specific; and
@@ -218,7 +229,9 @@ do not silently extend the contract.
   dotfiles, case sensitivity, rename old/new paths, deletion old paths, and
   symlinks without traversal. Prove `/foo` matches root `foo` and descendants
   such as `foo/x` while excluding `x/foo`; `/*.md` excludes `docs/x.md`; and
-  `/docs/` is root-directory-only. Reject bare `/`, `//`, leading `!/#`,
+  `/docs/` is root-directory-only. Prove `/README.md` selects that root entry
+  and also its descendants when the entry is a directory; pattern matching
+  does not infer a file type. Reject bare `/`, `//`, leading `!/#`,
   trailing whitespace, backslash, drive/UNC/device syntax including after an
   anchor, empty, `.`, and `..` components.
 - [ ] Write the full verdict matrix: blocking `FAIL` -> `FAIL`; advisory
@@ -253,6 +266,7 @@ do not silently extend the contract.
 ### Task 8: Atomic evidence package
 
 **Files:** create `release-gate/src/release_gate/evidence.py`,
+`release-gate/src/release_gate/timestamps.py`,
 `release-gate/src/release_gate/trace.py`, and
 `release-gate/tests/test_evidence.py`.
 
@@ -261,6 +275,22 @@ do not silently extend the contract.
   durations, metrics, timestamps, environment names, `control_id` for both
   preparation and check executions, and reason codes. Reject every unrecognized
   execution identifier field.
+- [ ] Test manifest lifecycle conditionals directly: pass/fail require a
+  nonnegative integer and false timeout; skipped requires null/false/empty
+  metrics; configured/unclassified exit errors require a nonnegative integer;
+  spawn/missing-environment/interruption require null/false; timeout requires
+  null/true in both directions; signal requires a negative integer/false; and
+  every negative exit requires the signal reason. No execution has multiple
+  terminal causes. Reject report diagnostics or metrics on preparation and
+  metrics on skipped work.
+- [ ] Implement and test the strict timestamp parser plus schema
+  `FormatChecker`. Accept real leap day, `Z`, fractions of 1 and 9 digits,
+  `+00:00`, `+14:00`, `-14:00`, and `-00:30`. Reject a missing zone, space or
+  lowercase separator, year 0000, non-leap February 29, February 30, hour 24,
+  second 60 even on historical leap-second dates, empty or 10-digit fractions,
+  `+14:01`, `+15:00`, `-00:00`, and trailing newline. Prove the emitter always
+  writes uppercase UTC `Z` and every result/manifest timestamp is checked by
+  both validators.
 - [ ] Verify `result.json` and `manifest.json` against bundled schemas and add a
   tamper test proving `result.json`, `candidate.patch`, `effective-config.json`,
   and `trace.json` appear exactly once, `manifest.json` never self-inventories,
@@ -360,6 +390,12 @@ do not silently extend the contract.
   declaration order. Reject zero, missing, extra, duplicate, or reordered
   items; preparation IDs must not appear there. Verify manifest/result root
   reason arrays are identical.
+- [ ] Semantically verify manifest execution cardinality and order against the
+  resolved policy: preparation controls first and base/candidate as required,
+  then candidate checks or base/candidate differential checks. At every slot
+  require exact `control_id`, phase, side, argv, cwd, and environment names;
+  retain the same slots as lifecycle-valid skipped executions after every
+  scheduling stop.
 - [ ] Add interruption tests and prove expected tool/report failures finalize
   to exit 2 while preflight errors do not claim a verdict.
 - [ ] Run `python -m pytest tests/test_engine.py tests/test_cli.py -q`; expect

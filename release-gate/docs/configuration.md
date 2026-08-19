@@ -87,9 +87,10 @@ wildmatch:
 - `*`, `?`, and bracket classes do not cross `/`; dotfiles are not special.
 - A pattern with no `/`, such as `*.md`, matches a basename at any depth.
 - One leading `/` anchors the pattern to repository root and is not a
-  filesystem absolute path: `/README.md` matches only the root file,
-  `/*.md` excludes `docs/x.md`, and `/docs/` matches only the root directory
-  and its descendants.
+  filesystem absolute path: `/README.md` selects the root entry named
+  `README.md` (and its descendants if that entry is a directory), `/*.md`
+  excludes `docs/x.md`, and `/docs/` matches only the root directory and its
+  descendants.
 - A pattern containing a non-terminal `/`, such as `src/*.py`, is anchored to
   repository root.
 - A trailing `/` is directory-only and covers that directory's descendants,
@@ -193,6 +194,18 @@ only appear in the `error` class. Spawn failure, timeout, and any unlisted exit
 are also evidence errors. The `pass`, `fail`, and `error` arrays must be
 pairwise disjoint. Defaults are `pass: [0]`, `fail: [1]`, and `error: []`;
 unlisted exits remain errors.
+
+Manifest execution records use one normalized lifecycle on every platform.
+A `pass` or `fail` has a nonnegative integer exit code and `timed_out: false`.
+An explicitly configured `error` exit or an unclassified exit also has its
+nonnegative integer status. A negative subprocess return is always
+`COMMAND_SIGNALLED`; a timeout is always `COMMAND_TIMED_OUT` with a null exit
+code and `timed_out: true`. Failure before a child starts—including a missing
+executable, which is `COMMAND_SPAWN_FAILED`—a missing inherited variable, and
+a safely finalized operator interruption all use a null exit code and
+`timed_out: false`. A skipped control likewise has a null exit code,
+`timed_out: false`, and no metrics. Platform-specific termination statuses are
+normalized to these records before policy aggregation.
 
 ## Modes and severities
 
