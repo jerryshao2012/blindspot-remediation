@@ -1,5 +1,9 @@
 # Doing a run — step by step
 
+> **Legacy demo:** This walkthrough and every command below continue to use the
+> unchanged Bash gate. For the reusable cross-repository product, see
+> [`release-gate/`](../release-gate/README.md).
+
 This is the walkthrough for a run, driven by hand. Every step says what to
 type, what you should see, and *why*, so that by the end you understand each
 piece well enough to explain it to someone else. Budget 30–40 minutes the first

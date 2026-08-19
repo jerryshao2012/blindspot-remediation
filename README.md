@@ -74,9 +74,20 @@ lane, where you hold the answers, can see both kinds of mistake. (This is
 
 ## 3. What is in this repository
 
-Two very different things live here. Do not confuse them.
+Three distinct things live here. Do not confuse them.
 
-### 3a. The scaffolding — a design that was generated, unpacked, and audited
+### 3a. The reusable product — `release-gate/`
+
+[`release-gate/`](release-gate/) is the standalone implementation for reuse
+across repositories. It is a Python 3.11+ CLI with a repository-owned
+`.release-gate.yaml`, versioned schemas, clean base/candidate workspaces,
+three-way policy, tamper-evident evidence, and a thin portable skill. It has no
+runtime dependency on the demo or on the A/B scaffolding.
+
+Start with [`release-gate/README.md`](release-gate/README.md). This is the
+product to install for a new repository.
+
+### 3b. The scaffolding — a design that was generated, unpacked, and audited
 
 Directories `A1-…` through `A12-…`, `B1-…` through `B8-…`, `E1-E2-…`, and
 `prompts/`.
@@ -113,9 +124,13 @@ which was current, three copies of one component under two labels, the same
 concept ("gate outcome") defined nine incompatible ways. Keep that in mind
 when someone asks why any of this is necessary.
 
-### 3b. The demo — a minimum working version of the two lanes
+### 3c. The demo — a minimum working version of the two lanes
 
 Directory `demo/`. Small, and it runs. Everything below is about this.
+
+The Bash interface at `demo/gate/gate.sh` remains supported unchanged for the
+X1 walkthrough. `A3-release-gate-service` is audited legacy source material;
+neither is the reusable product.
 
 ```
 demo/

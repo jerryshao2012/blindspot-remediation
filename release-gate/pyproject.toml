@@ -1,0 +1,70 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "release-gate"
+version = "0.1.0"
+description = "A repository-neutral, evidence-producing release gate"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Blindspot Remediation contributors" }]
+dependencies = [
+  "pydantic>=2.12,<3",
+  "PyYAML>=6.0,<7",
+  "jsonschema[format]>=4.25,<5",
+  "pathspec==1.1.1",
+  "psutil>=7.0,<8",
+  "defusedxml>=0.7,<1",
+]
+
+[project.scripts]
+release-gate = "release_gate.cli:main"
+
+[dependency-groups]
+dev = [
+  "build>=1.3,<2",
+  "mypy>=1.17,<2",
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7",
+  "ruff>=0.12,<1",
+  "types-psutil>=7.0,<8",
+  "types-jsonschema>=4.25,<5",
+  "types-defusedxml>=0.7,<1",
+  "types-PyYAML>=6.0,<7",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/release_gate"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = [
+  "ignore:GitWildMatchPattern .* is deprecated:DeprecationWarning:pathspec.*",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["release_gate"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["release_gate"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]

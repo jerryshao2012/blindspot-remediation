@@ -1,0 +1,63 @@
+version: 1
+
+scope:
+  allowed_paths:
+    - "src/**"
+    - "tests/**"
+    - "tools/**"
+    - "/README.md"
+  forbidden_paths:
+    - ".github/**"
+  review_required_paths:
+    - "/.release-gate.yaml"
+    - "/SECURITY.md"
+    - "/LICENSE*"
+    - "tools/project-gate-check"
+    - "tools/project-gate-check.exe"
+
+prepare: []
+
+limits:
+  stream_bytes: 1048576
+  report_bytes: 5242880
+  total_bytes: 209715200
+
+checks:
+  - id: project-tests
+    mode: differential
+    severity: blocking
+    argv: ["./tools/project-gate-check", "--metrics", "gate-metrics.json"]
+    cwd: "."
+    timeout: 600
+    inherit_environment:
+      - "PATH"
+    environment:
+      CI: "true"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: [2]
+    platform:
+      windows:
+        argv: ["tools/project-gate-check.exe", "--metrics", "gate-metrics.json"]
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"
+    reports:
+      - id: metrics
+        parser: json-metrics
+        path: gate-metrics.json
+        required: true
+        max_bytes: 5242880
+    assertions:
+      - report: metrics
+        metric: /failed
+        comparison: candidate
+        operator: eq
+        value: 0
+      - report: metrics
+        metric: /warnings
+        comparison: candidate-minus-baseline
+        operator: lte
+        value: 0

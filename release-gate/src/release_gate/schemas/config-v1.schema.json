@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:release-gate:schema:config:v1",
+  "title": "Release Gate configuration v1",
+  "description": "JSON representation of a .release-gate.yaml policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "scope", "checks"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
+    },
+    "prepare": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/prepareStep"
+      }
+    },
+    "limits": {
+      "$ref": "#/$defs/limits"
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Portable preparation, check, or report identifier.",
+      "pattern": "^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$))[a-z](?:[a-z0-9._-]{0,62}[a-z0-9_-])?(?![\\s\\S])"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
+    },
+    "scopePattern": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "Closed Git-wildmatch pattern; one leading slash is a repository-root anchor, not an absolute filesystem path.",
+      "pattern": "^(?![!#])(?!//)(?!/?[A-Za-z]:)(?!/(?![\\s\\S]))(?![\\s\\S]*\\s(?![\\s\\S]))(?![\\s\\S]*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^\\\\]+(?![\\s\\S])"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_paths"],
+      "properties": {
+        "allowed_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePattern"
+          }
+        },
+        "forbidden_paths": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/scopePattern"
+          }
+        },
+        "review_required_paths": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/scopePattern"
+          }
+        }
+      }
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      }
+    },
+    "environment": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "$ref": "#/$defs/environmentName"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "default": {}
+    },
+    "environmentName": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Environment name. Exact all-platform engine-owned names are rejected here; platform-specific and Windows case-insensitive reservations are semantic validation rules.",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "not": {
+        "anyOf": [
+          {
+            "const": "HOME"
+          },
+          {
+            "pattern": "^RELEASE_GATE_"
+          }
+        ]
+      }
+    },
+    "inheritEnvironment": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/environmentName"
+      }
+    },
+    "exitCodeArray": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": -2147483648,
+        "maximum": 4294967295
+      }
+    },
+    "exitClasses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "fail", "error"],
+      "properties": {
+        "pass": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/exitCodeArray"
+            },
+            {
+              "minItems": 1
+            }
+          ]
+        },
+        "fail": {
+          "$ref": "#/$defs/exitCodeArray"
+        },
+        "error": {
+          "$ref": "#/$defs/exitCodeArray"
+        }
+      },
+      "default": {
+        "pass": [0],
+        "fail": [1],
+        "error": []
+      }
+    },
+    "commandOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "argv": {
+          "$ref": "#/$defs/argv"
+        },
+        "cwd": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "inherit_environment": {
+          "$ref": "#/$defs/inheritEnvironment"
+        },
+        "exit_classes": {
+          "$ref": "#/$defs/exitClasses"
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "linux": {
+          "$ref": "#/$defs/commandOverride"
+        },
+        "macos": {
+          "$ref": "#/$defs/commandOverride"
+        },
+        "windows": {
+          "$ref": "#/$defs/commandOverride"
+        }
+      }
+    },
+    "prepareStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "argv"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "argv": {
+          "$ref": "#/$defs/argv"
+        },
+        "cwd": {
+          "$ref": "#/$defs/relativePath",
+          "default": "."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 600
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "inherit_environment": {
+          "$ref": "#/$defs/inheritEnvironment"
+        },
+        "exit_classes": {
+          "$ref": "#/$defs/exitClasses"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "parser", "path"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "parser": {
+          "enum": ["junit-xml", "coverage-json", "json-metrics"]
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 52428800
+        }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report", "metric", "comparison", "operator", "value"],
+      "properties": {
+        "report": {
+          "$ref": "#/$defs/id"
+        },
+        "metric": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^(?:/(?:[^~/]|~[01])*)*(?![\\s\\S])"
+        },
+        "comparison": {
+          "enum": ["candidate", "baseline", "candidate-minus-baseline"]
+        },
+        "operator": {
+          "enum": ["eq", "ne", "gt", "gte", "lt", "lte"]
+        },
+        "value": {
+          "$ref": "#/$defs/scalar"
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mode", "severity", "argv"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "mode": {
+          "enum": ["candidate", "differential"]
+        },
+        "severity": {
+          "enum": ["blocking", "advisory", "informational"]
+        },
+        "argv": {
+          "$ref": "#/$defs/argv"
+        },
+        "cwd": {
+          "$ref": "#/$defs/relativePath",
+          "default": "."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 600
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "inherit_environment": {
+          "$ref": "#/$defs/inheritEnvironment"
+        },
+        "exit_classes": {
+          "$ref": "#/$defs/exitClasses"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        },
+        "reports": {
+          "type": "array",
+          "maxItems": 16,
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/report"
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "maxItems": 64,
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/assertion"
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stream_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10485760,
+          "default": 1048576
+        },
+        "report_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 52428800,
+          "default": 5242880
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 16777216,
+          "maximum": 209715200,
+          "description": "Inclusive byte ceiling for every retained run file; semantic preflight preserves the fixed 7 MiB finalization reserve.",
+          "default": 209715200
+        }
+      },
+      "default": {}
+    },
+    "scalar": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": -1.7976931348623157e308,
+          "maximum": 1.7976931348623157e308
+        },
+        {
+          "type": "string",
+          "maxLength": 4096
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

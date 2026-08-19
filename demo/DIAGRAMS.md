@@ -1,5 +1,9 @@
 # Diagrams
 
+> **Legacy demo:** These diagrams describe `demo/gate/gate.sh`; they are not
+> the architecture of the reusable [`release-gate/`](../release-gate/README.md)
+> product.
+
 Two diagrams, in Mermaid. GitHub renders them in place; draw.io imports them
 via *Arrange → Insert → Advanced → Mermaid* (paste the block); most IDEs
 preview them.

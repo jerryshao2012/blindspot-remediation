@@ -119,3 +119,14 @@ Recommendation, in two steps:
    evidence and the design source. Update `INDEX.md` paths in the same commit.
    Nothing is lost — git keeps it — and the tree stops implying that 35,000
    lines are load-bearing.
+
+---
+
+## 5. Current state — 2026-08-18
+
+The reusable gate is implemented independently at
+[`release-gate/`](release-gate/). This does not revise the historical ledger:
+the A/B/E directories remain the received scaffolding and audit evidence, and
+their recorded defects/test counts remain historical facts. A3 contributed
+concepts only; it is not a package dependency. The unchanged Bash demo remains
+available for its documented X1 commands.

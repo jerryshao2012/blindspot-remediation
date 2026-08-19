@@ -1,0 +1,129 @@
+version: 1
+
+scope:
+  allowed_paths:
+    - "src/**"
+    - "tests/**"
+    - "/pyproject.toml"
+    - "/README.md"
+  forbidden_paths:
+    - ".github/**"
+  review_required_paths:
+    - "/.release-gate.yaml"
+    - "/SECURITY.md"
+    - "/LICENSE*"
+
+prepare:
+  - id: install-dependencies
+    argv: ["python3", "-m", "pip", "install", "--target", ".release-gate-deps", ".[test]"]
+    cwd: "."
+    timeout: 600
+    inherit_environment:
+      - "PATH"
+    environment:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: []
+    platform:
+      windows:
+        argv: ["py", "-3", "-m", "pip", "install", "--target", ".release-gate-deps", ".[test]"]
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"
+
+limits:
+  stream_bytes: 1048576
+  report_bytes: 5242880
+  total_bytes: 209715200
+
+checks:
+  - id: tests-and-coverage
+    mode: differential
+    severity: blocking
+    argv:
+      - "python3"
+      - "-m"
+      - "pytest"
+      - "--junitxml=junit.xml"
+      - "--cov=src"
+      - "--cov-report=json:coverage.json"
+    cwd: "."
+    timeout: 600
+    inherit_environment:
+      - "PATH"
+    environment:
+      CI: "true"
+      PYTHONPATH: ".release-gate-deps"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: [2, 3, 4, 5]
+    platform:
+      windows:
+        argv:
+          - "py"
+          - "-3"
+          - "-m"
+          - "pytest"
+          - "--junitxml=junit.xml"
+          - "--cov=src"
+          - "--cov-report=json:coverage.json"
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"
+    reports:
+      - id: junit
+        parser: junit-xml
+        path: junit.xml
+        required: true
+      - id: coverage
+        parser: coverage-json
+        path: coverage.json
+        required: true
+    assertions:
+      - report: junit
+        metric: /failures
+        comparison: candidate-minus-baseline
+        operator: lte
+        value: 0
+      - report: junit
+        metric: /errors
+        comparison: candidate-minus-baseline
+        operator: lte
+        value: 0
+      - report: coverage
+        metric: /percent_covered
+        comparison: candidate
+        operator: gte
+        value: 85
+      - report: coverage
+        metric: /percent_covered
+        comparison: candidate-minus-baseline
+        operator: gte
+        value: -1
+
+  - id: types
+    mode: candidate
+    severity: advisory
+    argv: ["python3", "-m", "mypy", "src"]
+    cwd: "."
+    timeout: 600
+    inherit_environment:
+      - "PATH"
+    environment:
+      PYTHONPATH: ".release-gate-deps"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: [2]
+    platform:
+      windows:
+        argv: ["py", "-3", "-m", "mypy", "src"]
+        inherit_environment:
+          - "PATH"
+          - "PATHEXT"
+          - "SYSTEMROOT"

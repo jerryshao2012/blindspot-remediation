@@ -238,6 +238,21 @@ Two components also supplied files that their own declared structure does not li
 B6 also shows a recommended `pyproject.toml` and a pytest marker block, but presents them
 as guidance rather than as files. They were not written out.
 
+## Current implementation index — 2026-08-18
+
+The repository-neutral product is now under [`release-gate/`](release-gate/):
+
+- `src/release_gate/` — standalone engine and CLI;
+- `schemas/` — configuration, stable result, and manifest contracts;
+- `examples/` — generic, Python, and Node policies;
+- `skills/release-gate/` — portable invocation/reporting skill; and
+- `docs/` — canonical architecture, security, adoption, CLI, evidence, and
+  configuration documentation.
+
+Historical A/B/E test counts and the sixteen defects above are preserved. A3
+is source material rather than a dependency; the Bash demo remains separately
+supported unchanged.
+
 ## Two corrections that were applied
 
 Both are repairs to mail-gateway damage, not changes to the design.
