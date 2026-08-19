@@ -187,6 +187,9 @@ def test_readme_documents_safe_updates_for_every_host() -> None:
         "Retain the previous wheel, host archive, and `SHA256SUMS`",
         "Never self-update or use an unpinned `skills update`",
         "Do not invoke Release Gate while the skill and CLI versions differ",
+        "After verifying the new wheel and exactly one host archive, run exactly one "
+        "matching host block",
+        "Resume only when the bundled skill version and executable version match",
     ):
         assert phrase.casefold() in normalized.casefold()
 
@@ -231,6 +234,19 @@ def test_readme_documents_safe_updates_for_every_host() -> None:
     assert cli_block in upgrade
     assert "/release-gate --version" in upgrade
     assert "$release-gate --version" in upgrade
+
+    uninstall_position = upgrade.index("uv tool uninstall release-gate")
+    assert all(position < uninstall_position for position in block_positions)
+
+    cli_end = upgrade.index(cli_block) + len(cli_block)
+    slash_check_position = upgrade.index("`/release-gate --version`")
+    dollar_check_position = upgrade.index("`$release-gate --version`")
+    assert cli_end < slash_check_position
+    assert cli_end < dollar_check_position
+
+    resume_position = upgrade.index("Resume only when the bundled skill version")
+    assert slash_check_position < resume_position
+    assert dollar_check_position < resume_position
 
 
 def test_assistant_version_syntax_is_documented_as_informational() -> None:
