@@ -5,13 +5,13 @@ scope:
     - "src/**"
     - "tests/**"
     - "tools/**"
-    - "README.md"
+    - "/README.md"
   forbidden_paths:
     - ".github/**"
   review_required_paths:
-    - ".release-gate.yaml"
-    - "SECURITY.md"
-    - "LICENSE*"
+    - "/.release-gate.yaml"
+    - "/SECURITY.md"
+    - "/LICENSE*"
     - "tools/project-gate-check"
     - "tools/project-gate-check.exe"
 

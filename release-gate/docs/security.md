@@ -38,15 +38,18 @@ The engine MUST:
   evidence roots; always reject aliases into the absolute per-worktree
   `--git-dir`, shared `--git-common-dir`, or execution clones; and pin and
   recheck accepted filesystem identities through finalization;
-- capture the candidate with a temporary Git index without changing the real
-  index or candidate source bytes, and create no missing default evidence
-  component until capture is complete;
+- capture the candidate with an invocation-owned temporary Git index and
+  `GIT_OBJECT_DIRECTORY`, expose source objects only as read-only alternates,
+  and change neither the real index, candidate source bytes, nor source/shared
+  object databases; create no missing default evidence component until
+  capture is complete;
 - use distinct clean base and candidate clones and keep evidence outside them;
 - run argv directly with no shell and resolve `cwd` beneath the clone root;
 - reject report/evidence traversal, absolute paths, unsafe symlink targets,
   duplicate normalized paths, and existing run destinations;
 - parse XML without DTDs, external entities, or network retrieval;
-- bound command time, retained streams, individual reports, and total evidence;
+- bound command time, retained streams, individual reports, policy shape, and
+  total evidence; reserve bounded finalization before candidate evaluation;
   and
 - treat unavailable required evidence as `NEEDS_HUMAN`, never as a pass.
 
@@ -124,6 +127,20 @@ submodule surprises not represented by the base, and ambiguous case-folding
 collisions on the host. The source repository, its index, and its refs remain
 read-only to the engine.
 
+Candidate capture also isolates object writes. The engine removes every
+ambient `GIT_*` variable, then supplies only a closed invocation-owned Git
+environment, including its temporary index/object directory and validated
+source object locations as read-only alternates. Alternate lists use
+`os.pathsep` (`:` on POSIX, `;` on Windows) plus Git's documented
+quoting/escaping for entries containing the separator or quotes. Source Git
+reads use `GIT_OPTIONAL_LOCKS=0` so status/index refresh cannot write through an
+optional lock. The temporary object directory remains live through diff
+emission and candidate-tree reconstruction and is then removed. Tests compare
+the real index, status,
+refs, and a filename/content inventory of the per-worktree and shared object
+databases before and after capture, including linked worktrees and pre-existing
+alternates.
+
 Artifact paths use Unicode NFC and POSIX separators in contracts and native
 paths only after validated joining. Each component is 1-128 Unicode code
 points and rejects ASCII controls, Windows-illegal `<>:"/\|?*`, a trailing
@@ -153,6 +170,16 @@ Truncation, missing reports, parser failures, timeouts, and interrupted checks
 are explicit reason-coded events. Logs and report contents must be treated as
 untrusted when displayed; user interfaces should escape control characters
 and markup.
+
+Every retained regular file counts toward `limits.total_bytes`, including
+`manifest.json` although the manifest cannot inventory itself. Before a
+verdict, the exact patch and effective configuration must fit beside a fixed
+7 MiB result/manifest/trace reserve; otherwise the input is rejected with exit
+3 and no result. Once evaluation begins, deterministic stream/report quotas
+preserve the reserve, and budget exhaustion becomes a complete
+`NEEDS_HUMAN` package. Accepted patch/config bytes are never truncated. This
+makes every allowed 16-200 MiB total feasible rather than relying on disk
+exhaustion during finalization.
 
 ## Operational guidance
 

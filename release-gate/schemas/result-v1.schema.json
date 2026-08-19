@@ -35,19 +35,22 @@
       "enum": [0, 1, 2]
     },
     "reason_codes": {
-      "$ref": "#/$defs/reasonCodes"
+      "$ref": "#/$defs/runReasonCodes"
     },
     "started_at": {
       "type": "string",
+      "maxLength": 64,
       "format": "date-time"
     },
     "finished_at": {
       "type": "string",
+      "maxLength": 64,
       "format": "date-time"
     },
     "duration_ms": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "maximum": 9223372036854775807
     },
     "base_commit": {
       "$ref": "#/$defs/gitObject"
@@ -66,6 +69,10 @@
     },
     "checks": {
       "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "description": "Exactly one entry per effective-config check, in declaration order; identity fields must match semantically.",
       "items": {
         "$ref": "#/$defs/checkResult"
       }
@@ -88,6 +95,9 @@
         "properties": {
           "exit_code": {
             "const": 0
+          },
+          "reason_codes": {
+            "const": []
           }
         }
       }
@@ -105,6 +115,9 @@
         "properties": {
           "exit_code": {
             "const": 1
+          },
+          "reason_codes": {
+            "$ref": "#/$defs/failRunReasonCodes"
           }
         }
       }
@@ -122,6 +135,9 @@
         "properties": {
           "exit_code": {
             "const": 2
+          },
+          "reason_codes": {
+            "$ref": "#/$defs/needsHumanRunReasonCodes"
           }
         }
       }
@@ -144,27 +160,134 @@
     },
     "sha256": {
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}(?![\\s\\S])"
     },
     "gitObject": {
       "type": "string",
-      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+      "minLength": 40,
+      "maxLength": 64,
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})(?![\\s\\S])"
     },
-    "reasonCodes": {
+    "runReasonCodes": {
       "type": "array",
-      "minItems": 1,
+      "maxItems": 22,
       "uniqueItems": true,
       "items": {
-        "type": "string",
-        "pattern": "^[A-Z][A-Z0-9_]*$"
+        "enum": [
+          "ASSERTION_FAILED",
+          "ASSERTION_OPERAND_ERROR",
+          "COMMAND_EXIT_ERROR",
+          "COMMAND_EXIT_UNCLASSIFIED",
+          "COMMAND_FAILED",
+          "COMMAND_SIGNALLED",
+          "COMMAND_SPAWN_FAILED",
+          "COMMAND_TIMED_OUT",
+          "CONTROL_LAUNCHER_REVIEW",
+          "EVIDENCE_BUDGET_EXHAUSTED",
+          "INHERITED_ENVIRONMENT_MISSING",
+          "OPERATOR_INTERRUPTED",
+          "PATH_FORBIDDEN",
+          "PATH_OUTSIDE_ALLOWED",
+          "PATH_REVIEW_REQUIRED",
+          "POLICY_FILE_CHANGED",
+          "PREPARATION_FAILED",
+          "REPORT_PARSE_FAILED",
+          "REPORT_PATH_UNSAFE",
+          "REPORT_TOO_LARGE",
+          "REQUIRED_CONTROL_SKIPPED",
+          "REQUIRED_REPORT_MISSING"
+        ]
       }
+    },
+    "nonPassRunReasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 22,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ASSERTION_FAILED",
+          "ASSERTION_OPERAND_ERROR",
+          "COMMAND_EXIT_ERROR",
+          "COMMAND_EXIT_UNCLASSIFIED",
+          "COMMAND_FAILED",
+          "COMMAND_SIGNALLED",
+          "COMMAND_SPAWN_FAILED",
+          "COMMAND_TIMED_OUT",
+          "CONTROL_LAUNCHER_REVIEW",
+          "EVIDENCE_BUDGET_EXHAUSTED",
+          "INHERITED_ENVIRONMENT_MISSING",
+          "OPERATOR_INTERRUPTED",
+          "PATH_FORBIDDEN",
+          "PATH_OUTSIDE_ALLOWED",
+          "PATH_REVIEW_REQUIRED",
+          "POLICY_FILE_CHANGED",
+          "PREPARATION_FAILED",
+          "REPORT_PARSE_FAILED",
+          "REPORT_PATH_UNSAFE",
+          "REPORT_TOO_LARGE",
+          "REQUIRED_CONTROL_SKIPPED",
+          "REQUIRED_REPORT_MISSING"
+        ]
+      }
+    },
+    "failRunReasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ASSERTION_FAILED",
+          "COMMAND_FAILED",
+          "PATH_FORBIDDEN",
+          "PATH_OUTSIDE_ALLOWED"
+        ]
+      }
+    },
+    "needsHumanRunReasonCodes": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nonPassRunReasonCodes"
+        },
+        {
+          "contains": {
+            "enum": [
+              "ASSERTION_FAILED",
+              "ASSERTION_OPERAND_ERROR",
+              "COMMAND_EXIT_ERROR",
+              "COMMAND_EXIT_UNCLASSIFIED",
+              "COMMAND_FAILED",
+              "COMMAND_SIGNALLED",
+              "COMMAND_SPAWN_FAILED",
+              "COMMAND_TIMED_OUT",
+              "CONTROL_LAUNCHER_REVIEW",
+              "EVIDENCE_BUDGET_EXHAUSTED",
+              "INHERITED_ENVIRONMENT_MISSING",
+              "OPERATOR_INTERRUPTED",
+              "PATH_REVIEW_REQUIRED",
+              "POLICY_FILE_CHANGED",
+              "PREPARATION_FAILED",
+              "REPORT_PARSE_FAILED",
+              "REPORT_PATH_UNSAFE",
+              "REPORT_TOO_LARGE",
+              "REQUIRED_CONTROL_SKIPPED",
+              "REQUIRED_REPORT_MISSING"
+            ]
+          }
+        }
+      ]
     },
     "pathArray": {
       "type": "array",
+      "maxItems": 4096,
       "uniqueItems": true,
       "items": {
         "type": "string",
         "minLength": 1,
+        "maxLength": 4096,
         "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
       }
     },
@@ -184,7 +307,7 @@
           "enum": ["PASS", "FAIL", "NEEDS_HUMAN"]
         },
         "reason_codes": {
-          "$ref": "#/$defs/reasonCodes"
+          "$ref": "#/$defs/scopeReasonCodes"
         },
         "changed_paths": {
           "$ref": "#/$defs/pathArray"
@@ -198,10 +321,79 @@
         "review_required_paths": {
           "$ref": "#/$defs/pathArray"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "PASS"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "const": []
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "FAIL"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "$ref": "#/$defs/failScopeReasonCodes"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "NEEDS_HUMAN"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "$ref": "#/$defs/reviewScopeReasonCodes"
+              }
+            }
+          }
+        }
+      ]
     },
     "scalar": {
-      "type": ["number", "string", "boolean", "null"]
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": -1.7976931348623157e308,
+          "maximum": 1.7976931348623157e308
+        },
+        {
+          "type": "string",
+          "maxLength": 4096
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "assertionResult": {
       "type": "object",
@@ -222,6 +414,7 @@
         },
         "metric": {
           "type": "string",
+          "maxLength": 1024,
           "pattern": "^(?:/(?:[^~/]|~[01])*)*(?![\\s\\S])"
         },
         "comparison": {
@@ -240,9 +433,62 @@
           "type": ["boolean", "null"]
         },
         "reason_codes": {
-          "$ref": "#/$defs/reasonCodes"
+          "$ref": "#/$defs/assertionReasonCodes"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["passed"],
+            "properties": {
+              "passed": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "const": []
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["passed"],
+            "properties": {
+              "passed": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "const": ["ASSERTION_FAILED"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["passed"],
+            "properties": {
+              "passed": {
+                "const": null
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "$ref": "#/$defs/errorAssertionReasonCodes"
+              }
+            }
+          }
+        }
+      ]
     },
     "checkResult": {
       "type": "object",
@@ -269,14 +515,248 @@
           "enum": ["PASS", "FAIL", "ERROR", "SKIPPED"]
         },
         "reason_codes": {
-          "$ref": "#/$defs/reasonCodes"
+          "$ref": "#/$defs/checkReasonCodes"
         },
         "assertions": {
           "type": "array",
+          "maxItems": 64,
           "items": {
             "$ref": "#/$defs/assertionResult"
           }
         }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "PASS"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "$ref": "#/$defs/passCheckReasonCodes"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "FAIL"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "$ref": "#/$defs/failCheckReasonCodes"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "ERROR"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "$ref": "#/$defs/errorCheckReasonCodes"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "SKIPPED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "$ref": "#/$defs/skippedCheckReasonCodes"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "scopeReasonCodes": {
+      "type": "array",
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["PATH_FORBIDDEN", "PATH_OUTSIDE_ALLOWED", "PATH_REVIEW_REQUIRED"]
+      }
+    },
+    "failScopeReasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["PATH_FORBIDDEN", "PATH_OUTSIDE_ALLOWED"]
+      }
+    },
+    "reviewScopeReasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["PATH_FORBIDDEN", "PATH_OUTSIDE_ALLOWED", "PATH_REVIEW_REQUIRED"]
+      },
+      "contains": {
+        "const": "PATH_REVIEW_REQUIRED"
+      }
+    },
+    "assertionReasonCodes": {
+      "type": "array",
+      "maxItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ASSERTION_FAILED",
+          "ASSERTION_OPERAND_ERROR"
+        ]
+      }
+    },
+    "errorAssertionReasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ASSERTION_OPERAND_ERROR"
+        ]
+      }
+    },
+    "checkReasonCodes": {
+      "type": "array",
+      "maxItems": 21,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ASSERTION_FAILED",
+          "ASSERTION_OPERAND_ERROR",
+          "COMMAND_EXIT_ERROR",
+          "COMMAND_EXIT_UNCLASSIFIED",
+          "COMMAND_FAILED",
+          "COMMAND_SIGNALLED",
+          "COMMAND_SPAWN_FAILED",
+          "COMMAND_TIMED_OUT",
+          "CONTROL_LAUNCHER_REVIEW",
+          "EVIDENCE_BUDGET_EXHAUSTED",
+          "INHERITED_ENVIRONMENT_MISSING",
+          "OPERATOR_INTERRUPTED",
+          "OPTIONAL_REPORT_MISSING",
+          "POLICY_FILE_CHANGED",
+          "PREPARATION_FAILED",
+          "REPORT_PARSE_FAILED",
+          "REPORT_PATH_UNSAFE",
+          "REPORT_TOO_LARGE",
+          "REQUIRED_CONTROL_SKIPPED",
+          "REQUIRED_REPORT_MISSING",
+          "STREAM_TRUNCATED"
+        ]
+      }
+    },
+    "passCheckReasonCodes": {
+      "type": "array",
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["OPTIONAL_REPORT_MISSING", "STREAM_TRUNCATED"]
+      }
+    },
+    "failCheckReasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ASSERTION_FAILED",
+          "COMMAND_FAILED",
+          "OPTIONAL_REPORT_MISSING",
+          "STREAM_TRUNCATED"
+        ]
+      },
+      "contains": {
+        "enum": ["ASSERTION_FAILED", "COMMAND_FAILED"]
+      }
+    },
+    "errorCheckReasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 14,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ASSERTION_OPERAND_ERROR",
+          "COMMAND_EXIT_ERROR",
+          "COMMAND_EXIT_UNCLASSIFIED",
+          "COMMAND_SIGNALLED",
+          "COMMAND_SPAWN_FAILED",
+          "COMMAND_TIMED_OUT",
+          "EVIDENCE_BUDGET_EXHAUSTED",
+          "INHERITED_ENVIRONMENT_MISSING",
+          "OPERATOR_INTERRUPTED",
+          "REPORT_PARSE_FAILED",
+          "REPORT_PATH_UNSAFE",
+          "REPORT_TOO_LARGE",
+          "REQUIRED_REPORT_MISSING",
+          "STREAM_TRUNCATED"
+        ]
+      },
+      "contains": {
+        "enum": [
+          "ASSERTION_OPERAND_ERROR",
+          "COMMAND_EXIT_ERROR",
+          "COMMAND_EXIT_UNCLASSIFIED",
+          "COMMAND_SIGNALLED",
+          "COMMAND_SPAWN_FAILED",
+          "COMMAND_TIMED_OUT",
+          "EVIDENCE_BUDGET_EXHAUSTED",
+          "INHERITED_ENVIRONMENT_MISSING",
+          "OPERATOR_INTERRUPTED",
+          "REPORT_PARSE_FAILED",
+          "REPORT_PATH_UNSAFE",
+          "REPORT_TOO_LARGE",
+          "REQUIRED_REPORT_MISSING"
+        ]
+      }
+    },
+    "skippedCheckReasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "CONTROL_LAUNCHER_REVIEW",
+          "EVIDENCE_BUDGET_EXHAUSTED",
+          "OPERATOR_INTERRUPTED",
+          "POLICY_FILE_CHANGED",
+          "PREPARATION_FAILED",
+          "REQUIRED_CONTROL_SKIPPED"
+        ]
       }
     }
   }

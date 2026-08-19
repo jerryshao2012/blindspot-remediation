@@ -113,11 +113,23 @@ the final run directory is disjoint from every protected path. The engine
 creates clones elsewhere and rechecks before executing commands. No custom
 root creates a capture exclusion or hides candidate files.
 
-Preflight resolves the base, reads `.release-gate.yaml` from it, validates the
-policy, performs the read-only source/evidence checks above, and only then
-captures the working tree through a temporary index. Invalid refs,
-invalid/missing policy, ambiguous input, patch reconstruction failure, or an
-unsafe evidence path exit 3 before a candidate verdict.
+Preflight resolves the base, reads at most 1 MiB of `.release-gate.yaml` from
+it, validates the policy, performs the read-only source/evidence checks above,
+and only then captures the working tree through an invocation-owned temporary
+index and Git object directory. Source objects are read-only alternates; newly
+staged blobs do not enter the source/common object database.
+
+Before candidate evaluation, preflight stages and measures the exact
+`candidate.patch` and canonical `effective-config.json`. It rejects a patch
+over 200 MiB, either raw/effective configuration over 1 MiB, or any input for
+which `patch bytes + effective-config bytes + 7,340,032` exceeds
+`limits.total_bytes`. It also rejects an effective policy and captured
+changed-path inventory whose maximum bounded result/manifest/trace structures
+cannot fit the respective 2/4/1 MiB parts of that reserve. These are exit-3
+input/configuration errors: no verdict or `result.json` is promised, staged
+files are discarded, and accepted patch/config bytes are never truncated.
+Invalid refs, ambiguous input, patch reconstruction failure, or an unsafe
+evidence path have the same boundary.
 
 After capture, preflight compares `.release-gate.yaml` and every directly
 invoked repository-local launcher with the base. Any candidate add, modify,
@@ -138,7 +150,8 @@ RESULT: <absolute-path-to-result.json>
 
 Human-readable progress goes to stderr. Automation MUST consume `result.json`,
 not parse progress text. The result is complete before the verdict lines are
-printed.
+printed. Even when later work stops, its `checks` array contains one item per
+effective check in declaration order; unrun checks are reason-coded `SKIPPED`.
 
 ## Exit codes
 

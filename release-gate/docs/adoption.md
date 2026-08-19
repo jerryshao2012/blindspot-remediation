@@ -39,6 +39,14 @@ from candidate code. Store the whole evidence directory as one CI artifact and
 branch on exit 0/1/2; treat 3/4 as pipeline failures rather than candidate
 verdicts.
 
+Consumers MUST validate the schema and contract version before interpreting
+the closed v1 reason-code registry. An unknown or wrong-context code is a
+version/validation error, not a warning to ignore. Root reason arrays are
+stable machine data and are ASCII-sorted atomic causes; log prose is not.
+Size `total_bytes` with the exact patch/config feasibility rule and fixed
+7 MiB finalization reserve in mind; a preflight-infeasible change is exit 3,
+not a candidate failure.
+
 Linux, macOS, and Windows jobs SHOULD each run `validate`. Repositories
 claiming platform support MUST execute at least one real gate run on each
 claimed OS, because argv, executable names, path casing, signals, and process

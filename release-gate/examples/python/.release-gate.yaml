@@ -4,14 +4,14 @@ scope:
   allowed_paths:
     - "src/**"
     - "tests/**"
-    - "pyproject.toml"
-    - "README.md"
+    - "/pyproject.toml"
+    - "/README.md"
   forbidden_paths:
     - ".github/**"
   review_required_paths:
-    - ".release-gate.yaml"
-    - "SECURITY.md"
-    - "LICENSE*"
+    - "/.release-gate.yaml"
+    - "/SECURITY.md"
+    - "/LICENSE*"
 
 prepare:
   - id: install-dependencies

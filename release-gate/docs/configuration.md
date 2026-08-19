@@ -11,9 +11,9 @@ The document is YAML whose data model MUST validate against
 ```yaml
 version: 1
 scope:
-  allowed_paths: ["src/**", "tests/**"]
+  allowed_paths: ["src/**", "tests/**", "/README.md"]
   forbidden_paths: [".github/**"]
-  review_required_paths: [".release-gate.yaml", "SECURITY.md", "LICENSE*"]
+  review_required_paths: ["/.release-gate.yaml", "/SECURITY.md", "/LICENSE*"]
 prepare:
   - id: dependencies
     argv: ["python3", "-m", "pip", "install", "-e", ".[test]"]
@@ -86,6 +86,10 @@ wildmatch:
 
 - `*`, `?`, and bracket classes do not cross `/`; dotfiles are not special.
 - A pattern with no `/`, such as `*.md`, matches a basename at any depth.
+- One leading `/` anchors the pattern to repository root and is not a
+  filesystem absolute path: `/README.md` matches only the root file,
+  `/*.md` excludes `docs/x.md`, and `/docs/` matches only the root directory
+  and its descendants.
 - A pattern containing a non-terminal `/`, such as `src/*.py`, is anchored to
   repository root.
 - A trailing `/` is directory-only and covers that directory's descendants,
@@ -96,13 +100,14 @@ wildmatch:
   `dir` but not the directory entry itself.
 - Pattern lists are an unordered OR. Negation is not supported.
 
-Patterns beginning `/`, `!`, or `#`, ending in whitespace,
-absolute/drive/UNC/device paths, backslashes, `.` or `..` components, and empty
-path components are invalid. The single terminal separator that gives a
-directory pattern its trailing `/` semantics is the only permitted empty
-component. These restrictions remove Git-ignore comments, negation, escaping,
-trailing-space normalization, and host-dependent path interpretation while
-retaining the matching rules above.
+Exactly one optional leading `/` is permitted as the repository-root anchor.
+A bare `/`, `//`, a leading `!` or `#`, trailing whitespace, drive/UNC/device
+syntax (including after the optional anchor), backslashes, `.` or `..`
+components, and empty path components are invalid. The one terminal separator
+that gives a directory pattern its trailing `/` semantics is the only
+permitted empty component. These restrictions remove Git-ignore comments,
+negation, escaping, trailing-space normalization, and host-dependent
+filesystem interpretation while retaining the matching rules above.
 
 - `allowed_paths` is a required allowlist. A changed path outside it is
   blocking.
@@ -216,7 +221,11 @@ required skip always produce `NEEDS_HUMAN` regardless of severity.
 Report paths are POSIX-style, clone-root-relative single files without globs
 or traversal. A required report that is missing, escapes through a symlink,
 exceeds its limit, or cannot be parsed makes the check `ERROR`. An optional
-missing report is recorded but is an error if an assertion references it.
+missing report is recorded but is an error if an assertion references it. If
+an optional report exists but is unsafe, oversized, or unparsable, it is
+`ERROR`; `required: false` permits absence, not invalid content. A report that
+cannot be retained whole under the total evidence allowance produces
+`EVIDENCE_BUDGET_EXHAUSTED` and `NEEDS_HUMAN` regardless of `required`.
 
 V1 parsers expose these JSON-shaped metrics:
 
@@ -251,7 +260,49 @@ draining and hashing a larger stream but retains only the configured prefix
 and records truncation.
 
 `report_bytes` defaults to 5 MiB per report and may be raised to at most
-50 MiB; individual reports may set a lower `max_bytes`. Reports are never
-silently truncated before parsing. `total_bytes` defaults to and cannot exceed
-200 MiB per run. Exhausting the total budget stops scheduling new checks,
-marks required work `SKIPPED`, and yields `NEEDS_HUMAN`.
+50 MiB. An individual `max_bytes` must not exceed the effective
+`limits.report_bytes`; reports are never silently truncated before parsing.
+
+`total_bytes` is 16-200 MiB and defaults to 200 MiB. Every retained regular
+file in the run directory counts by exact byte length, including the patch,
+effective configuration, result, trace, manifest, logs, and copied reports.
+The engine reserves exactly 7 MiB before candidate evaluation: 2 MiB for
+`result.json`, 4 MiB for `manifest.json`, and 1 MiB for `trace.json`. The raw
+UTF-8 YAML and canonical UTF-8 effective JSON are each limited to 1 MiB.
+Preflight stages and measures the exact patch and effective JSON and requires
+`patch + effective-config + 7 MiB <= total_bytes`; failure is invalid input
+(exit 3) before a verdict or `result.json`. An accepted patch and effective
+configuration are retained byte-for-byte and never truncated.
+
+Once evaluation starts, the remaining non-finalization bytes are allocated in
+declaration order. Prefix-bounded streams are drained fully; reports are kept
+whole or rejected, never partially retained. Budget exhaustion stops new
+controls, leaves every unrun check in `result.json` as `SKIPPED`, and yields
+`NEEDS_HUMAN`. The accounting and deterministic allocation algorithm are
+normative in [Evidence Contract](evidence.md#deterministic-byte-accounting).
+
+## Structural bounds
+
+V1 bounds policy shape before execution: at most 32 preparation items, 128
+checks, 16 reports and 64 assertions per check, 256 entries in each scope
+list, 64 argv entries, 64 names in each literal/inherited environment
+collection, and 256 exit codes per class. A platform literal map may add 64
+disjoint keys to the common map, while its inherited list replaces the common
+list; after overlap and up to six engine-owned Windows keys, a manifest
+execution can therefore record at most 198 environment names. Paths, scope
+patterns, and metric pointers are at most 1,024 Unicode code points; argv
+elements, literal environment values, and string assertion values are at most
+4,096; environment names are at most 128. JSON numeric inputs and parsed
+numeric metrics must be finite IEEE 754 binary64 values within
+`±1.7976931348623157e308`. The canonical encoder uses the shortest
+round-tripping JSON representation, normalizes negative zero to `0`, and emits
+at most 24 ASCII bytes per number.
+
+These are schema limits, not evidence entitlements. Semantic preflight also
+builds the maximum-size result/manifest skeleton implied by the actual
+effective policy and rejects it with exit 3 unless `result.json` can remain at
+most 2 MiB, `manifest.json` at most 4 MiB, and `trace.json` at most 1 MiB.
+This accounts for every configured check in order, the captured changed-path
+inventory, both required sides, bounded scalar slots, and every possible
+retained artifact entry. It prevents a schema-valid but structurally extreme
+policy from consuming the finalization reserve.

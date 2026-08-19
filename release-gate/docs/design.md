@@ -92,21 +92,33 @@ Missing or invalid base policy is an input/configuration error (exit 3).
 To capture the complete non-ignored working-tree state without changing the
 developer's real index, the engine:
 
-1. creates a temporary Git index;
-2. populates it with the base tree using `git read-tree`;
-3. stages the current working tree into that temporary index with
+1. snapshots the real index, source status, and source/shared Git object
+   stores, then creates an invocation-owned temporary index and temporary Git
+   object directory outside the source and evidence destination;
+2. removes every ambient `GIT_*` variable, then supplies only its closed,
+   invocation-owned Git environment, including `GIT_INDEX_FILE` and
+   `GIT_OBJECT_DIRECTORY` at those temporary paths. It exposes the resolved
+   source/common object directory and any validated existing alternates only
+   through `GIT_ALTERNATE_OBJECT_DIRECTORIES`, encoded with the native
+   path-list separator and Git's platform quoting rules, and uses
+   `GIT_OPTIONAL_LOCKS=0` for source-repository reads;
+3. populates the temporary index with the base tree using `git read-tree`;
+4. stages the current working tree into that temporary index with
    `git add -A`, including non-ignored untracked files and deletions but
    excluding descendants of only the literal, no-follow-verified-or-absent
    default `.release-gate/runs/` subtree; and
-4. emits a binary-safe staged diff against the base commit.
+5. emits a binary-safe staged diff against the base commit while the temporary
+   object directory remains available.
 
 Ignored files and `.git/` are excluded by Git. The engine hashes the patch,
 applies it to the clean candidate clone, writes the reconstructed candidate
-tree object, and records that tree ID. A patch that cannot be reconstructed
-unambiguously is invalid candidate input (exit 3). The real index, working
-tree candidate bytes, and base repository are never mutated. Default evidence
-directories may be created only after capture and only through the verified
-nonredirected chain described above.
+tree object, and records that tree ID before removing the temporary object
+directory. A patch that cannot be reconstructed unambiguously is invalid
+candidate input (exit 3). The real index, working-tree candidate bytes,
+source/common object databases, refs, and base repository are never mutated;
+the engine verifies its snapshots after capture. Default evidence directories
+may be created only after capture and only through the verified nonredirected
+chain described above.
 
 Any candidate addition, modification, rename, or deletion of
 `.release-gate.yaml` is a non-configurable preflight review condition. The
@@ -131,7 +143,8 @@ inputs remain the code under evaluation and may execute on the trusted host.
 source repository
   -> resolve base + load/validate base policy
   -> read-only canonical/no-follow validation of evidence destination
-  -> capture working-tree patch through temporary index
+  -> capture patch through temporary index and object directory
+  -> measure patch/config and prove the fixed finalization reserve
   -> revalidate and safely create/pin evidence destination
   -> create independent base and candidate clones
   -> revalidate and begin candidate evaluation
@@ -163,11 +176,19 @@ environment variable, or interruption yields `NEEDS_HUMAN`, stops remaining
 preparation and all checks, and records the unrun required controls as
 `SKIPPED`. Preparation is infrastructure setup and never produces `FAIL`.
 
+Every finalized result (exits 0, 1, or 2, including a safely finalized
+interruption) has exactly one `result.json.checks` entry for every effective
+check in declaration order, with matching `id`, `mode`, and `severity`. Unrun
+checks are retained as reason-coded `SKIPPED`; preparation IDs are represented
+only by manifest executions and trace events. Exit 4 does not promise a
+complete result.
+
 ## Check evaluation
 
 Each process exit is classified by `exit_classes` as `pass`, `fail`, or
 `error`. An unlisted exit, spawn failure, signal termination, timeout, missing
-required report, oversized required report, or parse failure is `ERROR`.
+required report, or any present declared report that is unsafe, oversized, or
+unparsable is `ERROR`.
 
 For `candidate` mode, the candidate exit class is the initial check status.
 For `differential` mode, `error` on either side is `ERROR`; otherwise a
@@ -199,8 +220,9 @@ candidate failures.
 | `informational` | no effect | recorded only | contributes `NEEDS_HUMAN` |
 
 Timeout, missing tool, signal termination, unclassified exit, preparation
-failure, missing/invalid/oversized required report, assertion operand error,
-and required skip always contribute `NEEDS_HUMAN`, regardless of severity.
+failure, missing required report, invalid/oversized present report, assertion
+operand error, and required skip always contribute `NEEDS_HUMAN`, regardless
+of severity.
 Severity can soften an ordinary informational failure; it cannot turn missing
 required assurance into a pass.
 
@@ -220,6 +242,37 @@ Aggregation is deterministic:
 3. otherwise -> `PASS`.
 
 This precedence is not configurable.
+
+All reason codes come from the closed v1 registry in
+[Evidence Contract](evidence.md#v1-reason-code-registry). Arrays are sorted by
+ASCII code-point order and contain no duplicates. The root result contains
+the union of verdict-contributing atomic causes, and the manifest repeats it
+exactly. A context with no applicable diagnostic uses an empty array; passing
+executions/checks may retain only the two registered non-verdict diagnostics.
+
+## Evidence feasibility
+
+Before candidate evaluation, the engine stages and exactly measures the
+binary patch and canonical effective configuration, with raw and effective
+configuration each capped at 1 MiB. It reserves a fixed 7 MiB for bounded
+finalization (2 MiB result, 4 MiB manifest, 1 MiB trace) and requires
+`patch + config + reserve <= total_bytes`. It also proves from the actual
+bounded policy and captured changed-path inventory that maximum-size final
+JSON structures fit those three caps. Scalar numbers are normalized to bounded
+finite binary64 encodings and durations to nonnegative signed 64-bit integers,
+so no runtime numeric field can invalidate that proof. An infeasible patch,
+config, or structure is invalid input (exit 3) and creates no candidate
+verdict; a patch above 200 MiB is necessarily rejected. An accepted
+patch/config is retained exactly.
+
+After evaluation starts, every retained file, including the non-inventoried
+manifest, counts toward the configured 16-200 MiB total. Optional capacity is
+assigned deterministically in control/side/stdout/stderr/report order. Streams
+retain bounded prefixes while being fully drained; reports are whole or
+omitted. Exhaustion stops new work, keeps every configured check in result
+order as `SKIPPED` where necessary, consumes only reserved finalization space,
+and produces `NEEDS_HUMAN`. Breaching a proven finalization cap is an internal
+failure (exit 4). Exact accounting is defined by the evidence contract.
 
 ## Failure boundaries
 

@@ -5,15 +5,15 @@ scope:
     - "src/**"
     - "test/**"
     - "tests/**"
-    - "package.json"
-    - "package-lock.json"
-    - "README.md"
+    - "/package.json"
+    - "/package-lock.json"
+    - "/README.md"
   forbidden_paths:
     - ".github/**"
   review_required_paths:
-    - ".release-gate.yaml"
-    - "SECURITY.md"
-    - "LICENSE*"
+    - "/.release-gate.yaml"
+    - "/SECURITY.md"
+    - "/LICENSE*"
 
 prepare:
   - id: install-dependencies

@@ -15,6 +15,7 @@
     },
     "prepare": {
       "type": "array",
+      "maxItems": 32,
       "uniqueItems": true,
       "default": [],
       "items": {
@@ -27,6 +28,7 @@
     "checks": {
       "type": "array",
       "minItems": 1,
+      "maxItems": 128,
       "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/check"
@@ -44,12 +46,15 @@
     "relativePath": {
       "type": "string",
       "minLength": 1,
+      "maxLength": 1024,
       "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
     },
     "scopePattern": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?![!#/])(?![A-Za-z]:)(?!.*\\s$)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^\\\\]+$"
+      "maxLength": 1024,
+      "description": "Closed Git-wildmatch pattern; one leading slash is a repository-root anchor, not an absolute filesystem path.",
+      "pattern": "^(?![!#])(?!//)(?!/?[A-Za-z]:)(?!/(?![\\s\\S]))(?![\\s\\S]*\\s(?![\\s\\S]))(?![\\s\\S]*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^\\\\]+(?![\\s\\S])"
     },
     "scope": {
       "type": "object",
@@ -59,6 +64,7 @@
         "allowed_paths": {
           "type": "array",
           "minItems": 1,
+          "maxItems": 256,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/scopePattern"
@@ -66,6 +72,7 @@
         },
         "forbidden_paths": {
           "type": "array",
+          "maxItems": 256,
           "uniqueItems": true,
           "default": [],
           "items": {
@@ -74,6 +81,7 @@
         },
         "review_required_paths": {
           "type": "array",
+          "maxItems": 256,
           "uniqueItems": true,
           "default": [],
           "items": {
@@ -85,23 +93,28 @@
     "argv": {
       "type": "array",
       "minItems": 1,
+      "maxItems": 64,
       "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "maxLength": 4096
       }
     },
     "environment": {
       "type": "object",
+      "maxProperties": 64,
       "propertyNames": {
         "$ref": "#/$defs/environmentName"
       },
       "additionalProperties": {
-        "type": "string"
+        "type": "string",
+        "maxLength": 4096
       },
       "default": {}
     },
     "environmentName": {
       "type": "string",
+      "maxLength": 128,
       "description": "Environment name. Exact all-platform engine-owned names are rejected here; platform-specific and Windows case-insensitive reservations are semantic validation rules.",
       "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
       "not": {
@@ -117,6 +130,7 @@
     },
     "inheritEnvironment": {
       "type": "array",
+      "maxItems": 64,
       "uniqueItems": true,
       "default": [],
       "items": {
@@ -125,6 +139,7 @@
     },
     "exitCodeArray": {
       "type": "array",
+      "maxItems": 256,
       "uniqueItems": true,
       "items": {
         "type": "integer",
@@ -273,6 +288,7 @@
         },
         "metric": {
           "type": "string",
+          "maxLength": 1024,
           "pattern": "^(?:/(?:[^~/]|~[01])*)*(?![\\s\\S])"
         },
         "comparison": {
@@ -282,7 +298,7 @@
           "enum": ["eq", "ne", "gt", "gte", "lt", "lte"]
         },
         "value": {
-          "type": ["number", "string", "boolean", "null"]
+          "$ref": "#/$defs/scalar"
         }
       }
     },
@@ -327,6 +343,7 @@
         },
         "reports": {
           "type": "array",
+          "maxItems": 16,
           "default": [],
           "items": {
             "$ref": "#/$defs/report"
@@ -334,6 +351,7 @@
         },
         "assertions": {
           "type": "array",
+          "maxItems": 64,
           "default": [],
           "items": {
             "$ref": "#/$defs/assertion"
@@ -359,12 +377,32 @@
         },
         "total_bytes": {
           "type": "integer",
-          "minimum": 1,
+          "minimum": 16777216,
           "maximum": 209715200,
+          "description": "Inclusive byte ceiling for every retained run file; semantic preflight preserves the fixed 7 MiB finalization reserve.",
           "default": 209715200
         }
       },
       "default": {}
+    },
+    "scalar": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": -1.7976931348623157e308,
+          "maximum": 1.7976931348623157e308
+        },
+        {
+          "type": "string",
+          "maxLength": 4096
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   }
 }

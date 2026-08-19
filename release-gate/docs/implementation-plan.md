@@ -37,7 +37,8 @@ do not silently extend the contract.
   `Draft202012Validator.check_schema`, validate every example, and reject
   representative unknown fields and invalid versions. Add shared contract
   probes for portable run/control/report IDs, per-component artifact paths,
-  and the empty RFC 6901 root pointer.
+  and the empty RFC 6901 root pointer. Prove result/manifest reason-code enums
+  have the documented parity and reject unknown or wrong-context codes.
 - [ ] Write an AST/import test proving `release_gate` imports no repository
   A-series/B-series modules and a filesystem test proving it does not depend
   on `demo/gate`.
@@ -60,6 +61,15 @@ do not silently extend the contract.
   legacy key spellings are rejected, plus YAML/schema errors, unknown keys,
   POSIX/drive/UNC/traversal paths, overlapping/out-of-range exit classes,
   invalid assertion references/modes, defaults, and limits.
+- [ ] Exercise every declared count/string boundary and raw/effective UTF-8
+  1 MiB limits: 32 preparations, 128 checks, 16 reports and 64 assertions per
+  check, 256 scope/exit entries, 64 argv/each-environment entries, the
+  198-name effective manifest bound, and the documented
+  128/1,024/4,096-code-point limits. Reject non-finite numeric values and an
+  individual report limit above effective `limits.report_bytes`. Exercise the
+  finite binary64 endpoints, one value beyond each endpoint, negative-zero
+  normalization, shortest round-trip encodings through 24 bytes, and
+  nonnegative signed-64-bit duration boundaries.
 - [ ] Test `prepare` as an ordered array, required IDs, duplicate IDs within
   preparation and globally across preparation/checks, stable ordering, and
   base-required/candidate-always workspace selection.
@@ -99,18 +109,28 @@ do not silently extend the contract.
   is distinguished from invalid or missing base policy.
 - [ ] Add cases for staged, unstaged, deleted, renamed, executable-mode,
   binary, Unicode/space-containing, non-ignored untracked, and ignored files;
-  snapshot index bytes and `git status` before capture.
+  snapshot index bytes, refs, `git status`, and filename/content inventories of
+  both per-worktree and shared Git object databases before capture.
 - [ ] Run `python -m pytest tests/test_git_capture.py -q`; expect failure because
   capture is absent.
 - [ ] Implement ref resolution, `git show` base-policy loading, an isolated
-  temporary index initialized from base, `git add -A`, binary-safe patch
+  temporary index plus temporary `GIT_OBJECT_DIRECTORY` initialized from base,
+  source/common objects exposed as read-only `GIT_ALTERNATE_OBJECT_DIRECTORIES`,
+  `git add -A`, binary-safe patch
   emission, and exclusion of descendants of only the literal default
   `.release-gate/runs/` subtree after a no-follow inspection of the node and
   its parent. Prove a tracked or untracked candidate symlink/reparse/junction
   at `.release-gate` or `runs` is rejected rather than masked and a custom
   in-repository path cannot create another exclusion.
-- [ ] Assert the real index/status are byte-for-byte unchanged and the patch
-  digest is deterministic in repeated runs. Destination validation and every
+- [ ] Scrub every ambient `GIT_*` variable, rebuild a closed capture
+  environment, and test native `os.pathsep` plus
+  Git quoting for alternate paths containing spaces, quotes, and the platform
+  separator. Set and test `GIT_OPTIONAL_LOCKS=0` on every source read. Keep the
+  temporary object store through patch/tree emission; test linked worktrees
+  and pre-existing validated alternates.
+- [ ] Assert the real index/status/refs and both source object stores are
+  byte-for-byte unchanged and the patch digest is deterministic in repeated
+  runs. Destination validation and every
   exit-3 redirect rejection must not create, delete, replace, or follow a
   source entry before capture.
 - [ ] Run focused/full tests and commit with
@@ -171,6 +191,9 @@ do not silently extend the contract.
 - [ ] Write failing golden tests for nested JUnit aggregation, coverage.py JSON,
   JSON Metrics plus RFC 6901 pointers, malformed data, non-finite values, XML
   entities, missing/escaping/special files, and 5 MiB/50 MiB boundaries.
+- [ ] Prove an absent, unreferenced optional report is only
+  `OPTIONAL_REPORT_MISSING`; an assertion that needs it is `ERROR`; and a
+  present optional report that is unsafe, oversized, or unparsable is `ERROR`.
 - [ ] Cover the empty pointer `""` selecting the whole document, `/` selecting
   an empty-key member, `//`, and `~0`/`~1` escapes. Reject a bare name, `~2`,
   and a dangling `~`; include scalar root `json-metrics` assertions.
@@ -189,11 +212,15 @@ do not silently extend the contract.
 `release-gate/tests/test_policy.py`.
 
 - [ ] Write pathspec Git-wildmatch conformance tests for `*`, `?`, bracket
-  classes, slashless basename matching, slash anchoring, trailing `/`,
+  classes, slashless basename matching, one leading `/` root anchor, slash
+  anchoring, trailing `/`,
   including nested `x/foo/file` matching `foo/`, `**/x`, `a/**/b`, `a/**`,
   dotfiles, case sensitivity, rename old/new paths, deletion old paths, and
-  symlinks without traversal. Reject leading `!/#`, trailing whitespace,
-  backslash, drive/UNC, empty, `.`, and `..` components.
+  symlinks without traversal. Prove `/foo` matches root `foo` and descendants
+  such as `foo/x` while excluding `x/foo`; `/*.md` excludes `docs/x.md`; and
+  `/docs/` is root-directory-only. Reject bare `/`, `//`, leading `!/#`,
+  trailing whitespace, backslash, drive/UNC/device syntax including after an
+  anchor, empty, `.`, and `..` components.
 - [ ] Write the full verdict matrix: blocking `FAIL` -> `FAIL`; advisory
   `FAIL` -> `NEEDS_HUMAN`; informational `FAIL` is recorded only; every
   timeout, missing tool/environment, signal, unclassified exit, preparation
@@ -211,7 +238,15 @@ do not silently extend the contract.
   remaining configured commands with reason-coded `SKIPPED` results.
 - [ ] Run `python -m pytest tests/test_policy.py -q`; expect failure.
 - [ ] Implement pure deterministic policy functions and stable uppercase reason
-  codes; keep precedence and scope enforcement non-configurable.
+  codes; keep precedence and scope enforcement non-configurable. Test the
+  complete v1 registry, context allowlists, empty no-diagnostic contexts,
+  ASCII-sorted/deduplicated arrays, root aggregation, and rejection of unknown
+  or vendor codes. Reject `NEEDS_HUMAN` containing only forbidden/outside scope
+  failure atoms, and reject `ERROR` containing only a non-verdict diagnostic.
+  Reject generic `REQUIRED_CONTROL_SKIPPED` beside a narrower skip cause. Scope
+  failures do not short-circuit configured controls. For each manifest
+  execution, reject multiple terminal-cause codes; ensure preparation metrics
+  are empty and preparation reasons cannot contain report diagnostics.
 - [ ] Run focused/full tests and commit with
   `feat(release-gate): decide three-way verdicts`.
 
@@ -223,7 +258,9 @@ do not silently extend the contract.
 
 - [ ] Write failing tests for the exact documented tree, restrictive creation,
   artifact hashes/sizes, base/candidate/config/engine identity, commands,
-  durations, metrics, timestamps, environment names, and reason codes.
+  durations, metrics, timestamps, environment names, `control_id` for both
+  preparation and check executions, and reason codes. Reject every unrecognized
+  execution identifier field.
 - [ ] Verify `result.json` and `manifest.json` against bundled schemas and add a
   tamper test proving `result.json`, `candidate.patch`, `effective-config.json`,
   and `trace.json` appear exactly once, `manifest.json` never self-inventories,
@@ -237,10 +274,22 @@ do not silently extend the contract.
   collisions such as `Log.txt`/`log.txt`, and every NFC+casefold alias of the
   reserved `manifest.json` path. Prove the closed `.xml`/`.json` report-name
   mapping keeps a maximum-length report ID within the component limit.
-- [ ] Test stream truncation metadata, total 200 MiB exhaustion using injected
-  small test limits, existing-run refusal, atomic rename, interrupted
-  finalization, `.incomplete`, and manifest-last ordering. For the default
-  root, swap a verified component before each result/manifest rename and prove
+- [ ] Test exact byte accounting over every retained regular file, including
+  the non-inventoried manifest and safe `.incomplete`; exclude directories,
+  pathnames, allocation units, and discarded temporary files. Exercise 16 MiB
+  and 200 MiB total boundaries and prove a complete package never exceeds its
+  configured total.
+- [ ] Test the fixed 7 MiB finalization reserve and 2/4/1 MiB sublimits using
+  injected small analogues: exact-fit and one-byte-over patch/config sums,
+  accepted exact patches never truncated, whole-or-omitted reports, stable
+  control/base/candidate/stdout/stderr/report allocation, concurrent stream
+  arrival independence, quota return, budget-stop SKIPPED checks, and trace's
+  500-byte-event/2,048-event boundaries with its reserved terminal summary.
+  Budget-stopped checks use `EVIDENCE_BUDGET_EXHAUSTED`, not the generic skip
+  fallback. A post-proof cap breach must be exit 4.
+- [ ] Test stream truncation metadata, existing-run refusal, atomic rename,
+  interrupted finalization, `.incomplete`, and manifest-last ordering. For the
+  default root, swap a verified component before each result/manifest rename and prove
   pinned-handle I/O cannot be redirected, late identity loss exits 4, and an
   incomplete marker is attempted only through a still-verified handle.
 - [ ] Run `python -m pytest tests/test_evidence.py -q`; expect failure.
@@ -300,6 +349,17 @@ do not silently extend the contract.
 - [ ] Cover exits 0/1/2/3/4 and assert a schema-valid result for every 0/1/2
   path; inject finalization failure to distinguish exit 4 from
   `NEEDS_HUMAN`.
+- [ ] Before the candidate-evaluation transition, test raw/effective config at
+  1 MiB and one byte over, patch above 200 MiB, and
+  `patch + config + 7,340,032` at/over every 16-200 MiB total boundary. Build
+  maximum-output skeletons from actual policy sides/scalars/artifacts and
+  reject structures that cannot fit result<=2 MiB, manifest<=4 MiB, or
+  trace<=1 MiB. Every infeasible case is exit 3 with no promised result.
+- [ ] For success and every early-stop path, semantically verify
+  `result.checks` has exactly the effective-config check IDs/modes/severities in
+  declaration order. Reject zero, missing, extra, duplicate, or reordered
+  items; preparation IDs must not appear there. Verify manifest/result root
+  reason arrays are identical.
 - [ ] Add interruption tests and prove expected tool/report failures finalize
   to exit 2 while preflight errors do not claim a verdict.
 - [ ] Run `python -m pytest tests/test_engine.py tests/test_cli.py -q`; expect
@@ -341,7 +401,9 @@ commands and supported versions after packaging is proven.
   path components, linked-worktree `--git-dir` and `--git-common-dir`, redirect
   targets inside/outside protected trees, and checkpoint substitution races.
 - [ ] Exercise each platform override and native timeout/process-tree cleanup;
-  compare verdict and reason-code parity across operating systems.
+  compare verdict and closed reason-code parity across operating systems. Also
+  prove temporary object-directory capture leaves source/common object stores,
+  the real index, refs, and status unchanged on linked worktrees.
 - [ ] Build wheel/sdist, install each into a clean environment, invoke all three
   CLI commands outside this monorepo, and inspect archives to prove no A/B or
   demo package is included.
