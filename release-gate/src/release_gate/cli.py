@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from release_gate.config import ConfigError, load_config
+from release_gate.engine import GateInputError, run_gate
 
 _POLICY_NAME = ".release-gate.yaml"
 _EVIDENCE_IGNORE = "/.release-gate/runs/"
@@ -52,8 +53,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         if arguments.command == "validate":
             return _validate(Path(arguments.repo))
         if arguments.command == "run":
-            print("ERROR: run is not implemented yet", file=sys.stderr)
-            return 4
+            outcome = run_gate(
+                Path(arguments.repo),
+                base=arguments.base,
+                output=Path(arguments.output) if arguments.output else None,
+                run_id=arguments.run_id,
+            )
+            print(f"VERDICT: {outcome.verdict.value}")
+            print(f"RESULT: {outcome.result_path}")
+            return outcome.exit_code
         raise _UsageError("a command is required")
     except _UsageError as error:
         print(f"ERROR: {error}", file=sys.stderr)
@@ -61,6 +69,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 3
+    except GateInputError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 3
+    except Exception as error:
+        print(f"ERROR: internal release-gate failure: {error}", file=sys.stderr)
+        return 4
 
 
 def _build_parser() -> _ArgumentParser:
