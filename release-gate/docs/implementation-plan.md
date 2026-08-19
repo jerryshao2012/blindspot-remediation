@@ -37,7 +37,8 @@ NEEDS_HUMAN end-to-end repositories.
 
 Task 11 is represented by `.github/workflows/release-gate-ci.yml`, which runs
 Python 3.11–3.13 on Ubuntu, macOS, and Windows, builds the wheel, smoke-tests
-the installed command, and validates the skill. Local completion evidence is
+the installed command, enforces an 80% cross-platform coverage floor, and
+validates the skill. Local completion evidence is
 recorded during branch verification; hosted CI results exist only after this
 branch is pushed to GitHub.
 
