@@ -1,4 +1,6 @@
 interface:
   display_name: "Release Gate"
-  short_description: "Run repository release assurance checks"
-  default_prompt: "Use $release-gate to evaluate this repository release candidate."
+  short_description: "Explicit release policy initialization and checks"
+  default_prompt: "Explicitly use $release-gate with init, validate, or run."
+policy:
+  allow_implicit_invocation: false

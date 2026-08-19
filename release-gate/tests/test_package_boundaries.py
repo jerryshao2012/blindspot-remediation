@@ -14,7 +14,7 @@ REPOSITORY_ROOT = ROOT.parent
 def test_package_metadata_declares_standalone_console_command() -> None:
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert metadata["project"]["requires-python"] == ">=3.11"
+    assert metadata["project"]["requires-python"] == ">=3.11,<3.14"
     assert metadata["project"]["scripts"]["release-gate"] == "release_gate.cli:main"
     dependency_names = {
         Requirement(item).name.lower() for item in metadata["project"]["dependencies"]
@@ -29,6 +29,7 @@ def test_package_contains_all_v1_schemas() -> None:
         "config-v1.schema.json",
         "result-v1.schema.json",
         "manifest-v1.schema.json",
+        "qualification-v1.schema.json",
     }
 
 

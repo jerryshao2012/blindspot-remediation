@@ -6,6 +6,16 @@ that path from the resolved base commit, never from the candidate working tree.
 The document is YAML whose data model MUST validate against
 `schemas/config-v1.schema.json`.
 
+`release-gate init --from-config PATH` validates an approved source with this
+same contract before mutating the target repository, caps the source at 1 MiB,
+and copies its exact bytes rather than parsing and reserializing it. The source
+must be an ordinary non-reparse file; symbolic links, FIFOs, devices,
+directories, and other special files are rejected before a nonblocking,
+no-follow open. Descriptor/path identity, size/change metadata, and two reads
+are compared before validation. These checks detect ordinary concurrent edits
+but are not an atomic snapshot against a hostile same-user writer. Plain
+`release-gate init` continues to create the generic draft.
+
 ## Complete shape
 
 ```yaml

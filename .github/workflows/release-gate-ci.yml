@@ -3,12 +3,16 @@ name: Release Gate
 on:
   push:
     paths:
+      - ".gitignore"
       - "release-gate/**"
       - ".github/workflows/release-gate-ci.yml"
+      - ".github/workflows/release-gate-release.yml"
   pull_request:
     paths:
+      - ".gitignore"
       - "release-gate/**"
       - ".github/workflows/release-gate-ci.yml"
+      - ".github/workflows/release-gate-release.yml"
 
 permissions:
   contents: read
@@ -26,12 +30,17 @@ jobs:
       run:
         working-directory: release-gate
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      # astral-sh/setup-uv v8.1.0; upgrade only with reviewed lock/tool changes.
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           python-version: ${{ matrix.python }}
+          version: "0.12.5"
       - name: Install package and development dependencies
-        run: uv sync --all-groups
+        run: uv sync --all-groups --locked
       - name: Test
         run: uv run pytest --cov=release_gate --cov-report=term-missing -q
       - name: Type check
@@ -40,9 +49,21 @@ jobs:
         run: uv run ruff check src tests scripts
       - name: Check packaged schemas
         run: uv run python scripts/sync_schemas.py
-      - name: Build wheel and source distribution
-        run: uv run python -m build
+      - name: Build wheel and source distribution from locked backend
+        run: uv run python -m build --no-isolation
       - name: Smoke-test installed wheel
         run: uv run python scripts/smoke_installed.py
       - name: Validate portable skill
         run: uv run python tests/validate_skill.py
+      - name: Validate pending qualification template shape
+        run: >-
+          uv run python scripts/validate_qualification.py
+          qualification/release-gate-v0.2.0-rc.1.pending.json
+          --expected-tag release-gate-v0.2.0-rc.1
+          --allow-pending-schema-only
+      - name: Build deterministic skill archives twice
+        shell: bash
+        run: |
+          uv run python scripts/build_skill_archives.py --output-dir "${RUNNER_TEMP}/skills-first"
+          uv run python scripts/build_skill_archives.py --output-dir "${RUNNER_TEMP}/skills-second"
+          diff -r "${RUNNER_TEMP}/skills-first" "${RUNNER_TEMP}/skills-second"

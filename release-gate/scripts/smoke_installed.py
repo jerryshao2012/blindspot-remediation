@@ -23,8 +23,10 @@ def main() -> int:
         )
         scripts = "Scripts" if os.name == "nt" else "bin"
         python = environment / scripts / ("python.exe" if os.name == "nt" else "python")
-        command = environment / scripts / (
-            "release-gate.exe" if os.name == "nt" else "release-gate"
+        command = (
+            environment
+            / scripts
+            / ("release-gate.exe" if os.name == "nt" else "release-gate")
         )
         subprocess.run(
             [str(python), "-m", "pip", "install", "--no-deps", str(wheels[0])],
@@ -46,6 +48,18 @@ def main() -> int:
             )
         if "{init,validate,run}" not in result.stdout:
             raise SystemExit("installed command did not expose the expected CLI")
+        version = subprocess.run(
+            [str(command), "--version"],
+            capture_output=True,
+            text=True,
+            env=process_environment,
+            check=False,
+        )
+        if version.returncode != 0 or version.stdout != "release-gate 0.2.0\n":
+            raise SystemExit(
+                "installed command reported the wrong version:\n"
+                f"stdout:\n{version.stdout}stderr:\n{version.stderr}"
+            )
         target = Path(temporary) / "target"
         target.mkdir()
         subprocess.run(

@@ -1,5 +1,30 @@
 # Security and Trust Model
 
+For supported release lines and private vulnerability reporting, see the
+[security policy](../SECURITY.md).
+
+## Release artifact trust
+
+Treat the Python wheel and assistant skill as two separate supply-chain inputs.
+Install only a matching pair from one immutable `release-gate-v*` GitHub
+release after verifying each file against its published SHA-256 manifest. The
+skill checks the installed CLI version before every operation and stops on a
+missing executable or mismatch.
+
+The wheel checksum covers only the Release Gate wheel. A normal
+`uv tool install` resolves the wheel's declared dependency ranges from the
+configured package index; the development `uv.lock` is not consumed, and
+resolved dependency bytes are outside the release asset checksum. Environments
+that require a fully reproducible dependency closure must impose and retain
+their own index, version, and hash controls.
+
+An unrelated existing PyPI project uses the name `release-gate`. This project
+is not published to PyPI: never install it by an unqualified package name.
+Follow the exact wheel and host-archive procedure in
+[Adoption](adoption.md). Preserve the prior verified release for rollback and
+upgrade by removal plus installation of the next pinned archive, never through
+an unpinned skill update.
+
 ## Supported threat model
 
 V1 protects policy provenance, source-worktree integrity, evidence path
@@ -122,6 +147,51 @@ from discovering host-readable credentials through other channels. Run the
 gate under a dedicated low-privilege identity when consequences matter.
 
 ## Git and filesystem handling
+
+Initialization treats its policy and `.gitignore` changes as a guarded
+two-target update sequence. An optional `--from-config` source is size-bounded and
+fully validated before target mutation. The policy must be absent. Its bytes
+are first written and flushed in a private repository-local staging directory;
+only after the ignore update succeeds is that staged inode published at the
+policy path with an atomic, exclusive hard link. There are no fallible target
+operations after publication and no policy rollback. Cleanup is limited to
+the identity-verified policy file in the random, private staging directory
+(mode 0700 where POSIX modes apply); it does not recursively remove unproven
+entries. The staging directory's own identity is checked before cleanup and
+again immediately before `rmdir`; detected replacements and nonempty
+directories are left for human inspection. The staged policy source is created
+exclusively without following links, and that descriptor remains open through
+publication. Its descriptor identity, bytes, path identity, and containing
+directory identity are checked before linking.
+
+An existing `.gitignore` must be an ordinary file, never a symbolic link or
+Windows reparse point; its identity, length, and digest are snapshotted. The
+command opens or exclusively creates the final path, takes a nonblocking
+exclusive advisory lock, and performs the final snapshot check through that
+pinned handle. That lock is held through an append or existing-entry no-op,
+policy publication, and failure rollback. Ignore bytes are flushed before
+publication. Immediately before the policy link, the command revalidates the
+ignore path identity and exact expected descriptor bytes, even when the ignore
+entry already existed and no append was required. Rollback truncation is
+attempted through the still-locked handle only when the path identity and exact
+invocation-written tail remain proven, with a second verification at the
+rollback boundary. Detected later or unproven bytes cause rollback refusal and
+are preserved. A newly created ignore file is left empty on a later failure;
+the command never uses a check-then-unlink sequence that could delete a
+concurrent replacement. Locks are advisory, so other writers should use a
+compatible lock; non-cooperating changes are detected where portable file APIs
+allow and cause destructive rollback to be refused.
+
+These checks narrow race windows but do not create a filesystem transaction.
+Portable APIs cannot atomically bind the final ignore verification to the
+policy hard link, the exact-content rollback check to `ftruncate`, or an
+identity check to `unlink`/`rmdir`. The random staging namespace is private
+(0700 on POSIX) but a hostile same-user process can still discover and race it,
+and a non-cooperating writer can bypass the advisory ignore lock. Such a process
+may win a syscall-level race after the last check. Release Gate performs no
+unsafe retry or target-path unlink in response. Operators must exclude other
+same-user repository writers during `init`; same-user filesystem access is an
+explicit trust boundary.
 
 Git arguments are passed after `--` where paths are accepted. Refs are
 resolved with commit peeling and recorded as object IDs. Patch application

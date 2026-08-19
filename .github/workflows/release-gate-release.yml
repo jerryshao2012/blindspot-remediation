@@ -1,0 +1,316 @@
+name: Release Gate protected release
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Build/publish the RC, or promote already-qualified RC bytes
+        required: true
+        type: choice
+        options: [rc, promote]
+      rc_commit:
+        description: Default-branch tip SHA captured at dispatch time (required for rc)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-v0.2.0
+  cancel-in-progress: false
+
+env:
+  RC_TAG: release-gate-v0.2.0-rc.1
+  FINAL_TAG: release-gate-v0.2.0
+  QUALIFICATION: release-gate/qualification/release-gate-v0.2.0-rc.1.json
+
+jobs:
+  build-rc:
+    if: ${{ inputs.action == 'rc' }}
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    outputs:
+      rc_commit: ${{ steps.validate.outputs.rc_commit }}
+      manifest_sha256: ${{ steps.bind.outputs.manifest_sha256 }}
+    steps:
+      - name: Bind candidate to the trusted default-branch tip
+        id: validate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RC_COMMIT_INPUT: ${{ inputs.rc_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$RC_COMMIT_INPUT" =~ ^[0-9a-f]{40}$ ]]
+          default_branch="$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/$default_branch" --jq .protected)" = true
+          default_tip="$(gh api "repos/$GITHUB_REPOSITORY/commits/$default_branch" --jq .sha)"
+          test "$RC_COMMIT_INPUT" = "$default_tip" || {
+            echo "RC commit is not the default-branch tip at build start" >&2
+            exit 1
+          }
+          echo "rc_commit=$RC_COMMIT_INPUT" >> "$GITHUB_OUTPUT"
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ steps.validate.outputs.rc_commit }}
+          fetch-depth: 1
+          persist-credentials: false
+      # astral-sh/setup-uv v8.1.0; upgrade with reviewed lock/tool changes only.
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          python-version: "3.12"
+          version: "0.12.5"
+      - name: Install the committed lock exactly
+        working-directory: release-gate
+        run: uv sync --all-groups --locked
+      - name: Test and build the RC assets exactly once
+        working-directory: release-gate
+        run: |
+          uv run pytest -q
+          uv run mypy src/release_gate
+          uv run ruff check src tests scripts
+          uv run python scripts/build_release_assets.py --output-dir "$RUNNER_TEMP/release-assets" --tag "$RC_TAG"
+          uv run python scripts/verify_release_assets.py --assets-dir "$RUNNER_TEMP/release-assets" --expected-tag "$RC_TAG"
+      - name: Bind the Actions artifact to its manifest
+        id: bind
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(sha256sum "$RUNNER_TEMP/release-assets/SHA256SUMS" | cut -d' ' -f1)"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          echo "manifest_sha256=$digest" >> "$GITHUB_OUTPUT"
+      # actions/upload-artifact v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-gate-v0.2.0-rc.1-assets
+          path: ${{ runner.temp }}/release-assets/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-rc:
+    if: ${{ inputs.action == 'rc' }}
+    needs: build-rc
+    runs-on: ubuntu-latest
+    environment: release-gate-production
+    permissions: {contents: write}
+    steps:
+      # actions/download-artifact v4.3.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-gate-v0.2.0-rc.1-assets
+          path: release-assets
+      - name: Verify bytes and protected-branch ancestry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ needs.build-rc.outputs.rc_commit }}
+          EXPECTED_MANIFEST_SHA256: ${{ needs.build-rc.outputs.manifest_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$EXPECTED_MANIFEST_SHA256  release-assets/SHA256SUMS" | sha256sum -c -
+          (cd release-assets && sha256sum -c SHA256SUMS)
+          test "$(find release-assets -maxdepth 1 -type f | wc -l | tr -d ' ')" = 7
+          default_branch="$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/$default_branch" --jq .protected)" = true
+          comparison="$(gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_COMMIT...$default_branch" --jq '[.status,.merge_base_commit.sha]|@tsv')"
+          status="${comparison%%$'\t'*}"; merge_base="${comparison#*$'\t'}"
+          test "$merge_base" = "$EXPECTED_COMMIT"
+          test "$status" = ahead -o "$status" = identical
+      - name: Create or safely resume and publish the RC draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ needs.build-rc.outputs.rc_commit }}
+          EXPECTED_MANIFEST_SHA256: ${{ needs.build-rc.outputs.manifest_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RC_TAG" --jq .object.sha 2>/dev/null)"; then test "$tag_sha" = "$EXPECTED_COMMIT"; fi
+          releases="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp)"
+          matches="$(jq --arg tag "$RC_TAG" '[.[][] | select(.tag_name == $tag)]' <<<"$releases")"
+          match_count="$(jq length <<<"$matches")"
+          test "$match_count" -le 1
+          if test "$match_count" = 1; then
+            release_json="$(jq '.[0]' <<<"$matches")"
+          else
+            release_json="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" -f tag_name="$RC_TAG" -f target_commitish="$EXPECTED_COMMIT" -f name="$RC_TAG" -f body='Release Gate 0.2.0 RC; host qualification remains required.' -F draft=true -F prerelease=true)"
+          fi
+          test "$(jq -r .draft <<<"$release_json")" = true
+          test "$(jq -r .prerelease <<<"$release_json")" = true
+          test "$(jq -r .target_commitish <<<"$release_json")" = "$EXPECTED_COMMIT"
+          release_id="$(jq -r .id <<<"$release_json")"
+          [[ "$release_id" =~ ^[0-9]+$ ]]
+          mkdir remote-existing
+          assets_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" --slurp)"
+          remote_names="$(jq -r '.[][] | .name' <<<"$assets_json")"
+          for remote in $remote_names; do test -f "release-assets/$remote"; done
+          for asset in release-assets/*; do
+            name="${asset##*/}"
+            asset_matches="$(jq --arg name "$name" '[.[][] | select(.name == $name)]' <<<"$assets_json")"
+            asset_count="$(jq length <<<"$asset_matches")"
+            test "$asset_count" -le 1
+            if test "$asset_count" = 1; then
+              asset_id="$(jq -r '.[0].id' <<<"$asset_matches")"
+              gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" -H 'Accept: application/octet-stream' > "remote-existing/$name"
+              test "$(sha256sum "$asset" | cut -d' ' -f1)" = "$(sha256sum "remote-existing/$name" | cut -d' ' -f1)"
+            else
+              [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+              curl --fail-with-body --silent --show-error --request POST \
+                --url "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name" \
+                --header "Authorization: Bearer $GH_TOKEN" \
+                --header "Accept: application/vnd.github+json" \
+                --header "Content-Type: application/octet-stream" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                --data-binary @"$asset" --output /dev/null
+            fi
+          done
+          mkdir remote-complete
+          assets_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" --slurp)"
+          test "$(jq '[.[][]] | length' <<<"$assets_json")" = 7
+          jq -r '.[][] | [.id,.name] | @tsv' <<<"$assets_json" | while IFS=$'\t' read -r asset_id name; do
+            test -f "release-assets/$name"
+            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" -H 'Accept: application/octet-stream' > "remote-complete/$name"
+          done
+          echo "$EXPECTED_MANIFEST_SHA256  remote-complete/SHA256SUMS" | sha256sum -c -
+          (cd remote-complete && sha256sum -c SHA256SUMS)
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -F draft=false >/dev/null
+
+  validate-promotion:
+    if: ${{ inputs.action == 'promote' }}
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    outputs:
+      rc_commit: ${{ steps.rc.outputs.commit }}
+      manifest_sha256: ${{ steps.bind.outputs.manifest_sha256 }}
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      # astral-sh/setup-uv v8.1.0; upgrade with reviewed lock/tool changes only.
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          python-version: "3.12"
+          version: "0.12.5"
+      - name: Resolve immutable published RC
+        id: rc
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RC_TAG" --jq .draft)" = false
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RC_TAG" --jq .prerelease)" = true
+          commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RC_TAG" --jq .object.sha)"
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - name: Download existing RC assets for read-only verification
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: gh release download release-gate-v0.2.0-rc.1 --dir release-assets
+      - name: Install the committed validation environment
+        run: uv sync --project release-gate --all-groups --locked
+      - name: Require qualification for exact RC bytes
+        run: |
+          test -f "$QUALIFICATION" || { echo "Six-surface qualification remains outstanding" >&2; exit 1; }
+          uv run --project release-gate python release-gate/scripts/verify_release_assets.py --assets-dir release-assets --expected-tag "$FINAL_TAG"
+          uv run --project release-gate python release-gate/scripts/validate_qualification.py "$QUALIFICATION" --expected-tag "$RC_TAG" --expected-commit "${{ steps.rc.outputs.commit }}" --assets-dir release-assets
+      - name: Bind reused RC bytes
+        id: bind
+        run: |
+          digest="$(sha256sum release-assets/SHA256SUMS | cut -d' ' -f1)"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          echo "manifest_sha256=$digest" >> "$GITHUB_OUTPUT"
+      # actions/upload-artifact v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-gate-v0.2.0-promoted-assets
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-final:
+    if: ${{ inputs.action == 'promote' }}
+    needs: validate-promotion
+    runs-on: ubuntu-latest
+    environment: release-gate-production
+    permissions: {contents: write}
+    steps:
+      # actions/download-artifact v4.3.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-gate-v0.2.0-promoted-assets
+          path: release-assets
+      - name: Verify reused bytes and protected-branch ancestry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ needs.validate-promotion.outputs.rc_commit }}
+          EXPECTED_MANIFEST_SHA256: ${{ needs.validate-promotion.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          echo "$EXPECTED_MANIFEST_SHA256  release-assets/SHA256SUMS" | sha256sum -c -
+          (cd release-assets && sha256sum -c SHA256SUMS)
+          test "$(find release-assets -maxdepth 1 -type f | wc -l | tr -d ' ')" = 7
+          default_branch="$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/$default_branch" --jq .protected)" = true
+          comparison="$(gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_COMMIT...$default_branch" --jq '[.status,.merge_base_commit.sha]|@tsv')"
+          status="${comparison%%$'\t'*}"; merge_base="${comparison#*$'\t'}"
+          test "$merge_base" = "$EXPECTED_COMMIT"
+          test "$status" = ahead -o "$status" = identical
+      - name: Create or safely resume and publish the final draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ needs.validate-promotion.outputs.rc_commit }}
+          EXPECTED_MANIFEST_SHA256: ${{ needs.validate-promotion.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          if tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$FINAL_TAG" --jq .object.sha 2>/dev/null)"; then test "$tag_sha" = "$EXPECTED_COMMIT"; fi
+          releases="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp)"
+          matches="$(jq --arg tag "$FINAL_TAG" '[.[][] | select(.tag_name == $tag)]' <<<"$releases")"
+          match_count="$(jq length <<<"$matches")"
+          test "$match_count" -le 1
+          if test "$match_count" = 1; then
+            release_json="$(jq '.[0]' <<<"$matches")"
+          else
+            release_json="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" -f tag_name="$FINAL_TAG" -f target_commitish="$EXPECTED_COMMIT" -f name="$FINAL_TAG" -f body="Byte-identical promotion of $RC_TAG after six-surface qualification." -F draft=true -F prerelease=false)"
+          fi
+          test "$(jq -r .draft <<<"$release_json")" = true
+          test "$(jq -r .prerelease <<<"$release_json")" = false
+          test "$(jq -r .target_commitish <<<"$release_json")" = "$EXPECTED_COMMIT"
+          release_id="$(jq -r .id <<<"$release_json")"
+          [[ "$release_id" =~ ^[0-9]+$ ]]
+          mkdir remote-existing
+          assets_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" --slurp)"
+          remote_names="$(jq -r '.[][] | .name' <<<"$assets_json")"
+          for remote in $remote_names; do test -f "release-assets/$remote"; done
+          for asset in release-assets/*; do
+            name="${asset##*/}"
+            asset_matches="$(jq --arg name "$name" '[.[][] | select(.name == $name)]' <<<"$assets_json")"
+            asset_count="$(jq length <<<"$asset_matches")"
+            test "$asset_count" -le 1
+            if test "$asset_count" = 1; then
+              asset_id="$(jq -r '.[0].id' <<<"$asset_matches")"
+              gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" -H 'Accept: application/octet-stream' > "remote-existing/$name"
+              test "$(sha256sum "$asset" | cut -d' ' -f1)" = "$(sha256sum "remote-existing/$name" | cut -d' ' -f1)"
+            else
+              [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+              curl --fail-with-body --silent --show-error --request POST \
+                --url "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name" \
+                --header "Authorization: Bearer $GH_TOKEN" \
+                --header "Accept: application/vnd.github+json" \
+                --header "Content-Type: application/octet-stream" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                --data-binary @"$asset" --output /dev/null
+            fi
+          done
+          mkdir remote-complete
+          assets_json="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" --slurp)"
+          test "$(jq '[.[][]] | length' <<<"$assets_json")" = 7
+          jq -r '.[][] | [.id,.name] | @tsv' <<<"$assets_json" | while IFS=$'\t' read -r asset_id name; do
+            test -f "release-assets/$name"
+            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" -H 'Accept: application/octet-stream' > "remote-complete/$name"
+          done
+          echo "$EXPECTED_MANIFEST_SHA256  remote-complete/SHA256SUMS" | sha256sum -c -
+          (cd remote-complete && sha256sum -c SHA256SUMS)
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -F draft=false >/dev/null

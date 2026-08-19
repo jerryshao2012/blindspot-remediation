@@ -83,6 +83,8 @@ def test_run_produces_three_way_verdict_and_verified_evidence(
                 "run",
                 "--repo",
                 str(repo),
+                "--base",
+                "HEAD",
                 "--output",
                 str(output),
                 "--run-id",
@@ -114,6 +116,8 @@ def test_policy_change_stops_commands_and_needs_human(
             "run",
             "--repo",
             str(repo),
+            "--base",
+            "HEAD",
             "--output",
             str(output),
             "--run-id",
@@ -137,7 +141,9 @@ def test_invalid_candidate_returns_exit_3_without_result(
     repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
     (repo / "tracked.txt").write_text("base\n", encoding="utf-8")
     output = tmp_path / "evidence"
-    assert main(["run", "--repo", str(repo), "--output", str(output)]) == 3
+    assert main(
+        ["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)]
+    ) == 3
     assert "empty candidate" in capsys.readouterr().err
     assert not output.exists()
 
@@ -148,7 +154,9 @@ def test_invalid_output_file_returns_exit_3(
     repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
     output = tmp_path / "not-a-directory"
     output.write_text("owned\n", encoding="utf-8")
-    assert main(["run", "--repo", str(repo), "--output", str(output)]) == 3
+    assert main(
+        ["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)]
+    ) == 3
     assert "evidence root" in capsys.readouterr().err
     assert output.read_text(encoding="utf-8") == "owned\n"
 
@@ -178,7 +186,17 @@ checks:
     output = tmp_path / "evidence"
 
     assert main(
-        ["run", "--repo", str(repo), "--output", str(output), "--run-id", "prep"]
+        [
+            "run",
+            "--repo",
+            str(repo),
+            "--base",
+            "HEAD",
+            "--output",
+            str(output),
+            "--run-id",
+            "prep",
+        ]
     ) == 2
     capsys.readouterr()
     result = json.loads((output / "prep/result.json").read_bytes())
@@ -229,6 +247,8 @@ checks:
             "run",
             "--repo",
             str(repo),
+            "--base",
+            "HEAD",
             "--output",
             str(output),
             "--run-id",
@@ -263,7 +283,17 @@ def test_differential_check_runs_base_then_candidate(
     output = tmp_path / "evidence"
 
     assert main(
-        ["run", "--repo", str(repo), "--output", str(output), "--run-id", "diff"]
+        [
+            "run",
+            "--repo",
+            str(repo),
+            "--base",
+            "HEAD",
+            "--output",
+            str(output),
+            "--run-id",
+            "diff",
+        ]
     ) == 1
     capsys.readouterr()
     manifest = json.loads((output / "diff/manifest.json").read_bytes())
@@ -292,6 +322,8 @@ def test_node_repository_produces_verified_pass_evidence(
             "run",
             "--repo",
             str(repo),
+            "--base",
+            "HEAD",
             "--output",
             str(output),
             "--run-id",
@@ -328,6 +360,8 @@ def test_runtime_evidence_budget_exhaustion_finalizes_needs_human(
             "run",
             "--repo",
             str(repo),
+            "--base",
+            "HEAD",
             "--output",
             str(output),
             "--run-id",

@@ -3,6 +3,7 @@
 .venv-b/
 .env
 uv.lock
+!release-gate/uv.lock
 
 # Python build and cache
 __pycache__/

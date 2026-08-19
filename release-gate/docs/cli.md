@@ -1,20 +1,49 @@
 # CLI Contract
 
 The installed console command is `release-gate`. It supports exactly three v1
-subcommands: `init`, `validate`, and `run`.
+subcommands: `init`, `validate`, and `run`. The global `release-gate --version`
+command prints the installed distribution version and exits 0.
 
 ## `init`
 
 ```text
-release-gate init [--repo PATH]
+release-gate init [--repo PATH] [--from-config PATH]
 ```
 
 `--repo` defaults to the current directory. The command writes a generic
 `.release-gate.yaml` draft containing an intentionally unavailable placeholder
 command, then validates it. It does not infer an ecosystem or project command.
-It never overwrites an existing file; an existing target, non-directory path,
-or write failure is exit 3. The operator must tailor and commit the policy
-before `run`, because runs trust only base-revision policy.
+With `--from-config`, it instead reads at most 1 MiB from the selected file,
+performs the same YAML, schema, and semantic validation before changing the
+target repository, and preserves the exact approved source bytes in the new
+policy. It never overwrites an existing policy.
+
+Initialization snapshots `.gitignore` by filesystem identity, length, and
+SHA-256 before writing either target and rejects symbolic links, Windows
+reparse points, and non-regular ignore targets. It stages and flushes the
+policy privately, then opens or exclusively creates `.gitignore`, takes a
+nonblocking cross-platform advisory lock, and performs the final snapshot
+check through that pinned handle. The lock remains held through an append or
+no-op, policy publication, and any rollback. Immediately before publication,
+it revalidates both the final path identity and the exact expected bytes through
+the locked descriptor, including the existing-entry no-op case. Detected path
+or content changes stop publication and are preserved. The policy is published
+last by an atomic exclusive hard link; the command has no policy rollback and
+does not deliberately remove or truncate a published policy. On failure it
+attempts to roll back ignore bytes only through the locked handle after repeated
+identity and exact-content checks. When initialization created a missing
+`.gitignore` but later fails, it leaves the empty file instead of using a
+check-then-unlink cleanup. Advisory-lock contention, an existing target,
+non-directory repository path, unsafe ignore target, race, or write failure is
+exit 3. The operator must tailor and commit the policy before `run`, because
+runs trust only base-revision policy.
+
+The lock serializes cooperating Release Gate initializers, not arbitrary
+writers. Portable filesystems cannot atomically combine the final ignore check
+with policy linking, or the rollback content check with truncation. A hostile
+or non-cooperating same-user process can therefore race those syscall gaps.
+Run initialization without other repository writers; same-user processes are
+inside this local-filesystem trust boundary.
 
 ## `validate`
 
@@ -31,12 +60,13 @@ paths, contain no traceback for expected errors, and exit 3.
 ## `run`
 
 ```text
-release-gate run [--repo PATH] [--base REF] [--output PATH] [--run-id ID]
+release-gate run [--repo PATH] --base REF [--output PATH] [--run-id ID]
 ```
 
-`--repo` defaults to the current directory and `--base` defaults to `HEAD`.
-The selected base must resolve to a local commit. `--run-id` defaults to a separator-free UTC
-timestamp plus random suffix. It is a 1-128-character ASCII component that
+`--repo` defaults to the current directory. `--base` is mandatory at the
+argument-parser boundary and the selected ref must resolve to a local commit.
+`--run-id` defaults to a separator-free UTC timestamp plus random suffix. It is
+a 1-128-character ASCII component that
 begins with a letter or digit, then uses only letters, digits, `.`, `_`, and
 `-`, cannot end in `.`, and cannot have a case-insensitive DOS device basename
 `CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, or `LPT1`-`LPT9`, even with an
@@ -182,3 +212,9 @@ error and yields `NEEDS_HUMAN` instead.
 The new CLI does not replace or proxy `demo/gate/gate.sh`. Existing demo
 commands and their 0/1/2 behavior remain intact. There is no A3 request-file,
 execution-result, plugin, or adapter mode in v1.
+
+The 0.2.0 assistant archives bundle `references/compatibility.json` and require
+the exact output `release-gate 0.2.0` before `init`, `validate`, or `run`.
+A missing executable or different version is a safe stop. Install the CLI wheel
+and host archive as a separately verified, version-matched pair using the
+[adoption procedure](adoption.md).
