@@ -93,7 +93,6 @@ def capture_candidate(
             "-A",
             "--",
             ".",
-            ":(exclude).release-gate/runs/**",
         )
         candidate_tree = (
             _capture_git(root, environment, "write-tree").decode("ascii").strip()

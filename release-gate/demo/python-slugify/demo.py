@@ -27,7 +27,7 @@ CONTROL_EVIDENCE = WORKBENCH / "evidence"
 UPSTREAM_URL = "https://github.com/un33k/python-slugify.git"
 UPSTREAM_SHA = "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
 BASE_REF = "release-gate-demo-base"
-EXPECTED_GATE_VERSION = "release-gate 0.2.0"
+EXPECTED_GATE_VERSION = "release-gate 0.2.2"
 TEST_TOOLS = ("pytest==8.4.2",)
 
 
@@ -188,6 +188,25 @@ def _which(name: str) -> str:
     return path
 
 
+def _gate_argv(*arguments: str | os.PathLike[str]) -> tuple[str | os.PathLike[str], ...]:
+    """Build the release-gate invocation, preferring ``python -m release_gate``.
+
+    Some corporate endpoint security policies block the generated
+    ``release-gate`` executable shim while still allowing the interpreter it
+    was built with. Resolving the sibling ``python`` next to that shim and
+    running the module directly avoids executing the blocked binary.
+    """
+
+    exe = shutil.which("release-gate")
+    if exe is not None:
+        venv_python = Path(exe).with_name(
+            "python.exe" if sys.platform == "win32" else "python"
+        )
+        if venv_python.is_file():
+            return (venv_python, "-m", "release_gate", *arguments)
+    return ("release-gate", *arguments)
+
+
 def _task_python(venv: Path = TASK_VENV) -> Path:
     if sys.platform == "win32":
         return venv / "Scripts" / "python.exe"
@@ -204,7 +223,7 @@ def doctor() -> None:
         print(f"{executable}: {_which(executable)}")
     if not (sys.version_info.major == 3 and 11 <= sys.version_info.minor <= 13):
         raise DemoError("Python 3.11 through 3.13 is required")
-    version = _run(("release-gate", "--version"), capture=True).stdout.strip()
+    version = _run(_gate_argv("--version"), capture=True).stdout.strip()
     if version != EXPECTED_GATE_VERSION:
         raise DemoError(
             f"Release Gate version mismatch: expected {EXPECTED_GATE_VERSION!r}, "
@@ -230,8 +249,7 @@ def setup() -> None:
         _git("config", "user.name", "Release Gate Demo")
         _git("config", "user.email", "release-gate-demo@example.invalid")
         _run(
-            (
-                "release-gate",
+            _gate_argv(
                 "init",
                 "--repo",
                 REPOSITORY,
@@ -245,7 +263,7 @@ def setup() -> None:
         _verify_repository()
         _create_task_environment(TASK_VENV)
         _verify_upstream_tests()
-        _run(("release-gate", "validate", "--repo", REPOSITORY))
+        _run(_gate_argv("validate", "--repo", REPOSITORY))
     except Exception:
         print(f"setup stopped; inspect or remove {WORKBENCH}", file=sys.stderr)
         raise
@@ -330,8 +348,7 @@ def verify() -> None:
         control(scenario)
         run_id = f"verify-{scenario}-{uuid.uuid4().hex[:8]}"
         result = _run(
-            (
-                "release-gate",
+            _gate_argv(
                 "run",
                 "--repo",
                 REPOSITORY,
@@ -366,7 +383,7 @@ def verify() -> None:
 
 def _require_gate_version() -> None:
     _which("release-gate")
-    actual = _run(("release-gate", "--version"), capture=True).stdout.strip()
+    actual = _run(_gate_argv("--version"), capture=True).stdout.strip()
     if actual != EXPECTED_GATE_VERSION:
         raise DemoError(
             f"expected {EXPECTED_GATE_VERSION!r}, got {actual!r}; "

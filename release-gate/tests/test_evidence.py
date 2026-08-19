@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -198,6 +199,35 @@ def test_run_ids_are_append_only_and_casefold_unique(tmp_path: Path) -> None:
             patch=b"p",
             effective_config=b"{}",
         )
+
+
+def test_atomic_write_retries_windows_sharing_violation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = EvidenceRun.create(
+        tmp_path,
+        "run-1",
+        total_bytes=16 * 1024 * 1024,
+        patch=b"p",
+        effective_config=b"{}",
+    )
+    original_replace = os.replace
+    attempts = 0
+
+    def replace_once_locked(source: object, destination: object) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            error = PermissionError("sharing violation")
+            error.winerror = 32  # type: ignore[attr-defined]
+            raise error
+        original_replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", replace_once_locked)
+    run.write_artifact("output.log", b"ok\n", "text/plain")
+
+    assert attempts == 2
+    assert (run.path / "output.log").read_bytes() == b"ok\n"
 
 
 @pytest.mark.parametrize(

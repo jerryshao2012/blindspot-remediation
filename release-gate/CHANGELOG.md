@@ -2,6 +2,16 @@
 
 All notable changes to the standalone Release Gate are recorded here.
 
+## 0.2.2
+
+- Retry evidence-file finalization after transient Windows sharing violations
+  and support Windows hosts without `os.fchmod`.
+
+## 0.2.1
+
+- Fix isolated candidate capture when an ignored `.release-gate/runs/`
+  directory already exists.
+
 ## 0.2.0
 
 The release lifecycle qualifies `release-gate-v0.2.0-rc.1` on every advertised

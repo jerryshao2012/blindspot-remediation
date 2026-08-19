@@ -15,7 +15,7 @@ import yaml
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "build_skill_archives.py"
 HOSTS = ("copilot", "codex", "claude-code", "antigravity")
-VERSION = "0.2.0"
+VERSION = "0.2.2"
 
 
 def _lf(content: bytes) -> bytes:

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import unicodedata
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
@@ -21,6 +22,8 @@ RESULT_LIMIT = 2 * 1024 * 1024
 MANIFEST_LIMIT = 4 * 1024 * 1024
 TRACE_LIMIT = 1024 * 1024
 MAX_TOTAL = 200 * 1024 * 1024
+_REPLACE_RETRY_DELAY = 0.05
+_REPLACE_RETRIES = 3
 _RUN_ID = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9_-])?$")
 _DOS_DEVICE = re.compile(r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)", re.I)
 _ILLEGAL_COMPONENT = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
@@ -198,16 +201,24 @@ class EvidenceRun:
             prefix=".release-gate-", dir=target.parent
         )
         try:
-            os.fchmod(descriptor, 0o600)
+            if hasattr(os, "fchmod"):
+                os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, target)
+            for attempt in range(_REPLACE_RETRIES):
+                try:
+                    os.replace(temporary, target)
+                    break
+                except PermissionError as error:
+                    if getattr(error, "winerror", None) != 32 or attempt == _REPLACE_RETRIES - 1:
+                        raise
+                    time.sleep(_REPLACE_RETRY_DELAY)
         finally:
             try:
                 os.unlink(temporary)
-            except FileNotFoundError:
+            except (FileNotFoundError, PermissionError):
                 pass
 
 

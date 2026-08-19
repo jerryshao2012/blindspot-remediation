@@ -125,6 +125,20 @@ def test_captures_complete_worktree_without_ignored_files(repository: Path) -> N
     assert repository_snapshot(repository) == before
 
 
+def test_capture_ignores_existing_evidence_directory(repository: Path) -> None:
+    evidence = repository / ".release-gate" / "runs" / "previous-run"
+    evidence.mkdir(parents=True)
+    (evidence / "result.json").write_text("{}\n", encoding="utf-8")
+    (repository / "tracked.txt").write_text("candidate\n", encoding="utf-8")
+    before = repository_snapshot(repository)
+
+    capture = capture_candidate(repository, base="HEAD")
+
+    assert "tracked.txt" in capture.changed_paths
+    assert not any(path.startswith(".release-gate/runs/") for path in capture.changed_paths)
+    assert repository_snapshot(repository) == before
+
+
 def test_capture_is_deterministic_and_keeps_source_object_store_unchanged(
     repository: Path,
 ) -> None:

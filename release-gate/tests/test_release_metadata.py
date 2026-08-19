@@ -9,7 +9,7 @@ from release_gate import __version__
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "https://github.com/jerryshao2012/blindspot-remediation"
-RELEASE_TAG = "release-gate-v0.2.0"
+RELEASE_TAG = "release-gate-v0.2.2"
 SKILLS_VERSION = "1.5.23"
 HOST_AGENTS = {
     "copilot": "github-copilot",

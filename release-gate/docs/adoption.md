@@ -34,7 +34,7 @@ currently available.
 
 The commands below are release-ready examples for use only after the final
 GitHub release is published with its checksum manifest. They use the immutable
-`release-gate-v0.2.0` tag, but do not claim that those assets are currently
+`release-gate-v0.2.2` tag, but do not claim that those assets are currently
 available. Candidate assets and URLs belong only in the separate qualification
 procedure and are not substitutes for these end-user commands.
 
@@ -43,9 +43,9 @@ procedure and are not substitutes for these end-user commands.
 Download the release checksum manifest and exact wheel:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release_gate-0.2.0-py3-none-any.whl
-grep '  release_gate-0.2.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release_gate-0.2.2-py3-none-any.whl
+grep '  release_gate-0.2.2-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
 ```
 
 Review that the checksum line came from the same GitHub release, names exactly
@@ -56,11 +56,11 @@ the file is absent, duplicated, or mismatched.
 Install only the verified local wheel and confirm its exact version:
 
 ```bash
-uv tool install ./release_gate-0.2.0-py3-none-any.whl
+uv tool install ./release_gate-0.2.2-py3-none-any.whl
 release-gate --version
 ```
 
-The required output is `release-gate 0.2.0`.
+The required output is `release-gate 0.2.2`.
 
 The checksum covers the Release Gate wheel itself and proves nothing about
 transitive package bytes. `uv tool install` resolves the declared dependency
@@ -81,25 +81,25 @@ target. Do not replace the pinned installer version with `latest`.
 ### GitHub Copilot CLI
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-copilot-0.2.0.tar.gz
-grep '  release-gate-skill-copilot-0.2.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-copilot-0.2.0.tar.gz --global --copy --agent github-copilot
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-copilot-0.2.2.tar.gz
+grep '  release-gate-skill-copilot-0.2.2.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-copilot-0.2.2.tar.gz --global --copy --agent github-copilot
 ```
 
 ### Codex CLI and IDE
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-codex-0.2.0.tar.gz
-grep '  release-gate-skill-codex-0.2.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-codex-0.2.0.tar.gz --global --copy --agent codex
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-codex-0.2.2.tar.gz
+grep '  release-gate-skill-codex-0.2.2.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-codex-0.2.2.tar.gz --global --copy --agent codex
 ```
 
 ### Claude Code
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-claude-code-0.2.0.tar.gz
-grep '  release-gate-skill-claude-code-0.2.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-claude-code-0.2.0.tar.gz --global --copy --agent claude-code
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-claude-code-0.2.2.tar.gz
+grep '  release-gate-skill-claude-code-0.2.2.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-claude-code-0.2.2.tar.gz --global --copy --agent claude-code
 ```
 
 ### Antigravity IDE or CLI
@@ -108,10 +108,10 @@ The same verified archive is used for both Antigravity surfaces, but the
 installer target is surface-specific:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-antigravity-0.2.0.tar.gz
-grep '  release-gate-skill-antigravity-0.2.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-antigravity-0.2.0.tar.gz --global --copy --agent antigravity
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-antigravity-0.2.0.tar.gz --global --copy --agent antigravity-cli
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz
+grep '  release-gate-skill-antigravity-0.2.2.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz --global --copy --agent antigravity-cli
 ```
 
 Install only the line for the surface being used. After installation, use the
@@ -215,15 +215,15 @@ remove the old copied skill; install the new host archive with its exact
 Confirm `release-gate --version` and run host discovery before use. Do not mix
 CLI and skill versions.
 
-For example, after the final 0.2.0 release is published, upgrade the CLI from a
+For example, after the final 0.2.2 release is published, upgrade the CLI from a
 prior release only after the new wheel passes its checksum check:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release_gate-0.2.0-py3-none-any.whl
-grep '  release_gate-0.2.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release_gate-0.2.2-py3-none-any.whl
+grep '  release_gate-0.2.2-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
 uv tool uninstall release-gate
-uv tool install ./release_gate-0.2.0-py3-none-any.whl
+uv tool install ./release_gate-0.2.2-py3-none-any.whl
 release-gate --version
 ```
 
@@ -233,27 +233,27 @@ immutable URL. Use only the pair matching the selected host:
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent github-copilot --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-copilot-0.2.0.tar.gz --global --copy --agent github-copilot
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-copilot-0.2.2.tar.gz --global --copy --agent github-copilot
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent codex --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-codex-0.2.0.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-codex-0.2.2.tar.gz --global --copy --agent codex
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent claude-code --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-claude-code-0.2.0.tar.gz --global --copy --agent claude-code
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-claude-code-0.2.2.tar.gz --global --copy --agent claude-code
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-antigravity-0.2.0.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz --global --copy --agent antigravity
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity-cli --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-antigravity-0.2.0.tar.gz --global --copy --agent antigravity-cli
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz --global --copy --agent antigravity-cli
 ```
 
 To uninstall without upgrading, run only the matching `skills remove` line

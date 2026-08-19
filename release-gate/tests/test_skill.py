@@ -28,7 +28,7 @@ def test_skill_dispatches_only_three_explicit_operations() -> None:
         "Missing or unknown subcommand",
         "no operational tool call",
         "release-gate --version",
-        "release-gate 0.2.0",
+        "release-gate 0.2.2",
         "release-gate init --repo <repo> --from-config <temporary-approved-config>",
         "release-gate validate --repo <repo>",
         "release-gate run",
@@ -95,7 +95,7 @@ def test_compatibility_reference_pins_source_version() -> None:
     compatibility = json.loads(
         (SKILL.parent / "references" / "compatibility.json").read_text(encoding="utf-8")
     )
-    assert compatibility == {"cli": {"name": "release-gate", "version": "0.2.0"}}
+    assert compatibility == {"cli": {"name": "release-gate", "version": "0.2.2"}}
 
 
 def test_bundled_config_schema_is_the_exact_cli_schema() -> None:

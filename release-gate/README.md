@@ -33,14 +33,14 @@ available. These documents do not claim that those assets are currently
 available.
 
 For example, download `SHA256SUMS` and
-`release_gate-0.2.0-py3-none-any.whl` from the immutable
-`release-gate-v0.2.0` release, verify the wheel entry, and then install it:
+`release_gate-0.2.2-py3-none-any.whl` from the immutable
+`release-gate-v0.2.2` release, verify the wheel entry, and then install it:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release_gate-0.2.0-py3-none-any.whl
-grep '  release_gate-0.2.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-uv tool install ./release_gate-0.2.0-py3-none-any.whl
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release_gate-0.2.2-py3-none-any.whl
+grep '  release_gate-0.2.2-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+uv tool install ./release_gate-0.2.2-py3-none-any.whl
 release-gate --version
 ```
 
@@ -58,7 +58,7 @@ the immutable release asset URL directly, after the separate download and
 checksum review described in [Adoption](docs/adoption.md):
 
 ```bash
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.0/release-gate-skill-codex-0.2.0.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-codex-0.2.2.tar.gz --global --copy --agent codex
 ```
 
 Invoke the skill explicitly: `/release-gate init` in Copilot and Claude Code,
@@ -66,16 +66,19 @@ Invoke the skill explicitly: `/release-gate init` in Copilot and Claude Code,
 does not support arbitrary custom slash commands; `/skills` can select the
 installed skill. The skill supports only `init`, `validate`, and `run`.
 
-After guided initialization, review and commit `.release-gate.yaml`, then
-validate and run it against an explicit trusted base revision:
+After guided initialization, review and commit `.release-gate.yaml`. From the
+target repository directory, validate and run it against an explicit trusted
+base revision:
 
 ```bash
-release-gate validate --repo /path/to/target-repository
-release-gate run --repo /path/to/target-repository --base HEAD
+release-gate validate --repo .
+release-gate run --repo . --base HEAD
 ```
 
-`run` prints the stable verdict and the absolute path to `result.json`. By
-default evidence is written under the target repository's
+`--repo .` means the current directory. To run against another repository,
+replace `.` with its actual path, such as `C:\work\target-repository` in
+PowerShell. `run` prints the stable verdict and the absolute path to
+`result.json`. By default evidence is written under the target repository's
 `.release-gate/runs/`; `--output` selects a safe disjoint evidence root.
 
 ## Command summary

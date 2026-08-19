@@ -25,7 +25,7 @@ release-gate --version
 ```
 
 Read `references/compatibility.json` and require exact output
-`release-gate 0.2.0`. If the executable is missing, the reference is unreadable,
+`release-gate 0.2.2`. If the executable is missing, the reference is unreadable,
 or the output differs, stop safely. Do not install, upgrade, retry, or continue.
 
 ## init
