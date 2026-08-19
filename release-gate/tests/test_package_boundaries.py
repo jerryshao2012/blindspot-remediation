@@ -32,6 +32,13 @@ def test_package_contains_all_v1_schemas() -> None:
     }
 
 
+def test_packaged_schemas_match_canonical_contracts_byte_for_byte() -> None:
+    canonical = ROOT / "schemas"
+    packaged = ROOT / "src" / "release_gate" / "schemas"
+    for source in canonical.glob("*.schema.json"):
+        assert (packaged / source.name).read_bytes() == source.read_bytes()
+
+
 def test_console_entry_target_is_importable() -> None:
     from release_gate.cli import main
 

@@ -221,6 +221,17 @@ Do not give the guardrail the work of the offline measurement.
 
 ## Closed notes
 
+### N-9 — Reusable gate home (closed 2026-08-18)
+
+**Decision.** The reusable implementation lives in
+[`release-gate/`](release-gate/) as an independent Python CLI plus portable
+skill. Each adopting repository owns a committed `.release-gate.yaml`.
+
+**Coexistence.** `demo/gate/gate.sh` and its skill remain unchanged for the X1
+walkthrough. `A3-release-gate-service` remains auditable historical source
+material with known defects. The new product imports neither one, and no
+plugin or host-specific adapter is part of v1.
+
 ### N-1 — The main branch already contains a release gate that runs
 
 **What we found.**

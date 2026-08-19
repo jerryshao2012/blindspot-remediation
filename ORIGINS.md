@@ -222,3 +222,11 @@ recorded in NOTES.md, closed note N-1). It remains in git history:
 ```bash
 git checkout $(git log --diff-filter=D --format=%H -1 -- demo-rate-limiter)^ -- demo-rate-limiter
 ```
+
+## 12. Current state — 2026-08-18
+
+The reusable implementation now lives in [`release-gate/`](release-gate/).
+It is independent of A1/A2/A3/A9/B6 and treats those components as historical
+design and audit material. The existing `demo/gate/gate.sh` interface remains
+the unchanged X1 teaching gate; it is not a compatibility layer for the new
+CLI.

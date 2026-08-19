@@ -6,39 +6,36 @@ subcommands: `init`, `validate`, and `run`.
 ## `init`
 
 ```text
-release-gate init [--repo PATH] [--profile generic|python|node]
+release-gate init [--repo PATH]
 ```
 
-`--repo` defaults to the current directory and `--profile` to `generic`. The
-command writes `.release-gate.yaml` from the matching built-in v1 example and
-then validates it. It never overwrites an existing file; an existing target,
-non-repository path, or write failure is exit 3. The operator must tailor and
-commit the policy before `run`, because runs trust only base-revision policy.
+`--repo` defaults to the current directory. The command writes a generic
+`.release-gate.yaml` draft containing an intentionally unavailable placeholder
+command, then validates it. It does not infer an ecosystem or project command.
+It never overwrites an existing file; an existing target, non-directory path,
+or write failure is exit 3. The operator must tailor and commit the policy
+before `run`, because runs trust only base-revision policy.
 
 ## `validate`
 
 ```text
-release-gate validate [--repo PATH] [--config PATH]
+release-gate validate [--repo PATH]
 ```
 
 The default input is `<repo>/.release-gate.yaml`. This command performs YAML
 parsing, JSON Schema 2020-12 validation, semantic validation, defaults, and
 host-platform resolution without running repository commands. Success prints
-the config version and check count. Validation diagnostics go to stderr, use
-document paths, contain no traceback for expected errors, and exit 3.
-
-`--config` is a convenience for validating an uncommitted file. It is not
-accepted by `run` and cannot override trusted base policy.
+`VALID:` and the policy path. Validation diagnostics go to stderr, use document
+paths, contain no traceback for expected errors, and exit 3.
 
 ## `run`
 
 ```text
-release-gate run --base REF [--repo PATH] [--run-id ID]
-                 [--evidence-root PATH]
+release-gate run [--repo PATH] [--base REF] [--output PATH] [--run-id ID]
 ```
 
-`--repo` defaults to the current directory. `--base` is required and must
-resolve to a local commit. `--run-id` defaults to a separator-free UTC
+`--repo` defaults to the current directory and `--base` defaults to `HEAD`.
+The selected base must resolve to a local commit. `--run-id` defaults to a separator-free UTC
 timestamp plus random suffix. It is a 1-128-character ASCII component that
 begins with a letter or digit, then uses only letters, digits, `.`, `_`, and
 `-`, cannot end in `.`, and cannot have a case-insensitive DOS device basename
@@ -48,7 +45,7 @@ spaces, and Windows-illegal `<>:"/\|?*`. An existing or
 NFC-plus-casefold-equivalent sibling run directory is never overwritten.
 
 The default evidence root is the literal path
-`<canonical-repo>/.release-gate/runs`. A relative custom `--evidence-root` is
+`<canonical-repo>/.release-gate/runs`. A relative custom `--output` is
 anchored to the invocation working directory, not to `--repo`. Before candidate
 capture, the engine first canonicalizes only the repository root, its `.git`
 entry, the per-worktree directory from `git rev-parse --git-dir`, and the

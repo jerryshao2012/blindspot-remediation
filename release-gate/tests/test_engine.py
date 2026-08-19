@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -264,3 +265,29 @@ def test_differential_check_runs_base_then_candidate(
         "fail",
     ]
     verify_run(output / "diff")
+
+
+def test_node_repository_produces_verified_pass_evidence(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is unavailable")
+    repo = repository(tmp_path, [node, "-e", "console.log('ok')"])
+    output = tmp_path / "evidence"
+
+    assert main(
+        [
+            "run",
+            "--repo",
+            str(repo),
+            "--output",
+            str(output),
+            "--run-id",
+            "node-pass",
+        ]
+    ) == 0
+    capsys.readouterr()
+    result = json.loads((output / "node-pass/result.json").read_bytes())
+    assert result["verdict"] == "PASS"
+    verify_run(output / "node-pass")

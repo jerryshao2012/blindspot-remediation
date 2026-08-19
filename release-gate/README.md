@@ -1,7 +1,7 @@
 # Release Gate
 
-This directory is the canonical specification for a new, standalone release
-gate. The gate independently reconstructs a repository change, runs
+This directory contains the canonical specification and implementation of the
+standalone release gate. The gate independently reconstructs a repository change, runs
 repository-owned checks, preserves evidence, and returns exactly one verdict:
 `PASS`, `FAIL`, or `NEEDS_HUMAN`.
 
@@ -10,9 +10,41 @@ It does not import any A-series or B-series package. It runs configured
 commands directly on a trusted host; it is not a sandbox and must not be used
 for hostile repositories or patches.
 
-This specification intentionally precedes production code. The JSON Schemas
-and examples in this directory are the versioned v1 contract from which the
-implementation will be built.
+The Python package in `src/release_gate/` implements the versioned contracts in
+`schemas/`. The portable wrapper in `skills/release-gate/` invokes the installed
+CLI; it contains no second policy implementation.
+
+## Install and quick start
+
+Python 3.11 through 3.13 and Git are required. From this repository:
+
+```bash
+python -m pip install ./release-gate
+release-gate init --repo /path/to/target-repository
+```
+
+Review and commit the generated `.release-gate.yaml`, then validate and run it
+against an explicit trusted base revision:
+
+```bash
+release-gate validate --repo /path/to/target-repository
+release-gate run --repo /path/to/target-repository --base HEAD
+```
+
+`run` prints the stable verdict and the absolute path to `result.json`. By
+default evidence is written under the target repository's
+`.release-gate/runs/`; `--output` selects a safe disjoint evidence root.
+
+## Command summary
+
+| Command | Purpose |
+|---|---|
+| `release-gate init [--repo PATH]` | Create a generic draft policy without guessing project commands. |
+| `release-gate validate [--repo PATH]` | Validate the working-copy policy draft. |
+| `release-gate run [--repo PATH] [--base REF] [--output PATH] [--run-id ID]` | Evaluate the captured candidate using policy from the base revision. |
+
+Install or copy `skills/release-gate/` into an agent's skill search path only
+after installing the CLI. No plugin is required.
 
 ## Contract map
 

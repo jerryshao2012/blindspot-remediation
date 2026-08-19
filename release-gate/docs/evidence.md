@@ -22,7 +22,7 @@ layout:
             └── reports/...
 ```
 
-For an accepted custom `--evidence-root`, the subtree beginning with
+For an accepted custom `--output`, the subtree beginning with
 `<run-id>/` is identical; only the effective root replaces
 `.release-gate/runs`. The manifest stores paths relative to the run directory,
 so its contents do not depend on the host root.

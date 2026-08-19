@@ -26,6 +26,21 @@ Each task is a red-green-refactor slice. Commit only after its focused and
 regression tests pass. Keep public behavior behind the checked-in v1 schemas;
 do not silently extend the contract.
 
+## Implementation status — 2026-08-18
+
+Tasks 1–10 are implemented on the `codex/release-gate` branch using the
+red-green-refactor sequence recorded in its commits. The standalone package,
+configuration validator, Git capture, clean workspaces, bounded process runner,
+report/assertion evaluation, invariant policy, evidence finalization, CLI, and
+portable skill are present. Local tests include deterministic PASS, FAIL, and
+NEEDS_HUMAN end-to-end repositories.
+
+Task 11 is represented by `.github/workflows/release-gate-ci.yml`, which runs
+Python 3.11–3.13 on Ubuntu, macOS, and Windows, builds the wheel, smoke-tests
+the installed command, and validates the skill. Local completion evidence is
+recorded during branch verification; hosted CI results exist only after this
+branch is pushed to GitHub.
+
 ### Task 1: Package and contract test harness
 
 **Files:** create `release-gate/pyproject.toml`,
@@ -407,7 +422,7 @@ do not silently extend the contract.
 
 ### Task 10: Portable skill
 
-**Files:** create `release-gate/skill/release-gate/SKILL.md` and
+**Files:** create `release-gate/skills/release-gate/SKILL.md` and
 `release-gate/tests/test_skill_contract.py`.
 
 - [ ] Write a failing test that checks the skill invokes the standalone binary,

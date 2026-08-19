@@ -1,9 +1,21 @@
 # Adoption and Coexistence
 
+## Install the reusable product
+
+Use Python 3.11–3.13 and install the package from this repository:
+
+```bash
+python -m pip install ./release-gate
+```
+
+The optional agent wrapper is `release-gate/skills/release-gate/`. Copy that
+directory into the host's skill search path only after the CLI is installed.
+The skill is portable and does not require a plugin.
+
 ## Add a repository
 
 1. Install the independent Python 3.11+ CLI in a dedicated environment.
-2. Run `release-gate init --profile generic|python|node`.
+2. Run `release-gate init --repo /path/to/repository`.
 3. Replace example `allowed_paths`, `forbidden_paths`,
    `review_required_paths`, commands, inherited-environment names, exit
    classes, reports, and assertions with repository-owned policy.
