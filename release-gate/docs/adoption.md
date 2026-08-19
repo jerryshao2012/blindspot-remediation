@@ -129,6 +129,26 @@ must be immutable and byte-identical to the hash-qualified asset. Stop if the
 release asset was replaced, the manifest changed, or the installed archive
 cannot be tied to the qualified SHA-256.
 
+## Troubleshooting current installer availability
+
+If `npx --yes skills@1.5.23 ...` fails with `npm ERR! code ETARGET`, the
+required installer version is not yet available from your configured npm
+registry. If a release asset URL fails with `HTTP 404`, the immutable final
+GitHub release asset is not published yet.
+
+For local development in this repository only (not final release installation),
+install the checked-in skill directory directly:
+
+```bash
+npx --yes skills@1.5.22 remove release-gate --global --agent github-copilot --yes
+npx --yes skills@1.5.22 add ./release-gate/skills/release-gate --global --copy --agent github-copilot
+npx --yes skills@1.5.22 list --global --agent github-copilot
+```
+
+This workaround bypasses unavailable release assets and should be replaced with
+the pinned checksum-verified release workflow in this document as soon as the
+final release artifacts and required installer version are available.
+
 ## Invocation contract
 
 The standalone skill accepts informational `--version` and the three

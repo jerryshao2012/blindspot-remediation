@@ -162,6 +162,25 @@ Published users install the matching verified host archive. The canonical
 `skills/release-gate/` tree is for development and packaging. No plugin is
 required.
 
+## Troubleshooting current installer availability
+
+If `npx --yes skills@1.5.23 ...` fails with `npm ERR! code ETARGET`, that
+version is not yet available from your npm registry. If a GitHub release asset
+URL returns `HTTP 404`, the immutable release asset has not been published yet.
+
+For local development in this repository (not public release installation), use
+the checked-in skill folder directly:
+
+```bash
+npx --yes skills@1.5.22 remove release-gate --global --agent github-copilot --yes
+npx --yes skills@1.5.22 add ./release-gate/skills/release-gate --global --copy --agent github-copilot
+npx --yes skills@1.5.22 list --global --agent github-copilot
+```
+
+This workaround bypasses unavailable release artifacts and was verified in this
+workspace. Keep using the pinned release procedure above for production-ready,
+checksum-verified installs once the final GitHub release assets are published.
+
 ## Maintaining release versions
 
 For a release bump, edit only `src/release_gate/__init__.py::__version__`, then
