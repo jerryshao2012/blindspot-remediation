@@ -50,9 +50,9 @@ def test_ci_covers_supported_operating_systems_and_python_versions() -> None:
         '"3.11"',
         '"3.12"',
         '"3.13"',
-        "python -m pytest",
-        "python -m mypy",
-        "python -m ruff",
+        "uv run pytest",
+        "uv run mypy",
+        "uv run ruff",
         "python -m build",
     ):
         assert value in workflow
