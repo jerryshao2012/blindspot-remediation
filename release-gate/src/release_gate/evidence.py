@@ -96,14 +96,38 @@ class EvidenceRun:
         original_size_bytes: int | None = None,
         full_sha256: str | None = None,
     ) -> Path:
+        return self._write_artifact(
+            relative_path,
+            data,
+            media_type,
+            truncated=truncated,
+            original_size_bytes=original_size_bytes,
+            full_sha256=full_sha256,
+            preserve_finalization_reserve=True,
+        )
+
+    def _write_artifact(
+        self,
+        relative_path: str,
+        data: bytes,
+        media_type: str | None,
+        *,
+        truncated: bool = False,
+        original_size_bytes: int | None = None,
+        full_sha256: str | None = None,
+        preserve_finalization_reserve: bool,
+    ) -> Path:
         if self._complete:
             raise EvidenceError("completed evidence is append-only")
         _validate_artifact_path(relative_path)
         key = unicodedata.normalize("NFC", relative_path).casefold()
         if any(path.casefold() == key for path in self._artifacts):
             raise EvidenceError(f"artifact path collides: {relative_path}")
-        if self._retained_bytes + len(data) + FINALIZATION_RESERVE > self.total_bytes:
+        reserve = FINALIZATION_RESERVE if preserve_finalization_reserve else 0
+        if self._retained_bytes + len(data) + reserve > self.total_bytes:
             raise EvidenceError("evidence budget exhausted")
+        if truncated and (original_size_bytes is None or full_sha256 is None):
+            raise EvidenceError("truncated artifacts require full-stream facts")
         self._atomic_write(relative_path, data)
         record: dict[str, Any] = {
             "path": relative_path,
@@ -116,8 +140,8 @@ class EvidenceRun:
             "truncated": truncated,
         }
         if truncated:
-            if original_size_bytes is None or full_sha256 is None:
-                raise EvidenceError("truncated artifacts require full-stream facts")
+            assert original_size_bytes is not None
+            assert full_sha256 is not None
             record.update(
                 original_size_bytes=original_size_bytes, full_sha256=full_sha256
             )
@@ -133,12 +157,22 @@ class EvidenceRun:
     ) -> Path:
         if len(trace) > TRACE_LIMIT:
             raise EvidenceError("trace.json exceeds 1 MiB")
-        self.write_artifact("trace.json", trace, "application/json")
+        self._write_artifact(
+            "trace.json",
+            trace,
+            "application/json",
+            preserve_finalization_reserve=False,
+        )
         result_bytes = _canonical_json(result)
         if len(result_bytes) > RESULT_LIMIT:
             raise EvidenceError("result.json exceeds 2 MiB")
         _validate_document("result-v1.schema.json", result)
-        self.write_artifact("result.json", result_bytes, "application/json")
+        self._write_artifact(
+            "result.json",
+            result_bytes,
+            "application/json",
+            preserve_finalization_reserve=False,
+        )
         completed_manifest = {**manifest, "artifacts": list(self._artifacts.values())}
         _validate_document("manifest-v1.schema.json", completed_manifest)
         _validate_timestamps(completed_manifest)

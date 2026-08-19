@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from release_gate.evidence import (
+    FINALIZATION_RESERVE,
     EvidenceError,
     EvidenceRun,
     ensure_preflight_feasible,
@@ -84,7 +85,7 @@ def test_finalize_and_verify_tamper_evident_package(tmp_path: Path) -> None:
     run = EvidenceRun.create(
         tmp_path,
         "run-1",
-        total_bytes=16 * 1024 * 1024,
+        total_bytes=FINALIZATION_RESERVE + len(patch) + len(config) + 3,
         patch=patch,
         effective_config=config,
     )
