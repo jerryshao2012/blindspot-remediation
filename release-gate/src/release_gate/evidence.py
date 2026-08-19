@@ -36,6 +36,10 @@ class EvidenceError(ValueError):
     """Evidence cannot be created or verified safely."""
 
 
+class EvidenceBudgetExhausted(EvidenceError):
+    """Optional runtime evidence no longer fits the configured allowance."""
+
+
 def ensure_preflight_feasible(total_bytes: int, patch: bytes, config: bytes) -> int:
     """Return optional allowance after proving the fixed finalization reserve."""
 
@@ -125,7 +129,7 @@ class EvidenceRun:
             raise EvidenceError(f"artifact path collides: {relative_path}")
         reserve = FINALIZATION_RESERVE if preserve_finalization_reserve else 0
         if self._retained_bytes + len(data) + reserve > self.total_bytes:
-            raise EvidenceError("evidence budget exhausted")
+            raise EvidenceBudgetExhausted("evidence budget exhausted")
         if truncated and (original_size_bytes is None or full_sha256 is None):
             raise EvidenceError("truncated artifacts require full-stream facts")
         self._atomic_write(relative_path, data)

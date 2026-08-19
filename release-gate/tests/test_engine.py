@@ -142,6 +142,17 @@ def test_invalid_candidate_returns_exit_3_without_result(
     assert not output.exists()
 
 
+def test_invalid_output_file_returns_exit_3(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
+    output = tmp_path / "not-a-directory"
+    output.write_text("owned\n", encoding="utf-8")
+    assert main(["run", "--repo", str(repo), "--output", str(output)]) == 3
+    assert "evidence root" in capsys.readouterr().err
+    assert output.read_text(encoding="utf-8") == "owned\n"
+
+
 def test_preparation_failure_skips_check_and_preserves_evidence(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -291,3 +302,42 @@ def test_node_repository_produces_verified_pass_evidence(
     result = json.loads((output / "node-pass/result.json").read_bytes())
     assert result["verdict"] == "PASS"
     verify_run(output / "node-pass")
+
+
+def test_runtime_evidence_budget_exhaustion_finalizes_needs_human(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = "import sys;sys.stdout.buffer.write(b'x'*10000000)"
+    repo = repository(tmp_path, [sys.executable, "-c", code])
+    policy_path = repo / ".release-gate.yaml"
+    policy = policy_path.read_text(encoding="utf-8").replace(
+        "checks:\n",
+        "limits:\n"
+        "  stream_bytes: 10485760\n"
+        "  total_bytes: 16777216\n"
+        "checks:\n",
+    )
+    policy_path.write_text(policy, encoding="utf-8")
+    git(repo, "add", ".release-gate.yaml")
+    git(repo, "commit", "-qm", "configure bounded evidence")
+    (repo / "tracked.txt").write_text("budget candidate\n", encoding="utf-8")
+    output = tmp_path / "evidence"
+
+    assert main(
+        [
+            "run",
+            "--repo",
+            str(repo),
+            "--output",
+            str(output),
+            "--run-id",
+            "budget",
+        ]
+    ) == 2
+    capsys.readouterr()
+    run = output / "budget"
+    result = json.loads((run / "result.json").read_bytes())
+    assert result["verdict"] == "NEEDS_HUMAN"
+    assert result["checks"][0]["status"] == "ERROR"
+    assert "EVIDENCE_BUDGET_EXHAUSTED" in result["reason_codes"]
+    verify_run(run)

@@ -18,7 +18,11 @@ from typing import Any
 
 from release_gate import __version__
 from release_gate.assertions import AssertionState, evaluate_assertion
-from release_gate.evidence import EvidenceError, EvidenceRun
+from release_gate.evidence import (
+    EvidenceBudgetExhausted,
+    EvidenceError,
+    EvidenceRun,
+)
 from release_gate.git import CandidateCapture, CaptureError, capture_candidate
 from release_gate.models import (
     Check,
@@ -71,6 +75,7 @@ class _Execution:
     record: dict[str, Any]
     result: ExecutionResult
     reports: dict[str, object | None]
+    budget_exhausted: bool = False
 
 
 def run_gate(
@@ -100,8 +105,8 @@ def run_gate(
             patch=capture.patch,
             effective_config=config_bytes,
         )
-    except EvidenceError as error:
-        raise GateInputError(str(error)) from error
+    except (EvidenceError, OSError) as error:
+        raise GateInputError(f"invalid evidence root or run: {error}") from error
 
     trace = TraceRecorder()
     trace.add("candidate_captured", changed_paths=len(capture.changed_paths))
@@ -135,17 +140,26 @@ def run_gate(
                         trace,
                     )
                     if preparation_failed:
-                        run_reasons.add("PREPARATION_FAILED")
-                        run_reasons.update(preparation_failed)
+                        budget_stopped = (
+                            "EVIDENCE_BUDGET_EXHAUSTED" in preparation_failed
+                        )
+                        stop_reason = (
+                            "EVIDENCE_BUDGET_EXHAUSTED"
+                            if budget_stopped
+                            else "PREPARATION_FAILED"
+                        )
+                        run_reasons.add(stop_reason)
+                        if not budget_stopped:
+                            run_reasons.update(preparation_failed)
                         checks = [
-                            skipped_check(check, ("PREPARATION_FAILED",))
+                            skipped_check(check, (stop_reason,))
                             for check in capture.config.checks
                         ]
                         executions.extend(
                             _skipped_checks(
                                 capture.config,
                                 family,
-                                ("PREPARATION_FAILED",),
+                                (stop_reason,),
                                 datetime.now(UTC),
                             )
                         )
@@ -240,6 +254,11 @@ def _run_preparation(
             )
             if execution.result.classification is not ExecutionClass.PASS:
                 reason = execution.result.reason_codes
+                stop_reason = (
+                    "EVIDENCE_BUDGET_EXHAUSTED"
+                    if execution.budget_exhausted
+                    else "PREPARATION_FAILED"
+                )
                 now = datetime.now(UTC)
                 for remaining in config.prepare[index + 1 :]:
                     for later_side, _ in sides:
@@ -249,7 +268,7 @@ def _run_preparation(
                                 "prepare",
                                 later_side,
                                 remaining.resolve(family),
-                                ("PREPARATION_FAILED",),
+                                (stop_reason,),
                                 now,
                                 family,
                             )
@@ -283,6 +302,25 @@ def _run_checks(
                 config=config,
             )
             records.append(baseline.record)
+            if baseline.budget_exhausted:
+                records.append(
+                    _skipped_record(
+                        check.id,
+                        "check",
+                        "candidate",
+                        check.resolve(family),
+                        ("EVIDENCE_BUDGET_EXHAUSTED",),
+                        datetime.now(UTC),
+                        family,
+                    )
+                )
+                outcomes.append(
+                    skipped_check(check, ("EVIDENCE_BUDGET_EXHAUSTED",))
+                )
+                _append_budget_skips(
+                    config, family, check, outcomes, records, datetime.now(UTC)
+                )
+                break
         current = _execute_control(
             check,
             phase="check",
@@ -323,7 +361,46 @@ def _run_checks(
             control_id=check.id,
             status=outcome.status.value,
         )
+        if current.budget_exhausted:
+            _append_budget_skips(
+                config, family, check, outcomes, records, datetime.now(UTC)
+            )
+            break
     return outcomes
+
+
+def _append_budget_skips(
+    config: GateConfig,
+    family: PlatformName,
+    completed: Check,
+    outcomes: list[CheckOutcome],
+    records: list[dict[str, Any]],
+    now: datetime,
+) -> None:
+    start = next(
+        index
+        for index, configured in enumerate(config.checks)
+        if configured is completed
+    )
+    for check in config.checks[start + 1 :]:
+        outcomes.append(skipped_check(check, ("EVIDENCE_BUDGET_EXHAUSTED",)))
+        sides = (
+            ("base", "candidate")
+            if check.mode is CheckMode.DIFFERENTIAL
+            else ("candidate",)
+        )
+        for side in sides:
+            records.append(
+                _skipped_record(
+                    check.id,
+                    "check",
+                    side,
+                    check.resolve(family),
+                    ("EVIDENCE_BUDGET_EXHAUSTED",),
+                    now,
+                    family,
+                )
+            )
 
 
 def _execute_control(
@@ -355,22 +432,26 @@ def _execute_control(
     )
     finished = datetime.now(UTC)
     prefix = f"controls/{control.id}/{side}"
+    budget_exhausted = False
     for name, stream in (("stdout", result.stdout), ("stderr", result.stderr)):
-        evidence.write_artifact(
-            f"{prefix}/{name}.log",
-            stream.path.read_bytes(),
-            "application/octet-stream",
-            truncated=stream.truncated,
-            original_size_bytes=stream.original_size if stream.truncated else None,
-            full_sha256=stream.full_sha256 if stream.truncated else None,
-        )
+        try:
+            evidence.write_artifact(
+                f"{prefix}/{name}.log",
+                stream.path.read_bytes(),
+                "application/octet-stream",
+                truncated=stream.truncated,
+                original_size_bytes=stream.original_size if stream.truncated else None,
+                full_sha256=stream.full_sha256 if stream.truncated else None,
+            )
+        except EvidenceBudgetExhausted:
+            budget_exhausted = True
     diagnostics = set(result.reason_codes)
     if result.stdout.truncated or result.stderr.truncated:
         diagnostics.add("STREAM_TRUNCATED")
         result = replace(result, reason_codes=tuple(sorted(diagnostics)))
     reports: dict[str, object | None] = {}
     metrics: dict[str, Scalar] = {}
-    if isinstance(control, Check):
+    if isinstance(control, Check) and not budget_exhausted:
         for report in control.reports:
             try:
                 outcome = collect_report(
@@ -387,13 +468,18 @@ def _execute_control(
                         if report.parser is ReportParser.JUNIT_XML
                         else ".json"
                     )
-                    evidence.write_artifact(
-                        f"{prefix}/reports/{report.id}{extension}",
-                        outcome.artifact_path.read_bytes(),
-                        "application/xml"
-                        if extension == ".xml"
-                        else "application/json",
-                    )
+                    try:
+                        evidence.write_artifact(
+                            f"{prefix}/reports/{report.id}{extension}",
+                            outcome.artifact_path.read_bytes(),
+                            "application/xml"
+                            if extension == ".xml"
+                            else "application/json",
+                        )
+                    except EvidenceBudgetExhausted:
+                        budget_exhausted = True
+                        report_errors.append("EVIDENCE_BUDGET_EXHAUSTED")
+                        break
             except ReportError as error:
                 reports[report.id] = None
                 report_errors.append(error.reason_code)
@@ -406,6 +492,16 @@ def _execute_control(
         if result.classification is not ExecutionClass.PASS:
             permitted.update(result.reason_codes)
         result = replace(result, reason_codes=tuple(sorted(permitted)))
+    elif isinstance(control, Check):
+        reports.update({report.id: None for report in control.reports})
+    if budget_exhausted:
+        result = replace(
+            result,
+            classification=ExecutionClass.ERROR,
+            reason_codes=tuple(
+                sorted({*result.reason_codes, "EVIDENCE_BUDGET_EXHAUSTED"})
+            ),
+        )
     record = _execution_record(
         control.id,
         phase,
@@ -418,7 +514,12 @@ def _execute_control(
     )
     if report_errors:
         record["check_reason_codes"] = sorted(set(report_errors))
-    return _Execution(record=record, result=result, reports=reports)
+    return _Execution(
+        record=record,
+        result=result,
+        reports=reports,
+        budget_exhausted=budget_exhausted,
+    )
 
 
 def _referenced_metrics(
@@ -711,6 +812,8 @@ def _evidence_root(capture: CandidateCapture, requested: Path | None) -> Path:
     if requested is None:
         return capture.repository / ".release-gate" / "runs"
     absolute = requested.absolute()
+    if absolute.exists() and not absolute.is_dir():
+        raise GateInputError(f"evidence root is not a directory: {requested}")
     existing = absolute
     while not existing.exists():
         if existing.parent == existing:
