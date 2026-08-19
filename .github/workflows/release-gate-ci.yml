@@ -67,3 +67,26 @@ jobs:
           uv run python scripts/build_skill_archives.py --output-dir "${RUNNER_TEMP}/skills-first"
           uv run python scripts/build_skill_archives.py --output-dir "${RUNNER_TEMP}/skills-second"
           diff -r "${RUNNER_TEMP}/skills-first" "${RUNNER_TEMP}/skills-second"
+
+  python-slugify-demo:
+    name: python-slugify demo / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      # astral-sh/setup-uv v8.1.0; upgrade only with reviewed lock/tool changes.
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          python-version: "3.12"
+          version: "0.12.5"
+      - name: Install Release Gate from this checkout
+        run: uv tool install ./release-gate
+      - name: Verify PASS, FAIL, and NEEDS_HUMAN controls
+        run: python release-gate/demo/python-slugify/demo.py verify

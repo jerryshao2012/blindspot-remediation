@@ -143,7 +143,14 @@ result/evidence finalization exits 4.
 nor authorizes a merge or deployment. It is not a security attestation or
 proof that the software is defect free.
 
-## Existing demo
+## Demos
+
+[`demo/python-slugify/`](demo/python-slugify/README.md) is the standalone
+product walkthrough for native Windows and macOS. It uses GitHub Copilot CLI's
+explicit `/release-gate` skill, a generated pinned workbench, all three
+verdicts, evidence inspection, and hidden-oracle grading.
+
+### Legacy demo
 
 `demo/gate/gate.sh` and `demo/gate/SKILL.md` are the unchanged legacy X1 demo.
 Their documented commands remain valid. They are neither the implementation

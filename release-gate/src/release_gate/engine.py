@@ -711,8 +711,14 @@ def _result_document(
 
 def _check_document(outcome: CheckOutcome, configured: Check) -> dict[str, Any]:
     assertions = []
+    evaluated_assertions = (
+        () if outcome.status is CheckStatus.SKIPPED else outcome.assertions
+    )
+    configured_assertions = (
+        () if outcome.status is CheckStatus.SKIPPED else configured.assertions
+    )
     for assertion, evaluated in zip(
-        configured.assertions, outcome.assertions, strict=True
+        configured_assertions, evaluated_assertions, strict=True
     ):
         assertions.append(
             {

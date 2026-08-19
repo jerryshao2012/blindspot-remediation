@@ -1,0 +1,7 @@
+diff --git a/.release-gate.yaml b/.release-gate.yaml
+--- a/.release-gate.yaml
++++ b/.release-gate.yaml
+@@ -216,2 +216,3 @@ checks:
+           - "--ignore-missing-imports"
+         inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
++# deterministic Release Gate policy-review control

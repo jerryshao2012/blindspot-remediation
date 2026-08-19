@@ -1,0 +1,8 @@
+diff --git a/test.py b/test.py
+--- a/test.py
++++ b/test.py
+@@ -655,3 +655,4 @@ class TestCommandParams(unittest.TestCase):
+ 
+ if __name__ == '__main__':  # pragma: nocover
+     unittest.main()
++# deterministic Release Gate scope-tamper control

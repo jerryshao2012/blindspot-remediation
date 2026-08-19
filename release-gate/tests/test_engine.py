@@ -178,6 +178,16 @@ checks:
     mode: candidate
     severity: blocking
     argv: {json.dumps([sys.executable, "-c", "print('unused')"])}
+    reports:
+      - id: metrics
+        parser: json-metrics
+        path: metrics.json
+    assertions:
+      - report: metrics
+        metric: /score
+        comparison: candidate
+        operator: gte
+        value: 1
 """
     (repo / ".release-gate.yaml").write_text(policy, encoding="utf-8")
     git(repo, "add", ".release-gate.yaml")
@@ -202,6 +212,7 @@ checks:
     result = json.loads((output / "prep/result.json").read_bytes())
     manifest = json.loads((output / "prep/manifest.json").read_bytes())
     assert result["checks"][0]["status"] == "SKIPPED"
+    assert result["checks"][0]["assertions"] == []
     assert "PREPARATION_FAILED" in result["reason_codes"]
     assert [item["classification"] for item in manifest["executions"]] == [
         "fail",

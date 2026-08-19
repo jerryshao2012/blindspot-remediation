@@ -50,6 +50,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/release_gate"]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["/demo/python-slugify/workbench"]
+
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"
 testpaths = ["tests"]
