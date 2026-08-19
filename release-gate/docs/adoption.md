@@ -130,6 +130,39 @@ release asset was replaced, the manifest changed, or the installed archive
 cannot be tied to the qualified SHA-256.
 
 ## Troubleshooting current installer availability
+### When the CLI reports an older version
+
+The Copilot skill installation and the `release-gate` CLI executable are separate. Updating the skill with `skills add --global --copy` does not replace a CLI launcher already on `PATH`. Check the executable PowerShell resolves before troubleshooting the package version:
+
+```powershell
+Get-Command release-gate -All
+release-gate --version
+```
+
+If the command resolves to `$HOME\.local\bin\release-gate.exe`, it is typically a `uv` tool launcher. Reinstall the tool from the checkout that contains the desired version:
+
+```powershell
+$root = 'C:\path\to\release-gate'
+uv tool install --force --editable $root
+```
+
+If `uv` cannot resolve dependencies because the package index is unavailable or returns an authorization error, first verify the checkout's isolated launcher:
+
+```powershell
+& "$root\.venv\Scripts\release-gate.exe" --version
+```
+
+As a temporary local recovery, when that launcher reports the desired version, copy it over the stale launcher and verify from a fresh PowerShell process:
+
+```powershell
+$source = Join-Path $root '.venv\Scripts\release-gate.exe'
+$target = Join-Path $HOME '.local\bin\release-gate.exe'
+Copy-Item $source $target -Force
+powershell.exe -NoProfile -Command 'Get-Command release-gate -All; release-gate --version'
+```
+
+This recovery depends on the checkout's `.venv` remaining available. Use a successful `uv tool install` or a host archive installation for a durable installation.
+
 
 If `npx --yes skills@1.5.23 ...` fails with `npm ERR! code ETARGET`, the
 required installer version is not yet available from your configured npm
