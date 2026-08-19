@@ -12,10 +12,12 @@ from pathlib import Path, PurePosixPath
 import pytest
 import yaml
 
+from release_gate import __version__
+
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "build_skill_archives.py"
 HOSTS = ("copilot", "codex", "claude-code", "antigravity")
-VERSION = "0.2.2"
+VERSION = __version__
 
 
 def _lf(content: bytes) -> bytes:
@@ -245,8 +247,8 @@ def test_adapter_metadata_and_body_are_exact(tmp_path: Path) -> None:
     archives = _build(tmp_path / "dist")
     bodies: dict[str, bytes] = {}
     expected_description = (
-        "Use only when explicitly invoked by the user to initialize, validate, or "
-        "run Release Gate. Do not invoke implicitly."
+        "Use only when explicitly invoked by the user to report its version, "
+        "initialize, validate, or run Release Gate. Do not invoke implicitly."
     )
     for host in HOSTS:
         archive, members = _archive_members(
@@ -263,7 +265,9 @@ def test_adapter_metadata_and_body_are_exact(tmp_path: Path) -> None:
                 "user-invocable",
                 "disable-model-invocation",
             }
-            assert metadata["argument-hint"] == "<init|validate|run> [options]"
+            assert metadata["argument-hint"] == (
+                "<--version|init|validate|run> [options]"
+            )
             assert metadata["user-invocable"] is True
             assert metadata["disable-model-invocation"] is True
         else:

@@ -135,7 +135,9 @@ def test_capture_ignores_existing_evidence_directory(repository: Path) -> None:
     capture = capture_candidate(repository, base="HEAD")
 
     assert "tracked.txt" in capture.changed_paths
-    assert not any(path.startswith(".release-gate/runs/") for path in capture.changed_paths)
+    assert not any(
+        path.startswith(".release-gate/runs/") for path in capture.changed_paths
+    )
     assert repository_snapshot(repository) == before
 
 

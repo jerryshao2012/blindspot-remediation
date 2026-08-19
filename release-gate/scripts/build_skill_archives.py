@@ -20,7 +20,7 @@ import yaml
 
 HOSTS = ("copilot", "codex", "claude-code", "antigravity")
 COMMAND_METADATA = (
-    'argument-hint: "<init|validate|run> [options]"\n'
+    'argument-hint: "<--version|init|validate|run> [options]"\n'
     "user-invocable: true\n"
     "disable-model-invocation: true\n"
 )

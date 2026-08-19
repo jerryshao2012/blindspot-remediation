@@ -212,7 +212,8 @@ class EvidenceRun:
                     os.replace(temporary, target)
                     break
                 except PermissionError as error:
-                    if getattr(error, "winerror", None) != 32 or attempt == _REPLACE_RETRIES - 1:
+                    final_attempt = attempt == _REPLACE_RETRIES - 1
+                    if getattr(error, "winerror", None) != 32 or final_attempt:
                         raise
                     time.sleep(_REPLACE_RETRY_DELAY)
         finally:

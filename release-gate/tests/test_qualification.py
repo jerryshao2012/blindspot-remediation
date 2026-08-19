@@ -13,7 +13,9 @@ from release_gate import __version__
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "schemas" / "qualification-v1.schema.json"
 VALIDATOR = ROOT / "scripts" / "validate_qualification.py"
-TEMPLATE = ROOT / "qualification" / "release-gate-v0.2.0-rc.1.pending.json"
+TEMPLATE = (
+    ROOT / "qualification" / f"release-gate-v{__version__}-rc.1.pending.json"
+)
 SURFACES = {
     "Copilot CLI",
     "Codex CLI",
@@ -47,6 +49,33 @@ OUTCOMES = {
     "run-needs-human": "NEEDS_HUMAN",
     "run-exit-3": "EXIT_3_NO_VERDICT",
     "run-exit-4": "EXIT_4_NO_VERDICT",
+}
+GRAPHIFY_OBSERVATIONS = {
+    "operation-mismatched-cli": ("RG-GRAPHIFY-PREFLIGHT-BEFORE-QUERY",),
+    "init-python": (
+        "RG-GRAPHIFY-PREFLIGHT-BEFORE-QUERY",
+        "RG-GRAPHIFY-INIT-EXISTING-GRAPH-READONLY-QUERY",
+        "RG-GRAPHIFY-INIT-DIRECT-SOURCE-VERIFICATION",
+    ),
+    "init-adversarial-repository": (
+        "RG-GRAPHIFY-MISSING-NONBLOCKING",
+        "RG-GRAPHIFY-STALE-NONBLOCKING",
+        "RG-GRAPHIFY-QUERY-FAILURE-NONBLOCKING",
+    ),
+    "validate-invalid-config": ("RG-GRAPHIFY-VALIDATE-NO-QUERY",),
+    **{
+        case: (
+            "RG-GRAPHIFY-PREFLIGHT-BEFORE-QUERY",
+            "RG-GRAPHIFY-RUN-RESULT-FIRST",
+            "RG-GRAPHIFY-RUN-QUERY-COUNT-0-OR-1",
+            "RG-GRAPHIFY-RUN-SCOPE-CHANGED-PATHS-ONLY",
+            "RG-GRAPHIFY-RUN-ADVISORY-SEPARATE-NON-GATING",
+            "RG-GRAPHIFY-RUN-VERDICT-UNCHANGED",
+        )
+        for case in ("run-pass", "run-fail", "run-needs-human")
+    },
+    "run-exit-3": ("RG-GRAPHIFY-RUN-ERROR-NO-QUERY",),
+    "run-exit-4": ("RG-GRAPHIFY-RUN-ERROR-NO-QUERY",),
 }
 
 
@@ -120,7 +149,12 @@ def _complete_evidence() -> dict[str, object]:
                             "read repository",
                             "run release-gate",
                         ],
-                        "observed_effects": f"Observed expected effects for {case}.",
+                        "observed_effects": " ".join(
+                            (
+                                f"Observed expected effects for {case}.",
+                                *GRAPHIFY_OBSERVATIONS.get(case, ()),
+                            )
+                        ),
                         "observed_outcome": OUTCOMES[case],
                         "result": {
                             "status": "pass",
@@ -199,7 +233,7 @@ def test_complete_evidence_rejects_wrong_dependency_tag_and_commit() -> None:
             "skills CLI",
         ),
         (lambda item: item["installer"].update(node_version="22.19.9"), "Node"),
-        (lambda item: item["release"].update(tag="release-gate-v0.2.0"), "tag"),
+        (lambda item: item["release"].update(tag="release-gate-v0.2.2"), "tag"),
         (lambda item: item["release"].update(commit="b" * 40), "commit"),
     ):
         candidate = json.loads(json.dumps(evidence))
@@ -283,6 +317,49 @@ def test_complete_evidence_requires_exact_passing_corpus_per_surface() -> None:
     )
     with pytest.raises(ValueError, match="evidence reference"):
         validate(reused_digest, expected_tag=f"release-gate-v{__version__}-rc.1")
+
+
+@pytest.mark.parametrize(
+    ("case_name", "marker"),
+    [
+        (case_name, marker)
+        for case_name, markers in GRAPHIFY_OBSERVATIONS.items()
+        for marker in markers
+    ],
+)
+def test_complete_evidence_requires_each_graphify_observation(
+    case_name: str, marker: str
+) -> None:
+    validator = _load_validator()
+    validate = validator.validate_evidence
+    evidence = _complete_evidence()
+    validate(evidence, expected_tag=f"release-gate-v{__version__}-rc.1")
+    target = next(
+        case
+        for case in evidence["surfaces"][0]["case_results"]
+        if case["case"] == case_name
+    )
+    target["observed_effects"] = target["observed_effects"].replace(marker, "")
+    with pytest.raises(ValueError, match="Graphify observation"):
+        validate(evidence, expected_tag=f"release-gate-v{__version__}-rc.1")
+
+
+@pytest.mark.parametrize("surface_name", sorted(SURFACES))
+def test_graphify_observations_are_required_for_every_surface(
+    surface_name: str,
+) -> None:
+    validator = _load_validator()
+    validate = validator.validate_evidence
+    evidence = _complete_evidence()
+    surface = next(
+        item for item in evidence["surfaces"] if item["surface"] == surface_name
+    )
+    run_pass = next(
+        case for case in surface["case_results"] if case["case"] == "run-pass"
+    )
+    run_pass["observed_effects"] = "Gate result recorded without tool-call detail."
+    with pytest.raises(ValueError, match="Graphify observation"):
+        validate(evidence, expected_tag=f"release-gate-v{__version__}-rc.1")
 
 
 def test_pending_template_cannot_be_promoted_by_flipping_statuses() -> None:

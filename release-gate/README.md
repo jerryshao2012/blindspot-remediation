@@ -32,15 +32,19 @@ Run them only after the final GitHub release is published and its checksums are
 available. These documents do not claim that those assets are currently
 available.
 
+<!-- release-version-sync:start -->
+All fenced `bash` download commands require a POSIX shell. On Windows, run
+them in Git Bash; do not paste the `curl` lines into PowerShell.
+
 For example, download `SHA256SUMS` and
-`release_gate-0.2.2-py3-none-any.whl` from the immutable
-`release-gate-v0.2.2` release, verify the wheel entry, and then install it:
+`release_gate-0.2.3-py3-none-any.whl` from the immutable
+`release-gate-v0.2.3` release, verify the wheel entry, and then install it:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release_gate-0.2.2-py3-none-any.whl
-grep '  release_gate-0.2.2-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-uv tool install ./release_gate-0.2.2-py3-none-any.whl
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release_gate-0.2.3-py3-none-any.whl
+grep '  release_gate-0.2.3-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+uv tool install ./release_gate-0.2.3-py3-none-any.whl
 release-gate --version
 ```
 
@@ -58,13 +62,17 @@ the immutable release asset URL directly, after the separate download and
 checksum review described in [Adoption](docs/adoption.md):
 
 ```bash
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-codex-0.2.2.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-codex-0.2.3.tar.gz --global --copy --agent codex
 ```
 
 Invoke the skill explicitly: `/release-gate init` in Copilot and Claude Code,
 `$release-gate init` in Codex, and `/release-gate init` in Antigravity. Codex
 does not support arbitrary custom slash commands; `/skills` can select the
-installed skill. The skill supports only `init`, `validate`, and `run`.
+installed skill. `/release-gate --version` (or `$release-gate --version` in
+Codex) reports exactly `release-gate 0.2.3` from the bundled skill version; it
+does not call the CLI or inspect the repository. The only operational
+subcommands are `init`, `validate`, and `run`.
+<!-- release-version-sync:end -->
 
 After guided initialization, review and commit `.release-gate.yaml`. From the
 target repository directory, validate and run it against an explicit trusted
@@ -92,6 +100,13 @@ PowerShell. `run` prints the stable verdict and the absolute path to
 Published users install the matching verified host archive. The canonical
 `skills/release-gate/` tree is for development and packaging. No plugin is
 required.
+
+## Maintaining release versions
+
+For a release bump, edit only `src/release_gate/__init__.py::__version__`, then
+run `uv run python scripts/sync_release_version.py`. Review the generated
+changes and release notes before committing. CI enforces the same source with
+`uv run python scripts/sync_release_version.py --check`.
 
 ## Contract map
 

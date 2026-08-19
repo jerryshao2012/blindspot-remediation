@@ -2,6 +2,13 @@
 
 All notable changes to the standalone Release Gate are recorded here.
 
+## 0.2.3
+
+- Add an optional, read-only Graphify advisory after exact CLI compatibility
+  preflight without changing Release Gate policy, verdict, or runtime APIs.
+- Document a checksum-first paired upgrade and rollback procedure for every
+  supported assistant host.
+
 ## 0.2.2
 
 - Retry evidence-file finalization after transient Windows sharing violations

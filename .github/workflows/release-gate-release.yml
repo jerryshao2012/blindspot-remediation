@@ -17,13 +17,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-gate-v0.2.0
+  group: release-gate-v0.2.3
   cancel-in-progress: false
 
 env:
-  RC_TAG: release-gate-v0.2.0-rc.1
-  FINAL_TAG: release-gate-v0.2.0
-  QUALIFICATION: release-gate/qualification/release-gate-v0.2.0-rc.1.json
+  RC_TAG: release-gate-v0.2.3-rc.1
+  FINAL_TAG: release-gate-v0.2.3
+  QUALIFICATION: release-gate/qualification/release-gate-v0.2.3-rc.1.json
 
 jobs:
   build-rc:
@@ -84,7 +84,7 @@ jobs:
       # actions/upload-artifact v4.6.2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: release-gate-v0.2.0-rc.1-assets
+          name: release-gate-v0.2.3-rc.1-assets
           path: ${{ runner.temp }}/release-assets/*
           if-no-files-found: error
           retention-days: 30
@@ -99,7 +99,7 @@ jobs:
       # actions/download-artifact v4.3.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: release-gate-v0.2.0-rc.1-assets
+          name: release-gate-v0.2.3-rc.1-assets
           path: release-assets
       - name: Verify bytes and protected-branch ancestry
         env:
@@ -134,7 +134,7 @@ jobs:
           if test "$match_count" = 1; then
             release_json="$(jq '.[0]' <<<"$matches")"
           else
-            release_json="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" -f tag_name="$RC_TAG" -f target_commitish="$EXPECTED_COMMIT" -f name="$RC_TAG" -f body='Release Gate 0.2.0 RC; host qualification remains required.' -F draft=true -F prerelease=true)"
+            release_json="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" -f tag_name="$RC_TAG" -f target_commitish="$EXPECTED_COMMIT" -f name="$RC_TAG" -f body='Release Gate 0.2.3 RC; host qualification remains required.' -F draft=true -F prerelease=true)"
           fi
           test "$(jq -r .draft <<<"$release_json")" = true
           test "$(jq -r .prerelease <<<"$release_json")" = true
@@ -206,7 +206,7 @@ jobs:
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - name: Download existing RC assets for read-only verification
         env: {GH_TOKEN: "${{ github.token }}"}
-        run: gh release download release-gate-v0.2.0-rc.1 --dir release-assets
+        run: gh release download release-gate-v0.2.3-rc.1 --dir release-assets
       - name: Install the committed validation environment
         run: uv sync --project release-gate --all-groups --locked
       - name: Require qualification for exact RC bytes
@@ -223,7 +223,7 @@ jobs:
       # actions/upload-artifact v4.6.2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: release-gate-v0.2.0-promoted-assets
+          name: release-gate-v0.2.3-promoted-assets
           path: release-assets/*
           if-no-files-found: error
           retention-days: 7
@@ -238,7 +238,7 @@ jobs:
       # actions/download-artifact v4.3.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: release-gate-v0.2.0-promoted-assets
+          name: release-gate-v0.2.3-promoted-assets
           path: release-assets
       - name: Verify reused bytes and protected-branch ancestry
         env:

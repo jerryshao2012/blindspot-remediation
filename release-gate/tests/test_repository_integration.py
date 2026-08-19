@@ -55,5 +55,6 @@ def test_ci_covers_supported_operating_systems_and_python_versions() -> None:
         "uv run mypy",
         "uv run ruff",
         "python -m build",
+        "python scripts/sync_release_version.py --check",
     ):
         assert value in workflow

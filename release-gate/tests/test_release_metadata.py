@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import shlex
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
+
+import pytest
 
 from release_gate import __version__
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "https://github.com/jerryshao2012/blindspot-remediation"
-RELEASE_TAG = "release-gate-v0.2.2"
+RELEASE_TAG = f"release-gate-v{__version__}"
 SKILLS_VERSION = "1.5.23"
 HOST_AGENTS = {
     "copilot": "github-copilot",
@@ -55,6 +61,42 @@ def test_version_agrees_across_release_metadata() -> None:
     assert "byte-identical final promotion" in changelog
     assert "GitHub release page is authoritative" in changelog
     assert "pending release" not in changelog
+
+
+def test_current_release_workflows_and_qualification_use_package_version() -> None:
+    rc_tag = f"release-gate-v{__version__}-rc.1"
+    final_tag = f"release-gate-v{__version__}"
+    template_name = f"{rc_tag}.pending.json"
+    current_surfaces = {
+        "release workflow": _read("../.github/workflows/release-gate-release.yml"),
+        "CI workflow": _read("../.github/workflows/release-gate-ci.yml"),
+        "qualification docs": _read("docs/qualification.md"),
+        "asset builder": _read("scripts/build_release_assets.py"),
+        "qualification validator": _read("scripts/validate_qualification.py"),
+    }
+
+    for name, text in current_surfaces.items():
+        assert "release-gate-v0.2.0" not in text, name
+        assert "v0.2.0" not in text, name
+
+    assert rc_tag in current_surfaces["release workflow"]
+    assert final_tag in current_surfaces["release workflow"]
+    assert template_name in current_surfaces["CI workflow"]
+    assert rc_tag in current_surfaces["qualification docs"]
+    assert final_tag in current_surfaces["qualification docs"]
+    assert f"v{__version__}" in current_surfaces["asset builder"]
+    assert f"v{__version__}" in current_surfaces["qualification validator"]
+
+    template_path = ROOT / "qualification" / template_name
+    assert template_path.exists()
+    assert not (
+        ROOT / "qualification" / "release-gate-v0.2.0-rc.1.pending.json"
+    ).exists()
+    template = json.loads(template_path.read_text(encoding="utf-8"))
+    assert template["release"]["tag"] == rc_tag
+    for asset in template["assets"]:
+        if asset["name"] != "SHA256SUMS":
+            assert __version__ in asset["name"]
 
 
 def test_build_backend_and_uv_are_exactly_locked() -> None:
@@ -129,6 +171,166 @@ def test_upgrade_commands_remove_then_install_verified_pinned_artifacts() -> Non
             f"npx --yes skills@{SKILLS_VERSION} add {archive_url} "
             f"--global --copy --agent {agent}"
         ) in adoption
+
+
+def test_assistant_version_syntax_is_documented_as_informational() -> None:
+    readme = _read("README.md")
+    adoption = _read("docs/adoption.md")
+
+    for text in (readme, adoption):
+        assert "/release-gate --version" in text
+        assert "$release-gate --version" in text
+        assert f"release-gate {__version__}" in text
+        assert "does not call the CLI" in text
+    assert "underlying CLI output" in adoption
+
+
+def test_upgrade_retains_and_verifies_both_pairs_before_removal() -> None:
+    adoption = _read("docs/adoption.md")
+    upgrade = adoption.split("## Upgrade, uninstall, and rollback", 1)[1]
+    normalized = " ".join(upgrade.split())
+    wheel = f"release_gate-{__version__}-py3-none-any.whl"
+
+    for phrase in (
+        "Retain the prior wheel, host archive, and `SHA256SUMS`",
+        "exactly one archive for the host target",
+        "before removing or replacing anything",
+        "verified local wheel",
+        "never from a package index",
+        f"release-gate {__version__}",
+        "Do not invoke Release Gate while the skill and CLI versions differ",
+        "rollback to the retained prior pair",
+        "Never use self-update",
+        "never use an unpinned `skills update`",
+    ):
+        assert phrase.casefold() in normalized.casefold()
+
+    manifest_url = f"{REPOSITORY}/releases/download/{RELEASE_TAG}/SHA256SUMS"
+    wheel_url = f"{REPOSITORY}/releases/download/{RELEASE_TAG}/{wheel}"
+    assert f"curl --fail --location --remote-name {manifest_url}" in upgrade
+    assert f"curl --fail --location --remote-name {wheel_url}" in upgrade
+    assert upgrade.index(manifest_url) < upgrade.index("remove release-gate")
+    assert upgrade.index(wheel_url) < upgrade.index("remove release-gate")
+
+    for host, agent in HOST_AGENTS.items():
+        archive = f"release-gate-skill-{host}-{__version__}.tar.gz"
+        archive_url = f"{REPOSITORY}/releases/download/{RELEASE_TAG}/{archive}"
+        assert upgrade.index(archive_url) < upgrade.index(
+            f"remove release-gate --global --agent {agent} --yes"
+        )
+    assert "--agent antigravity-cli --yes" in upgrade
+    assert "skills list" in upgrade
+
+
+def test_upgrade_checksum_commands_are_cross_platform_and_require_one_entry() -> None:
+    adoption = _read("docs/adoption.md")
+    upgrade = adoption.split("## Upgrade, uninstall, and rollback", 1)[1]
+    verification = "uv run --no-project python -c"
+
+    assert "grep " not in upgrade
+    assert upgrade.count(verification) == 4
+    for guard in (
+        "all(valid_entries)",
+        "all(len(matches[name]) == 1 for name in names)",
+        "expected exactly one SHA256SUMS entry per asset",
+        "hashlib.sha256",
+        "SHA-256 mismatch",
+    ):
+        assert upgrade.count(guard) == 4
+    wheel = f"release_gate-{__version__}-py3-none-any.whl"
+    for host in HOST_AGENTS:
+        archive = f"release-gate-skill-{host}-{__version__}.tar.gz"
+        assert f'" {wheel} {archive}' in upgrade
+    assert "PowerShell" in upgrade
+    assert "macOS" in upgrade
+    for document in (adoption, _read("README.md")):
+        assert "On Windows" in document
+        assert "Git Bash" in document
+        assert "do not paste the `curl` lines into PowerShell" in document
+
+
+def _documented_checksum_verifier() -> str:
+    adoption = _read("docs/adoption.md")
+    lines = [
+        line
+        for line in adoption.splitlines()
+        if line.startswith("uv run --no-project python -c")
+    ]
+    codes: list[str] = []
+    for line in lines:
+        arguments = shlex.split(line)
+        code_index = arguments.index("-c") + 1
+        codes.append(arguments[code_index])
+    assert len(codes) == 4
+    assert len(set(codes)) == 1
+    return codes[0]
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_error"),
+    [
+        ("valid", None),
+        ("duplicate", "expected exactly one SHA256SUMS entry per asset"),
+        ("malformed", "invalid SHA256SUMS"),
+        ("missing", "expected exactly one SHA256SUMS entry per asset"),
+        ("mismatched", "SHA-256 mismatch"),
+    ],
+)
+def test_documented_checksum_verifier_behavior(
+    tmp_path: Path,
+    case: str,
+    expected_error: str | None,
+) -> None:
+    names = ("release_gate-test.whl", "release-gate-skill-test.tar.gz")
+    entries: list[str] = []
+    for index, name in enumerate(names):
+        content = f"asset {index}\n".encode()
+        (tmp_path / name).write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+        entries.append(f"{digest}  {name}")
+
+    if case == "duplicate":
+        entries.append(entries[0])
+    elif case == "malformed":
+        entries.append("not a checksum entry")
+    elif case == "missing":
+        entries.pop()
+    elif case == "mismatched":
+        entries[0] = f"{'0' * 64}  {names[0]}"
+    (tmp_path / "SHA256SUMS").write_text("\n".join(entries) + "\n", encoding="ascii")
+
+    result = subprocess.run(
+        [sys.executable, "-c", _documented_checksum_verifier(), *names],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if expected_error is None:
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == "".join(f"{name}: OK\n" for name in names)
+        assert result.stderr == ""
+    else:
+        assert result.returncode != 0
+        assert expected_error in result.stderr
+        assert result.stdout == ""
+
+
+def test_upgrade_checksum_verifiers_report_each_verified_asset_once() -> None:
+    adoption = _read("docs/adoption.md")
+    upgrade = adoption.split("## Upgrade, uninstall, and rollback", 1)[1]
+    verifiers = [
+        line
+        for line in upgrade.splitlines()
+        if line.startswith("uv run --no-project python -c")
+    ]
+
+    assert len(verifiers) == 4
+    success = "print('\\n'.join(f'{name}: OK' for name in names))"
+    for command in verifiers:
+        assert command.count(success) == 1
+        assert command.index("SHA-256 mismatch") < command.index(success)
 
 
 def test_documented_invocations_and_lifecycle_guards_are_explicit() -> None:

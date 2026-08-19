@@ -6,10 +6,14 @@ from pathlib import Path
 
 import yaml
 
+from release_gate import __version__
+
 ROOT = Path(__file__).resolve().parents[2]
 CI = ROOT / ".github" / "workflows" / "release-gate-ci.yml"
 RELEASE = ROOT / ".github" / "workflows" / "release-gate-release.yml"
 QUALIFICATION_DOCS = ROOT / "release-gate" / "docs" / "qualification.md"
+FINAL_TAG = f"release-gate-v{__version__}"
+RC_TAG = f"{FINAL_TAG}-rc.1"
 
 
 def _workflow(path: Path) -> dict[str, object]:
@@ -48,7 +52,7 @@ def test_release_workflow_separates_build_from_protected_writes() -> None:
         assert jobs[name]["permissions"] == {"contents": "write"}
         assert jobs[name]["environment"] == "release-gate-production"
     assert workflow["concurrency"] == {
-        "group": "release-gate-v0.2.0",
+        "group": FINAL_TAG,
         "cancel-in-progress": "false",
     }
 
@@ -150,14 +154,14 @@ def test_docs_require_real_github_environment_protection() -> None:
 def test_promotion_reuses_rc_assets_and_never_deletes_or_rebuilds() -> None:
     text = RELEASE.read_text(encoding="utf-8")
     promotion = text.split("validate-promotion:", 1)[1]
-    assert "gh release download release-gate-v0.2.0-rc.1" in promotion
+    assert f"gh release download {RC_TAG}" in promotion
     assert "validate_qualification.py" in promotion
     assert "verify_release_assets.py" in promotion
     assert "build_release_assets.py" not in promotion
     assert "gh release delete" not in text
     assert "git tag -d" not in text
-    assert "release-gate-v0.2.0" in promotion
-    assert "release-gate-v0.2.0-rc.1" in promotion
+    assert FINAL_TAG in promotion
+    assert RC_TAG in promotion
     assert "-F draft=true" in text
     assert "--clobber" not in text
     assert "concurrency:" in text

@@ -94,9 +94,11 @@ copilot skill add ./release-gate/skills/release-gate
 
 The required version output is:
 
+<!-- release-version-sync:start -->
 ```text
-release-gate 0.2.2
+release-gate 0.2.3
 ```
+<!-- release-version-sync:end -->
 
 The local directory registration is for this source demo. It does not replace
 the checksum-verified wheel and host archive procedure in

@@ -27,7 +27,7 @@ CONTROL_EVIDENCE = WORKBENCH / "evidence"
 UPSTREAM_URL = "https://github.com/un33k/python-slugify.git"
 UPSTREAM_SHA = "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
 BASE_REF = "release-gate-demo-base"
-EXPECTED_GATE_VERSION = "release-gate 0.2.2"
+EXPECTED_GATE_VERSION = "release-gate 0.2.3"
 TEST_TOOLS = ("pytest==8.4.2",)
 
 
@@ -188,7 +188,9 @@ def _which(name: str) -> str:
     return path
 
 
-def _gate_argv(*arguments: str | os.PathLike[str]) -> tuple[str | os.PathLike[str], ...]:
+def _gate_argv(
+    *arguments: str | os.PathLike[str],
+) -> tuple[str | os.PathLike[str], ...]:
     """Build the release-gate invocation, preferring ``python -m release_gate``.
 
     Some corporate endpoint security policies block the generated

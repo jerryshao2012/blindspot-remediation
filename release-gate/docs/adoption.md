@@ -32,20 +32,25 @@ currently available.
 > index. This project is not published to PyPI. Use only the exact GitHub
 > release wheel URL and its published SHA-256.
 
+<!-- release-version-sync:start -->
 The commands below are release-ready examples for use only after the final
 GitHub release is published with its checksum manifest. They use the immutable
-`release-gate-v0.2.2` tag, but do not claim that those assets are currently
+`release-gate-v0.2.3` tag, but do not claim that those assets are currently
 available. Candidate assets and URLs belong only in the separate qualification
 procedure and are not substitutes for these end-user commands.
+
+All fenced `bash` download commands require a POSIX shell. On Windows, run
+them in Git Bash; do not paste the `curl` lines into PowerShell. The later
+Python checksum command itself is also safe to run from PowerShell.
 
 ## Download and verify the CLI
 
 Download the release checksum manifest and exact wheel:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release_gate-0.2.2-py3-none-any.whl
-grep '  release_gate-0.2.2-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release_gate-0.2.3-py3-none-any.whl
+grep '  release_gate-0.2.3-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
 ```
 
 Review that the checksum line came from the same GitHub release, names exactly
@@ -56,11 +61,11 @@ the file is absent, duplicated, or mismatched.
 Install only the verified local wheel and confirm its exact version:
 
 ```bash
-uv tool install ./release_gate-0.2.2-py3-none-any.whl
+uv tool install ./release_gate-0.2.3-py3-none-any.whl
 release-gate --version
 ```
 
-The required output is `release-gate 0.2.2`.
+The required output is `release-gate 0.2.3`.
 
 The checksum covers the Release Gate wheel itself and proves nothing about
 transitive package bytes. `uv tool install` resolves the declared dependency
@@ -81,25 +86,25 @@ target. Do not replace the pinned installer version with `latest`.
 ### GitHub Copilot CLI
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-copilot-0.2.2.tar.gz
-grep '  release-gate-skill-copilot-0.2.2.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-copilot-0.2.2.tar.gz --global --copy --agent github-copilot
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-copilot-0.2.3.tar.gz
+grep '  release-gate-skill-copilot-0.2.3.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-copilot-0.2.3.tar.gz --global --copy --agent github-copilot
 ```
 
 ### Codex CLI and IDE
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-codex-0.2.2.tar.gz
-grep '  release-gate-skill-codex-0.2.2.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-codex-0.2.2.tar.gz --global --copy --agent codex
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-codex-0.2.3.tar.gz
+grep '  release-gate-skill-codex-0.2.3.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-codex-0.2.3.tar.gz --global --copy --agent codex
 ```
 
 ### Claude Code
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-claude-code-0.2.2.tar.gz
-grep '  release-gate-skill-claude-code-0.2.2.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-claude-code-0.2.2.tar.gz --global --copy --agent claude-code
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-claude-code-0.2.3.tar.gz
+grep '  release-gate-skill-claude-code-0.2.3.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-claude-code-0.2.3.tar.gz --global --copy --agent claude-code
 ```
 
 ### Antigravity IDE or CLI
@@ -108,10 +113,10 @@ The same verified archive is used for both Antigravity surfaces, but the
 installer target is surface-specific:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz
-grep '  release-gate-skill-antigravity-0.2.2.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz --global --copy --agent antigravity
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz --global --copy --agent antigravity-cli
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz
+grep '  release-gate-skill-antigravity-0.2.3.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz --global --copy --agent antigravity-cli
 ```
 
 Install only the line for the surface being used. After installation, use the
@@ -126,15 +131,19 @@ cannot be tied to the qualified SHA-256.
 
 ## Invocation contract
 
-The standalone skill supports only `init`, `validate`, and `run`. A missing or
-unknown subcommand displays help and performs no operational tool call.
+The standalone skill accepts informational `--version` and the three
+operational subcommands `init`, `validate`, and `run`. A missing or unknown
+input displays help and performs no operational tool call. The informational
+command reads the bundled compatibility reference and prints exactly
+`release-gate 0.2.3`; it does not call the CLI, inspect the repository, consider
+Graphify, or perform an operation.
 
-| Host | Initialize | Validate | Run |
-|---|---|---|---|
-| GitHub Copilot CLI | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
-| Codex CLI/IDE | `$release-gate init` | `$release-gate validate` | `$release-gate run --base <trusted-ref>` |
-| Claude Code | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
-| Antigravity IDE/CLI | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
+| Host | Version | Initialize | Validate | Run |
+|---|---|---|---|---|
+| GitHub Copilot CLI | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
+| Codex CLI/IDE | `$release-gate --version` | `$release-gate init` | `$release-gate validate` | `$release-gate run --base <trusted-ref>` |
+| Claude Code | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
+| Antigravity IDE/CLI | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
 
 Codex uses `$release-gate`; it does not provide arbitrary custom slash
 commands. `/skills` can be used to find and select the installed skill.
@@ -144,7 +153,8 @@ may load skill instructions implicitly in some host versions, so the portable
 body independently blocks every effect unless the user explicitly invoked a
 Release Gate operation.
 
-Before each operation, the skill compares `release-gate --version` with its
+Before each operation, the skill compares the underlying CLI output from
+`release-gate --version` with its
 bundled `references/compatibility.json`. Any missing executable or version
 mismatch stops without initialization, validation, or gate execution.
 
@@ -208,52 +218,86 @@ model](security.md) and the
 
 ## Upgrade, uninstall, and rollback
 
-Never use an unpinned `skills update`. To upgrade, retain the prior wheel,
-host archive, and `SHA256SUMS`; download and verify the next immutable release;
-remove the old copied skill; install the new host archive with its exact
-`skills@1.5.23` command; then replace the CLI with the matching verified wheel.
-Confirm `release-gate --version` and run host discovery before use. Do not mix
-CLI and skill versions.
-
-For example, after the final 0.2.2 release is published, upgrade the CLI from a
-prior release only after the new wheel passes its checksum check:
+Never use self-update, and never use an unpinned `skills update`. Retain the
+prior wheel, host archive, and `SHA256SUMS` in a separate rollback directory.
+Then download the 0.2.3 `SHA256SUMS`, wheel, and exactly one archive for the
+host target into a fresh directory:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release_gate-0.2.2-py3-none-any.whl
-grep '  release_gate-0.2.2-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-uv tool uninstall release-gate
-uv tool install ./release_gate-0.2.2-py3-none-any.whl
-release-gate --version
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release_gate-0.2.3-py3-none-any.whl
 ```
 
-Likewise, first download and checksum the new host archive using the relevant
-command above. Then remove the prior copied skill and install from the new
-immutable URL. Use only the pair matching the selected host:
+Choose exactly one matching host download-and-check pair below. Do not download
+several host archives into the upgrade directory. The `uv run --no-project`
+verification command is identical in macOS shells and Windows PowerShell. It
+validates every `SHA256SUMS` line, requires exactly one entry for both selected
+assets, and compares both bytestring digests before any removal.
+
+```bash
+# GitHub Copilot CLI
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-copilot-0.2.3.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.2.3-py3-none-any.whl release-gate-skill-copilot-0.2.3.tar.gz
+
+# Codex CLI and IDE
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-codex-0.2.3.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.2.3-py3-none-any.whl release-gate-skill-codex-0.2.3.tar.gz
+
+# Claude Code
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-claude-code-0.2.3.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.2.3-py3-none-any.whl release-gate-skill-claude-code-0.2.3.tar.gz
+
+# Antigravity IDE or CLI (one shared archive)
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.2.3-py3-none-any.whl release-gate-skill-antigravity-0.2.3.tar.gz
+```
+
+Stop unless the manifest came from the same immutable 0.2.3 release and both
+selected asset checks report `OK` exactly once. Complete these checks before
+removing or replacing anything. Then run exactly one host block. Each block
+removes the old copied skill with the exact pinned installer, installs the
+immutable 0.2.3 URL with `--global --copy` for the same target, and uses
+`skills list` to discover the installed skill without invoking it:
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent github-copilot --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-copilot-0.2.2.tar.gz --global --copy --agent github-copilot
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-copilot-0.2.3.tar.gz --global --copy --agent github-copilot
+npx --yes skills@1.5.23 list --global --agent github-copilot
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent codex --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-codex-0.2.2.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-codex-0.2.3.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 list --global --agent codex
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent claude-code --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-claude-code-0.2.2.tar.gz --global --copy --agent claude-code
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-claude-code-0.2.3.tar.gz --global --copy --agent claude-code
+npx --yes skills@1.5.23 list --global --agent claude-code
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 list --global --agent antigravity
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity-cli --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.2/release-gate-skill-antigravity-0.2.2.tar.gz --global --copy --agent antigravity-cli
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.2.3/release-gate-skill-antigravity-0.2.3.tar.gz --global --copy --agent antigravity-cli
+npx --yes skills@1.5.23 list --global --agent antigravity-cli
+```
+
+The skill and CLI now differ temporarily. Do not invoke Release Gate while the
+skill and CLI versions differ. Replace the CLI from the verified local wheel,
+never from a package index, and confirm the exact version:
+
+```bash
+uv tool uninstall release-gate
+uv tool install ./release_gate-0.2.3-py3-none-any.whl
+release-gate --version
+# required output: release-gate 0.2.3
 ```
 
 To uninstall without upgrading, run only the matching `skills remove` line
@@ -263,11 +307,15 @@ above, then uninstall the CLI separately:
 uv tool uninstall release-gate
 ```
 
-For rollback, perform those same removals, reinstall the retained prior skill
-archive for the exact host target, uninstall the current CLI, and reinstall the
-retained prior verified wheel. Verify both versions before resuming. A release
-process must preserve the prior GitHub release and its checksums so rollback
-does not depend on mutable or newly built bytes.
+For rollback to the retained prior pair, stop invoking the skill, remove the
+0.2.3 copied skill with the same pinned removal command, and reinstall the
+retained checksum-verified prior archive with `skills@1.5.23 --global --copy`
+for the same agent target. Then uninstall the current CLI and install the
+retained verified local prior wheel. Confirm the prior `release-gate --version`
+output, list the skill, and resume only when the pair matches. Preserve the
+prior GitHub release and its checksums so rollback never depends on mutable or
+newly built bytes.
+<!-- release-version-sync:end -->
 
 Uninstall does not remove repository policy or evidence. Remove those only as
 a separate, reviewed repository change.

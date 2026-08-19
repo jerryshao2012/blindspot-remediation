@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate qualification evidence before v0.2.0 promotion."""
+"""Validate qualification evidence before v0.2.3 promotion."""
 
 from __future__ import annotations
 
@@ -52,6 +52,33 @@ EXPECTED_OUTCOMES = {
     "run-needs-human": "NEEDS_HUMAN",
     "run-exit-3": "EXIT_3_NO_VERDICT",
     "run-exit-4": "EXIT_4_NO_VERDICT",
+}
+GRAPHIFY_OBSERVATIONS = {
+    "operation-mismatched-cli": ("RG-GRAPHIFY-PREFLIGHT-BEFORE-QUERY",),
+    "init-python": (
+        "RG-GRAPHIFY-PREFLIGHT-BEFORE-QUERY",
+        "RG-GRAPHIFY-INIT-EXISTING-GRAPH-READONLY-QUERY",
+        "RG-GRAPHIFY-INIT-DIRECT-SOURCE-VERIFICATION",
+    ),
+    "init-adversarial-repository": (
+        "RG-GRAPHIFY-MISSING-NONBLOCKING",
+        "RG-GRAPHIFY-STALE-NONBLOCKING",
+        "RG-GRAPHIFY-QUERY-FAILURE-NONBLOCKING",
+    ),
+    "validate-invalid-config": ("RG-GRAPHIFY-VALIDATE-NO-QUERY",),
+    **{
+        case: (
+            "RG-GRAPHIFY-PREFLIGHT-BEFORE-QUERY",
+            "RG-GRAPHIFY-RUN-RESULT-FIRST",
+            "RG-GRAPHIFY-RUN-QUERY-COUNT-0-OR-1",
+            "RG-GRAPHIFY-RUN-SCOPE-CHANGED-PATHS-ONLY",
+            "RG-GRAPHIFY-RUN-ADVISORY-SEPARATE-NON-GATING",
+            "RG-GRAPHIFY-RUN-VERDICT-UNCHANGED",
+        )
+        for case in ("run-pass", "run-fail", "run-needs-human")
+    },
+    "run-exit-3": ("RG-GRAPHIFY-RUN-ERROR-NO-QUERY",),
+    "run-exit-4": ("RG-GRAPHIFY-RUN-ERROR-NO-QUERY",),
 }
 
 
@@ -213,6 +240,12 @@ def validate_evidence(
                 raise ValueError(
                     f"passing case records failure details: {name}/{case['case']}"
                 )
+            for marker in GRAPHIFY_OBSERVATIONS.get(case["case"], ()):
+                if marker not in case["observed_effects"]:
+                    raise ValueError(
+                        "required Graphify observation is absent: "
+                        f"{name}/{case['case']}/{marker}"
+                    )
             _record_reference(
                 case["evidence_reference"],
                 evidence_references,

@@ -28,10 +28,9 @@ checks:
 def test_version_comes_from_package_and_is_exposed_by_cli(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert __version__ == "0.2.0"
     assert main(["--version"]) == 0
     result = capsys.readouterr()
-    assert result.out == "release-gate 0.2.0\n"
+    assert result.out == f"release-gate {__version__}\n"
     assert result.err == ""
 
     project = tomllib.loads(

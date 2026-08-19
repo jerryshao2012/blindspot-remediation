@@ -213,8 +213,10 @@ The new CLI does not replace or proxy `demo/gate/gate.sh`. Existing demo
 commands and their 0/1/2 behavior remain intact. There is no A3 request-file,
 execution-result, plugin, or adapter mode in v1.
 
-The 0.2.0 assistant archives bundle `references/compatibility.json` and require
-the exact output `release-gate 0.2.0` before `init`, `validate`, or `run`.
+<!-- release-version-sync:start -->
+The 0.2.3 assistant archives bundle `references/compatibility.json` and require
+the exact output `release-gate 0.2.3` before `init`, `validate`, or `run`.
 A missing executable or different version is a safe stop. Install the CLI wheel
 and host archive as a separately verified, version-matched pair using the
 [adoption procedure](adoption.md).
+<!-- release-version-sync:end -->
