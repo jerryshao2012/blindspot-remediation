@@ -330,3 +330,50 @@ def test_namespace_swap_after_stage_cannot_redirect_publication(
         result = session.publish()
     assert "OBSERVABILITY_PATH_UNSAFE" in result.warning_codes
     assert not list(outside.iterdir())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink replacement is POSIX-specific")
+def test_root_swap_before_acquisition_never_touches_outside_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    namespace = outside / "_observability"
+    namespace.mkdir(parents=True)
+    lock = namespace / ".refresh.lock"
+    lock.write_bytes(b"outside-owned")
+    original_open = runtime._open_directory
+
+    def swap(path: Path) -> int | None:
+        if path == root:
+            root.rename(tmp_path / "saved-root")
+            root.symlink_to(outside, target_is_directory=True)
+        return original_open(path)
+
+    monkeypatch.setattr(runtime, "_open_directory", swap)
+    session = RefreshSession.acquire(root, _summary("run-one"))
+    assert not session.locked
+    assert lock.read_bytes() == b"outside-owned"
+    assert ObservabilityWarning.PATH_UNSAFE in session.warnings
+
+
+def test_pending_incomplete_run_is_excluded_from_snapshot_diagnostics(
+    tmp_path: Path,
+) -> None:
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    pending = root / "run-one"
+    pending.mkdir(parents=True)
+    (pending / ".incomplete").write_bytes(b"")
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        report = session._report(include_pending=True)
+    assert report["diagnostics"]["skipped_runs"] == 0
+    assert "INCOMPLETE_RUN" not in report["diagnostics"]["warnings"]

@@ -27,7 +27,7 @@ _DATA_NAME = "gate-decisions-v1.json"
 _DASHBOARD_NAME = "index.html"
 _SNAPSHOT_NAME = "observability/gate-decisions.html"
 _MAX_SNAPSHOT_BYTES = 512 * 1024
-_LOCAL_LOCKS: dict[tuple[int, int], threading.Lock] = {}
+_LOCAL_LOCKS: dict[tuple[int, int], tuple[threading.Lock, int]] = {}
 _LOCAL_LOCKS_GUARD = threading.Lock()
 
 
@@ -90,6 +90,7 @@ class RefreshSession:
     _namespace_identity: tuple[int, int] | None = None
     _namespace_fd: int | None = None
     _local_lock: threading.Lock | None = None
+    _local_identity: tuple[int, int] | None = None
     _lock_fd: int | None = None
     _result: ObservabilityResult = field(default_factory=ObservabilityResult)
 
@@ -135,11 +136,13 @@ class RefreshSession:
                 return session._warn(ObservabilityWarning.PATH_UNSAFE)
             deadline = clock() + max(0.0, timeout_seconds)
             session._local_lock = _local_lock(session._namespace_identity)
+            session._local_identity = session._namespace_identity
             while not session._local_lock.acquire(blocking=False):
                 if clock() >= deadline:
                     _close_quietly(descriptor)
                     descriptor = None
                     session._local_lock = None
+                    session._local_identity = None
                     return session._warn(ObservabilityWarning.LOCK_BUSY)
                 wait(min(0.05, max(0.0, deadline - clock())))
             while not _try_lock(descriptor):
@@ -149,7 +152,9 @@ class RefreshSession:
                     descriptor = None
                     if session._local_lock is not None:
                         session._local_lock.release()
+                        _release_local(session._local_identity)
                         session._local_lock = None
+                        session._local_identity = None
                     return session._warn(ObservabilityWarning.LOCK_BUSY)
                 wait(min(0.05, max(0.0, deadline - clock())))
             session._lock_fd = descriptor
@@ -166,7 +171,9 @@ class RefreshSession:
                 session._root_fd = None
             if session._local_lock is not None:
                 session._local_lock.release()
+                _release_local(session._local_identity)
                 session._local_lock = None
+                session._local_identity = None
             return session._warn(ObservabilityWarning.PATH_UNSAFE)
 
     def __enter__(self) -> Self:
@@ -199,6 +206,8 @@ class RefreshSession:
             except Exception:
                 self._warn(ObservabilityWarning.PUBLISH_FAILED)
             self._local_lock = None
+            _release_local(self._local_identity)
+            self._local_identity = None
 
     def write_snapshot(self, evidence: EvidenceRun) -> ObservabilityResult:
         """Add a bounded, verified per-run HTML artifact while the lock is held."""
@@ -555,4 +564,17 @@ def _close_quietly(descriptor: int) -> bool:
 
 def _local_lock(identity: tuple[int, int]) -> threading.Lock:
     with _LOCAL_LOCKS_GUARD:
-        return _LOCAL_LOCKS.setdefault(identity, threading.Lock())
+        lock, references = _LOCAL_LOCKS.get(identity, (threading.Lock(), 0))
+        _LOCAL_LOCKS[identity] = (lock, references + 1)
+        return lock
+
+
+def _release_local(identity: tuple[int, int] | None) -> None:
+    if identity is None:
+        return
+    with _LOCAL_LOCKS_GUARD:
+        lock, references = _LOCAL_LOCKS.get(identity, (threading.Lock(), 0))
+        if references <= 1:
+            _LOCAL_LOCKS.pop(identity, None)
+        else:
+            _LOCAL_LOCKS[identity] = (lock, references - 1)
