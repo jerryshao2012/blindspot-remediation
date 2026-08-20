@@ -259,9 +259,12 @@ def test_concurrent_cli_finalizers_publish_both_completed_runs(tmp_path: Path) -
     for run_id in ("concurrent-a", "concurrent-b"):
         verify_run(output / run_id)
     data = json.loads((output / "_observability/gate-decisions-v1.json").read_bytes())
-    assert [item["run_id"] for item in data["source_runs"]] == [
+    source_runs = data["source_runs"]
+    assert {item["run_id"] for item in source_runs} == {
         "concurrent-a", "concurrent-b"
-    ]
+    }
+    identities = [(item["finished_at"], item["run_id"]) for item in source_runs]
+    assert identities == sorted(identities)
     html = (output / "_observability/index.html").read_bytes()
     assert data["generation_id"].encode() in html
     assert not list((output / "_observability").glob(".release-gate-*"))
