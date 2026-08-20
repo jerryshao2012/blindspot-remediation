@@ -40,10 +40,12 @@ def _minimal_builder_checkout(destination: Path, *, crlf: bool) -> None:
         Path("scripts/build_skill_archives.py"),
         Path("src/release_gate/__init__.py"),
         Path("src/release_gate/schemas/config-v1.schema.json"),
+        Path("src/release_gate/schemas/gate-decisions-v1.schema.json"),
         Path("skills/release-gate/SKILL.md"),
         Path("skills/release-gate/agents/openai.yaml"),
         Path("skills/release-gate/references/compatibility.json"),
         Path("skills/release-gate/references/config-v1.schema.json"),
+        Path("skills/release-gate/references/gate-decisions-v1.schema.json"),
         Path("skills/release-gate/references/initialization.md"),
     )
     for relative in sources:
@@ -196,6 +198,13 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
     canonical_schema = (
         ROOT / "src" / "release_gate" / "schemas" / "config-v1.schema.json"
     ).read_bytes()
+    canonical_observability_schema = (
+        ROOT
+        / "src"
+        / "release_gate"
+        / "schemas"
+        / "gate-decisions-v1.schema.json"
+    ).read_bytes()
     canonical_initialization = _lf(
         (
             ROOT / "skills" / "release-gate" / "references" / "initialization.md"
@@ -211,6 +220,7 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
             "release-gate/references",
             "release-gate/references/compatibility.json",
             "release-gate/references/config-v1.schema.json",
+            "release-gate/references/gate-decisions-v1.schema.json",
             "release-gate/references/initialization.md",
         }
         if host == "codex":
@@ -235,6 +245,11 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
         )
         assert schema is not None
         assert schema.read() == canonical_schema
+        observability_schema = archive.extractfile(
+            members["release-gate/references/gate-decisions-v1.schema.json"]
+        )
+        assert observability_schema is not None
+        assert observability_schema.read() == canonical_observability_schema
         initialization = archive.extractfile(
             members["release-gate/references/initialization.md"]
         )

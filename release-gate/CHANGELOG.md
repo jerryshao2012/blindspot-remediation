@@ -2,6 +2,15 @@
 
 All notable changes to the standalone Release Gate are recorded here.
 
+## 0.3.0
+
+- Refresh a self-contained, non-gating rolling 10/100 gate-decision dashboard
+  after each finalized `PASS`, `FAIL`, or `NEEDS_HUMAN` run.
+- Add tamper-evident per-run HTML snapshots, mutable stable JSON/HTML reports,
+  bounded history reconciliation, and hardened atomic publication.
+- Bundle the decision-report schema with both the wheel and portable skill,
+  and extend host qualification for report validation and refresh warnings.
+
 ## 0.2.3
 
 - Add an optional, read-only Graphify advisory after exact CLI compatibility

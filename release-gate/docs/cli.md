@@ -185,6 +185,27 @@ cross-document semantic checks, including the strict timestamp profile and
 execution lifecycle/order contract. Annotation-only `format` handling is not
 accepted.
 
+After a finalized decision, observability paths and bounded warnings use
+stderr without changing stdout:
+
+```text
+SNAPSHOT: <absolute-path-to-run/observability/gate-decisions.html>
+DASHBOARD: <absolute-path-to-root/_observability/index.html>
+OBSERVABILITY_DATA: <absolute-path-to-root/_observability/gate-decisions-v1.json>
+```
+
+A path is emitted only when that artifact was successfully refreshed. Warning
+codes cover conditions such as lock contention, unsafe paths, exhausted
+budgets, invalid history, and publication failure. Snapshot and stable-report
+failures are non-gating: they do not change verdict, exit code, `result.json`,
+or the exact `VERDICT:` and `RESULT:` stdout lines.
+
+Each exit 0, 1, or 2 run counts as one task. The report maps `PASS` to
+Releasing, `FAIL` to Failing, and `NEEDS_HUMAN` to Human review. Rolling 10 and
+rolling 100 use partial warm-up windows. The series exposes the latest 100
+points from up to 199 retained source summaries. A custom `--output` defines a
+shared scope; using one root across repositories intentionally combines them.
+
 ## Exit codes
 
 | Exit | Meaning | `result.json` guaranteed? |
@@ -214,8 +235,8 @@ commands and their 0/1/2 behavior remain intact. There is no A3 request-file,
 execution-result, plugin, or adapter mode in v1.
 
 <!-- release-version-sync:start -->
-The 0.2.3 assistant archives bundle `references/compatibility.json` and require
-the exact output `release-gate 0.2.3` before `init`, `validate`, or `run`.
+The 0.3.0 assistant archives bundle `references/compatibility.json` and require
+the exact output `release-gate 0.3.0` before `init`, `validate`, or `run`.
 A missing executable or different version is a safe stop. Install the CLI wheel
 and host archive as a separately verified, version-matched pair using the
 [adoption procedure](adoption.md).

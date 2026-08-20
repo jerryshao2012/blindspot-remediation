@@ -1,7 +1,7 @@
 # Evidence Contract
 
-At the default effective evidence root, every completed run has this exact
-layout:
+At the default effective evidence root, every completed run has this required
+layout; the observability snapshot shown below is optional:
 
 ```text
 .release-gate/runs/<run-id>/
@@ -10,6 +10,8 @@ layout:
 ├── candidate.patch
 ├── effective-config.json
 ├── trace.json
+├── observability/
+│   └── gate-decisions.html
 └── controls/
     └── <control-id>/
         ├── base/
@@ -203,7 +205,8 @@ it human-reviewable, which is verified against the effective configuration.
 `manifest.json`, validated by `schemas/manifest-v1.schema.json`, is written
 last. Its artifact array MUST contain `result.json`, `candidate.patch`,
 `effective-config.json`, and `trace.json` exactly once, plus every retained
-control log/report exactly once. It MUST NOT inventory `manifest.json`, because
+control log/report exactly once and the optional observability snapshot when
+present. It MUST NOT inventory `manifest.json`, because
 a file cannot contain its own final digest. It records:
 
 - the resolved base commit and reconstructed candidate tree;
@@ -313,6 +316,20 @@ array commas/brackets, this is at most 1,026,049 bytes and therefore below the
 API. Logs preserve raw retained process bytes; the CLI does not replay
 untrusted control characters to the terminal. Parsed reports are copied before
 their source clones are removed.
+
+The optional `observability/gate-decisions.html` is a self-contained snapshot
+of the decision dashboard, limited to 512 KiB. It is written only when both
+the remaining evidence bytes and manifest artifact slots allow it, and then it
+is inventoried like any other tamper-evident artifact. Snapshot failure is
+strictly non-gating and cannot prevent `result.json` and `manifest.json`
+finalization.
+
+The selected evidence root also owns mutable stable observability files at
+`_observability/index.html` and `_observability/gate-decisions-v1.json`. They
+are refreshed only after successful finalization, are not evidence artifacts,
+and are not listed in a run manifest. Each file is published atomically and
+both carry a shared deterministic generation ID so a cross-file mismatch is
+detectable. JSON and HTML publication is atomic per file, not as a pair.
 
 ## Size and time limits
 

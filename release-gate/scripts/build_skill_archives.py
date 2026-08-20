@@ -308,6 +308,14 @@ def build_archives(root: Path, output_dir: Path) -> list[Path]:
     )
     if config_schema != canonical_config_schema:
         raise ValueError("bundled config schema does not match the CLI schema")
+    observability_schema = _read_normalized_text(
+        skill_root / "references" / "gate-decisions-v1.schema.json"
+    )
+    canonical_observability_schema = _read_normalized_text(
+        root / "src" / "release_gate" / "schemas" / "gate-decisions-v1.schema.json"
+    )
+    if observability_schema != canonical_observability_schema:
+        raise ValueError("bundled observability schema does not match the CLI schema")
     initialization = _read_normalized_text(
         skill_root / "references" / "initialization.md"
     )
@@ -337,6 +345,9 @@ def build_archives(root: Path, output_dir: Path) -> list[Path]:
             "release-gate/SKILL.md": _skill_bytes(metadata, body, host),
             "release-gate/references/compatibility.json": compatibility_bytes,
             "release-gate/references/config-v1.schema.json": config_schema,
+            (
+                "release-gate/references/gate-decisions-v1.schema.json"
+            ): observability_schema,
             "release-gate/references/initialization.md": initialization,
         }
         if host == "codex":

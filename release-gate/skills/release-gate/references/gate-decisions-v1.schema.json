@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:release-gate:schema:gate-decisions:v1",
+  "title": "Release Gate decision observability v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "generation_id", "generated_at", "scope", "window_sizes", "source_runs", "series", "diagnostics"],
+  "properties": {
+    "version": {"const": 1},
+    "generation_id": {"$ref": "#/$defs/sha256"},
+    "generated_at": {"anyOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+    "scope": {"const": "evidence_root"},
+    "window_sizes": {"const": [10, 100]},
+    "source_runs": {"type": "array", "maxItems": 199, "items": {"$ref": "#/$defs/summary"}},
+    "series": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/seriesPoint"}},
+    "diagnostics": {"$ref": "#/$defs/diagnostics"}
+  },
+  "$defs": {
+    "runId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|$))[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9_-])?(?![\\s\\S])"},
+    "timestamp": {"type": "string", "minLength": 20, "maxLength": 35, "format": "date-time", "pattern": "^(?!0000-)[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,9})?(?:Z|\\+(?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00)|-(?!00:00)(?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "verdict": {"enum": ["PASS", "FAIL", "NEEDS_HUMAN"]},
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run_id", "finished_at", "verdict", "config_sha256"],
+      "properties": {
+        "run_id": {"$ref": "#/$defs/runId"}, "finished_at": {"$ref": "#/$defs/timestamp"},
+        "verdict": {"$ref": "#/$defs/verdict"}, "config_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "outcomes": {
+      "type": "object", "additionalProperties": false,
+      "required": ["releasing", "failing", "human_review"],
+      "properties": {
+        "releasing": {"type": "integer", "minimum": 0, "maximum": 10},
+        "failing": {"type": "integer", "minimum": 0, "maximum": 10},
+        "human_review": {"type": "integer", "minimum": 0, "maximum": 10}
+      }
+    },
+    "rates": {
+      "type": "object", "additionalProperties": false,
+      "required": ["releasing", "failing", "human_review"],
+      "properties": {
+        "releasing": {"type": "number", "minimum": 0, "maximum": 1},
+        "failing": {"type": "number", "minimum": 0, "maximum": 1},
+        "human_review": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "window10": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sample_size", "counts", "rates"],
+      "properties": {
+        "sample_size": {"type": "integer", "minimum": 1, "maximum": 10},
+        "counts": {"$ref": "#/$defs/outcomes"}, "rates": {"$ref": "#/$defs/rates"}
+      }
+    },
+    "window100": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sample_size", "counts", "rates"],
+      "properties": {
+        "sample_size": {"type": "integer", "minimum": 1, "maximum": 100},
+        "counts": {"$ref": "#/$defs/outcomes100"}, "rates": {"$ref": "#/$defs/rates"}
+      }
+    },
+    "outcomes100": {
+      "type": "object", "additionalProperties": false,
+      "required": ["releasing", "failing", "human_review"],
+      "properties": {
+        "releasing": {"type": "integer", "minimum": 0, "maximum": 100},
+        "failing": {"type": "integer", "minimum": 0, "maximum": 100},
+        "human_review": {"type": "integer", "minimum": 0, "maximum": 100}
+      }
+    },
+    "seriesPoint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run_id", "finished_at", "verdict", "config_sha256", "config_changed", "windows"],
+      "properties": {
+        "run_id": {"$ref": "#/$defs/runId"}, "finished_at": {"$ref": "#/$defs/timestamp"},
+        "verdict": {"$ref": "#/$defs/verdict"}, "config_sha256": {"$ref": "#/$defs/sha256"},
+        "config_changed": {"type": "boolean"},
+        "windows": {
+          "type": "object", "additionalProperties": false, "required": ["10", "100"],
+          "properties": {"10": {"$ref": "#/$defs/window10"}, "100": {"$ref": "#/$defs/window100"}}
+        }
+      }
+    },
+    "warning": {"enum": ["CACHE_INVALID", "CONFLICTING_RUN", "INCOMPLETE_RUN", "INVALID_SUMMARY", "MALFORMED_RUN", "RUN_DIGEST_MISMATCH", "RUN_DIRECTORY_UNSAFE", "RUN_ID_MISMATCH", "RUN_SCHEMA_INVALID", "RUN_TOO_LARGE", "SCAN_LIMIT_REACHED"]},
+    "diagnostics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["skipped_runs", "truncated", "warnings"],
+      "properties": {
+        "skipped_runs": {"type": "integer", "minimum": 0}, "truncated": {"type": "boolean"},
+        "warnings": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/warning"}}
+      }
+    }
+  }
+}

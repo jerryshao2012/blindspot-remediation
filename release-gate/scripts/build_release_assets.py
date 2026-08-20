@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the deterministic v0.2.3 RC asset set exactly once."""
+"""Build the deterministic v0.3.0 RC asset set exactly once."""
 
 from __future__ import annotations
 

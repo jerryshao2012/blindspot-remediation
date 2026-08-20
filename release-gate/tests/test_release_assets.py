@@ -127,6 +127,9 @@ def test_skill_archive_rejects_extra_and_special_members(tmp_path: Path) -> None
             "copilot",
             __version__,
             (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
+            (
+                ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
+            ).read_bytes(),
         )
 
 
@@ -155,6 +158,12 @@ def test_skill_archive_rejects_exact_names_with_swapped_path_types(
                 "release-gate/references/config-v1.schema.json",
                 (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
             ),
+            (
+                "release-gate/references/gate-decisions-v1.schema.json",
+                (
+                    ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
+                ).read_bytes(),
+            ),
             ("release-gate/references/initialization.md", b"reference"),
         ):
             info = tarfile.TarInfo(name)
@@ -167,6 +176,33 @@ def test_skill_archive_rejects_exact_names_with_swapped_path_types(
             "copilot",
             __version__,
             (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
+            (
+                ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
+            ).read_bytes(),
+        )
+
+
+def test_skill_archive_rejects_observability_schema_mismatch(tmp_path: Path) -> None:
+    verifier = _load_verifier()
+    output = tmp_path / "assets"
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/build_skill_archives.py"),
+            "--output-dir",
+            str(output),
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+    archive_path = output / f"release-gate-skill-copilot-{__version__}.tar.gz"
+    with pytest.raises(ValueError, match="observability schema"):
+        verifier._verify_skill_archive(
+            archive_path,
+            "copilot",
+            __version__,
+            (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
+            b"not the canonical observability schema",
         )
 
 

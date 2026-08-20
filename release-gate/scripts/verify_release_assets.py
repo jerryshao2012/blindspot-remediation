@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 HOSTS = ("antigravity", "claude-code", "codex", "copilot")
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 MANIFEST_RE = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$")
-MAX_SKILL_MEMBERS = 8
+MAX_SKILL_MEMBERS = 9
 MAX_SKILL_FILE_BYTES = 1024 * 1024
 MAX_SKILL_TOTAL_BYTES = 4 * 1024 * 1024
 MAX_SDIST_MEMBERS = 4096
@@ -168,7 +168,11 @@ def _verify_sdist(path: Path, version: str) -> None:
 
 
 def _verify_skill_archive(
-    path: Path, host: str, version: str, expected_config_schema: bytes
+    path: Path,
+    host: str,
+    version: str,
+    expected_config_schema: bytes,
+    expected_observability_schema: bytes,
 ) -> None:
     with tarfile.open(path, "r:gz") as archive:
         members = archive.getmembers()
@@ -179,6 +183,7 @@ def _verify_skill_archive(
             "release-gate/references",
             "release-gate/references/compatibility.json",
             "release-gate/references/config-v1.schema.json",
+            "release-gate/references/gate-decisions-v1.schema.json",
             "release-gate/references/initialization.md",
         }
         if host == "codex":
@@ -233,6 +238,14 @@ def _verify_skill_archive(
         assert config_schema is not None
         if config_schema.read() != expected_config_schema:
             raise ValueError(f"{host} archive config schema does not match the CLI")
+        observability_schema = archive.extractfile(
+            "release-gate/references/gate-decisions-v1.schema.json"
+        )
+        assert observability_schema is not None
+        if observability_schema.read() != expected_observability_schema:
+            raise ValueError(
+                f"{host} archive observability schema does not match the CLI"
+            )
 
 
 def _verify_installed_cli(wheel: Path, version: str) -> None:
@@ -309,6 +322,9 @@ def verify_assets(
     expected_config_schema = _normalized_text_bytes(
         root / "src/release_gate/schemas/config-v1.schema.json"
     )
+    expected_observability_schema = _normalized_text_bytes(
+        root / "src/release_gate/schemas/gate-decisions-v1.schema.json"
+    )
     _verify_wheel(wheel, version)
     _verify_sdist(assets_dir / f"release_gate-{version}.tar.gz", version)
     for host in HOSTS:
@@ -317,6 +333,7 @@ def verify_assets(
             host,
             version,
             expected_config_schema,
+            expected_observability_schema,
         )
     if check_installed_cli:
         _verify_installed_cli(wheel, version)

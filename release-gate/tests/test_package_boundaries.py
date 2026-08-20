@@ -41,6 +41,18 @@ def test_packaged_schemas_match_canonical_contracts_byte_for_byte() -> None:
         assert (packaged / source.name).read_bytes() == source.read_bytes()
 
 
+def test_skill_observability_schema_matches_canonical_contract() -> None:
+    canonical = ROOT / "schemas" / "gate-decisions-v1.schema.json"
+    bundled = (
+        ROOT
+        / "skills"
+        / "release-gate"
+        / "references"
+        / "gate-decisions-v1.schema.json"
+    )
+    assert bundled.read_bytes() == canonical.read_bytes()
+
+
 def test_console_entry_target_is_importable() -> None:
     from release_gate.cli import main
 

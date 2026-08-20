@@ -24,7 +24,7 @@ Do not infer a subcommand from repository context.
 ## Informational `--version`
 
 For explicit `/release-gate --version` (or `$release-gate --version` in Codex),
-read `references/compatibility.json`. Report exactly `release-gate 0.2.3` and
+read `references/compatibility.json`. Report exactly `release-gate 0.3.0` and
 stop. Do not call the CLI, do not run compatibility preflight, do not consider
 Graphify, and do not perform an `init`, `validate`, or `run` operation or any
 repository operation.
@@ -38,7 +38,7 @@ release-gate --version
 ```
 
 Read `references/compatibility.json` and require exact output
-`release-gate 0.2.3`. If the executable is missing, the reference is unreadable,
+`release-gate 0.3.0`. If the executable is missing, the reference is unreadable,
 or the output differs, stop safely. Do not install, upgrade, retry, or continue.
 <!-- release-version-sync:end -->
 
@@ -111,17 +111,29 @@ After preflight:
    release-gate run --repo <repo> --base <ref>
    ```
 
-3. For exits 0, 1, or 2, read the printed `RESULT:` path, parse its
-   `result.json`, and parse and report the exact result first. Preserve the exact
-   verdict, reason codes, configured check order, and evidence handling,
-   including the `PASS`, `FAIL`, or `NEEDS_HUMAN` verdict. Do not reinterpret
-   any result.
-4. After that exact report, eligible Graphify may issue at most one bounded query
-   derived only from `result.json` `scope.changed_paths`. Append its output as a
-   clearly separate, non-gating Graphify advisory; never mix it into the result.
-5. For exit 3 or 4, do not query Graphify. Report the input/configuration or
+3. For exits 0, 1, or 2, read the printed `RESULT:` path, parse and report the
+   exact result first: report `result.json` and its exact verdict first.
+   Preserve the exact verdict, reason codes, configured check order, and evidence
+   handling, including `PASS`,
+   `FAIL`, or `NEEDS_HUMAN`. Do not reinterpret any result.
+4. Then inspect stderr for `SNAPSHOT:`, `DASHBOARD:`, `OBSERVABILITY_DATA:`, and
+   refresh warnings. If `OBSERVABILITY_DATA:` is present and readable, validate
+   its JSON against `references/gate-decisions-v1.schema.json`. Summarize the
+   latest point's non-gating rolling 10 and rolling 100 counts, sample sizes,
+   and rates; label partial warm-up windows and report aggregate diagnostics.
+   Link the snapshot, dashboard, and data paths that were emitted. Treat
+   generation mismatch or invalid/unreadable data as a refresh warning, never
+   as a gate failure.
+5. Report refresh warnings without retrying the CLI or report publication; do
+   not change the verdict, exit meaning, or evidence. Do not retry a missing
+   report, because observability is strictly non-gating.
+6. Graphify advisory last: after the exact result and observability summary,
+   eligible Graphify may issue at most one bounded query derived only from
+   `result.json` `scope.changed_paths`. Append its output as a clearly separate,
+   non-gating Graphify advisory; never mix it into the result or report.
+7. For exit 3 or 4, do not query Graphify or read observability. Report the input/configuration or
    internal-engine error and no verdict. Never fabricate a result.
-6. Link the evidence directory and state that evidence is tamper-evident, not
+8. Link the evidence directory and state that evidence is tamper-evident, not
    immutable. A `PASS` covers only the configured policy and does not merge or deploy.
 
 ## Integrity rules

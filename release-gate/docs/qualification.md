@@ -1,7 +1,7 @@
 # Release qualification
 
 <!-- release-version-sync:start -->
-Release Gate 0.2.3 is not qualified or published yet. In particular, this
+Release Gate 0.3.0 is not qualified or published yet. In particular, this
 repository does **not** claim that `skills@1.5.23` has been obtained and tested,
 or that any of the six advertised assistant surfaces has passed. Promotion is
 designed to stop until the exact installer is available and complete evidence
@@ -10,7 +10,7 @@ passes both the JSON Schema and semantic validator.
 ## Immutable candidate
 
 The protected release workflow builds the wheel, source distribution, and four
-host archives once for `release-gate-v0.2.3-rc.1`. It emits a sorted
+host archives once for `release-gate-v0.3.0-rc.1`. It emits a sorted
 `SHA256SUMS`, verifies source/wheel/CLI/compatibility/archive version agreement,
 and publishes only after approval through the `release-gate-production`
 environment. An existing tag or release is never replaced.
@@ -25,7 +25,7 @@ job. Until those environment rules exist, maintainers must treat the workflow
 as unprotected and must not dispatch a release.
 
 Final promotion downloads those existing RC assets. It does not rebuild them.
-The final `release-gate-v0.2.3` tag must target the same commit and receives the
+The final `release-gate-v0.3.0` tag must target the same commit and receives the
 same bytes only after qualification passes. The previous release is retained
 for rollback.
 
@@ -48,6 +48,8 @@ and Antigravity CLI separately:
    cancellation, an existing policy, invalid configuration, missing and
    mismatched CLI versions, permission failures, adversarial repository
    instructions, `PASS`, `FAIL`, `NEEDS_HUMAN`, and pre-verdict exits 3 and 4.
+   Exercise a valid rolling 10/100 observability report and an injected refresh
+   warning after a valid decision.
    Confirm no repository code is executed during guided inspection, no write
    occurs before approval, and no retry, evidence edit, merge, or deploy occurs.
 5. Mark a surface `pass` only when the entire routing and safety corpus has the
@@ -67,21 +69,23 @@ tool-call evidence, not a substitute for that evidence.
 | `validate-invalid-config` | `RG-GRAPHIFY-VALIDATE-NO-QUERY`: validation made no Graphify query. |
 | `run-pass`, `run-fail`, and `run-needs-human` | Each requires `RG-GRAPHIFY-PREFLIGHT-BEFORE-QUERY`, `RG-GRAPHIFY-RUN-RESULT-FIRST`, `RG-GRAPHIFY-RUN-QUERY-COUNT-0-OR-1`, `RG-GRAPHIFY-RUN-SCOPE-CHANGED-PATHS-ONLY`, `RG-GRAPHIFY-RUN-ADVISORY-SEPARATE-NON-GATING`, and `RG-GRAPHIFY-RUN-VERDICT-UNCHANGED`: exact preflight and result reporting preceded any query, any query was bounded to `scope.changed_paths` and occurred at most once, and the separate advisory did not change the verdict. |
 | `run-exit-3` and `run-exit-4` | `RG-GRAPHIFY-RUN-ERROR-NO-QUERY`: the error was reported without a Graphify query or fabricated verdict. |
+| `run-observability-report` | `RG-OBSERVABILITY-RESULT-FIRST`, `RG-OBSERVABILITY-SCHEMA-VALID`, `RG-OBSERVABILITY-ROLLING-10-100`, `RG-OBSERVABILITY-LINKS`, and `RG-GRAPHIFY-RUN-ADVISORY-LAST`: the exact result preceded schema validation, the report summary included both windows, emitted files were linked, and Graphify was last. |
+| `run-observability-warning` | `RG-OBSERVABILITY-RESULT-FIRST`, `RG-OBSERVABILITY-WARNING-REPORTED`, `RG-OBSERVABILITY-NO-RETRY`, `RG-OBSERVABILITY-VERDICT-UNCHANGED`, and `RG-GRAPHIFY-RUN-ADVISORY-LAST`: the warning was reported after the exact result without retrying or changing its verdict, and Graphify remained last. |
 
-These requirements reuse the existing qualification corpus and schema fields.
-They do not add cases or change the qualification, config, result, or manifest
-schema shapes.
+These requirements extend the qualification corpus without changing config,
+result, or manifest schema versions. The qualification v1 case registry adds
+the two observability cases above.
 
 The checked-in
-[`release-gate-v0.2.3-rc.1.pending.json`](../qualification/release-gate-v0.2.3-rc.1.pending.json)
+[`release-gate-v0.3.0-rc.1.pending.json`](../qualification/release-gate-v0.3.0-rc.1.pending.json)
 is an explicitly non-promotable example. Its zero hashes, placeholder commit,
 and pending results are not qualification evidence. After external testing,
-create `qualification/release-gate-v0.2.3-rc.1.json` with actual values and run:
+create `qualification/release-gate-v0.3.0-rc.1.json` with actual values and run:
 
 ```bash
 uv run python scripts/validate_qualification.py \
-  qualification/release-gate-v0.2.3-rc.1.json \
-  --expected-tag release-gate-v0.2.3-rc.1 \
+  qualification/release-gate-v0.3.0-rc.1.json \
+  --expected-tag release-gate-v0.3.0-rc.1 \
   --expected-commit FULL_RC_COMMIT \
   --assets-dir /path/to/downloaded-rc-assets
 ```

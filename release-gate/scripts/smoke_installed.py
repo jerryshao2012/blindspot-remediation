@@ -55,10 +55,32 @@ def main() -> int:
             env=process_environment,
             check=False,
         )
-        if version.returncode != 0 or version.stdout != "release-gate 0.2.3\n":
+        if version.returncode != 0 or version.stdout != "release-gate 0.3.0\n":
             raise SystemExit(
                 "installed command reported the wrong version:\n"
                 f"stdout:\n{version.stdout}stderr:\n{version.stderr}"
+            )
+        schema = subprocess.run(
+            [
+                str(python),
+                "-c",
+                (
+                    "import json; from importlib import resources; "
+                    "from jsonschema import Draft202012Validator; "
+                    "value=json.loads((resources.files('release_gate')/"
+                    "'schemas'/'gate-decisions-v1.schema.json').read_text()); "
+                    "Draft202012Validator.check_schema(value)"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            env=process_environment,
+            check=False,
+        )
+        if schema.returncode != 0:
+            raise SystemExit(
+                "installed observability schema failed validation:\n"
+                f"stdout:\n{schema.stdout}stderr:\n{schema.stderr}"
             )
         target = Path(temporary) / "target"
         target.mkdir()

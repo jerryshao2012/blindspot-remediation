@@ -153,8 +153,29 @@ source repository
   -> run configured checks
   -> parse bounded reports and evaluate assertions
   -> aggregate verdict (NEEDS_HUMAN > FAIL > PASS)
+  -> best-effort build a per-run decision-dashboard snapshot
   -> revalidate, atomically finalize result.json then manifest.json, revalidate
+  -> best-effort refresh stable decision-dashboard JSON and HTML
 ```
+
+Observability is deliberately outside verdict aggregation. Before evidence
+finalization, the engine holds the observability lock for at most five seconds,
+combines prior valid decisions with the pending result, and attempts the
+manifest-inventoried `observability/gate-decisions.html` snapshot only when the
+512 KiB snapshot, evidence-byte budget, and artifact slots permit it. After
+successful finalization, it rescans under the held lock and atomically replaces
+the stable `_observability/gate-decisions-v1.json` and
+`_observability/index.html` files independently. A deterministic generation ID
+in both files detects a publication mismatch, and each HTML file embeds its
+complete data without scripts, assets, telemetry, or network access.
+
+History reconciliation considers at most the newest 1,000 real run
+directories under a 64 MiB read budget. It accepts only completed,
+schema-valid results whose bytes match their manifest digest, deduplicates by
+run ID, and sorts by `finished_at` then `run_id`. Up to 199 source summaries
+provide complete context for the latest 100 rolling-100 points. Configuration
+changes continue the trend and mark the transition. All lock, scan, render,
+snapshot, and publication failures remain non-gating.
 
 Commands are argv arrays and run without a shell. Relative `cwd` values are
 resolved inside the relevant clone. A platform override (`linux`, `macos`, or

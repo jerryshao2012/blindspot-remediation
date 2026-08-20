@@ -96,7 +96,7 @@ The required version output is:
 
 <!-- release-version-sync:start -->
 ```text
-release-gate 0.2.3
+release-gate 0.3.0
 ```
 <!-- release-version-sync:end -->
 

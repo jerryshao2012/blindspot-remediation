@@ -95,6 +95,37 @@ def test_run_contract_preserves_verdicts_and_error_exit_semantics() -> None:
         assert phrase in text
 
 
+def test_run_contract_reports_non_gating_observability_before_graphify() -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    run = " ".join(
+        text.split("## run", 1)[1].split("## Integrity rules", 1)[0].split()
+    )
+    required = [
+        "Call the gate exactly once",
+        "`RESULT:` path",
+        "report `result.json` and its exact verdict first",
+        "references/gate-decisions-v1.schema.json",
+        "non-gating rolling 10 and rolling 100",
+        "partial warm-up windows",
+        "diagnostics",
+        "`SNAPSHOT:`",
+        "`DASHBOARD:`",
+        "`OBSERVABILITY_DATA:`",
+        "refresh warnings",
+        "Do not retry",
+        "do not change the verdict",
+        "Graphify advisory last",
+    ]
+    for phrase in required:
+        assert phrase in run
+    assert run.index("report `result.json` and its exact verdict first") < run.index(
+        "references/gate-decisions-v1.schema.json"
+    )
+    assert run.index("references/gate-decisions-v1.schema.json") < run.index(
+        "Graphify advisory last"
+    )
+
+
 def test_graphify_is_portable_optional_read_only_and_non_gating() -> None:
     text = " ".join(SKILL.read_text(encoding="utf-8").split())
     required = [
@@ -181,6 +212,14 @@ def test_compatibility_reference_pins_source_version() -> None:
 def test_bundled_config_schema_is_the_exact_cli_schema() -> None:
     bundled = SKILL.parent / "references" / "config-v1.schema.json"
     canonical = ROOT / "src" / "release_gate" / "schemas" / "config-v1.schema.json"
+    assert bundled.read_bytes() == canonical.read_bytes()
+
+
+def test_bundled_observability_schema_is_the_exact_cli_schema() -> None:
+    bundled = SKILL.parent / "references" / "gate-decisions-v1.schema.json"
+    canonical = (
+        ROOT / "src" / "release_gate" / "schemas" / "gate-decisions-v1.schema.json"
+    )
     assert bundled.read_bytes() == canonical.read_bytes()
 
 

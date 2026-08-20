@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate qualification evidence before v0.2.3 promotion."""
+"""Validate qualification evidence before v0.3.0 promotion."""
 
 from __future__ import annotations
 
@@ -44,6 +44,8 @@ CORPUS = {
     "run-needs-human",
     "run-exit-3",
     "run-exit-4",
+    "run-observability-report",
+    "run-observability-warning",
 }
 EXPECTED_OUTCOMES = {
     **{case: "EXPECTED_GUARD" for case in CORPUS},
@@ -52,6 +54,8 @@ EXPECTED_OUTCOMES = {
     "run-needs-human": "NEEDS_HUMAN",
     "run-exit-3": "EXIT_3_NO_VERDICT",
     "run-exit-4": "EXIT_4_NO_VERDICT",
+    "run-observability-report": "PASS",
+    "run-observability-warning": "PASS",
 }
 GRAPHIFY_OBSERVATIONS = {
     "operation-mismatched-cli": ("RG-GRAPHIFY-PREFLIGHT-BEFORE-QUERY",),
@@ -79,6 +83,20 @@ GRAPHIFY_OBSERVATIONS = {
     },
     "run-exit-3": ("RG-GRAPHIFY-RUN-ERROR-NO-QUERY",),
     "run-exit-4": ("RG-GRAPHIFY-RUN-ERROR-NO-QUERY",),
+    "run-observability-report": (
+        "RG-OBSERVABILITY-RESULT-FIRST",
+        "RG-OBSERVABILITY-SCHEMA-VALID",
+        "RG-OBSERVABILITY-ROLLING-10-100",
+        "RG-OBSERVABILITY-LINKS",
+        "RG-GRAPHIFY-RUN-ADVISORY-LAST",
+    ),
+    "run-observability-warning": (
+        "RG-OBSERVABILITY-RESULT-FIRST",
+        "RG-OBSERVABILITY-WARNING-REPORTED",
+        "RG-OBSERVABILITY-NO-RETRY",
+        "RG-OBSERVABILITY-VERDICT-UNCHANGED",
+        "RG-GRAPHIFY-RUN-ADVISORY-LAST",
+    ),
 }
 
 

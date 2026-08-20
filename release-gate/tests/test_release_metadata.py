@@ -50,6 +50,7 @@ def test_package_metadata_uses_the_license_file_and_authoritative_urls() -> None
 
 
 def test_version_agrees_across_release_metadata() -> None:
+    assert __version__ == "0.3.0"
     compatibility = json.loads(
         _read("skills/release-gate/references/compatibility.json")
     )
@@ -61,6 +62,47 @@ def test_version_agrees_across_release_metadata() -> None:
     assert "byte-identical final promotion" in changelog
     assert "GitHub release page is authoritative" in changelog
     assert "pending release" not in changelog
+
+
+def test_observability_behavior_is_documented_across_public_surfaces() -> None:
+    text = " ".join(
+        "\n".join(
+            _read(path)
+            for path in (
+                "README.md",
+                "docs/adoption.md",
+                "docs/cli.md",
+                "docs/design.md",
+                "docs/evidence.md",
+            )
+        ).split()
+    )
+    for phrase in (
+        "exit 0, 1, or 2",
+        "partial warm-up windows",
+        "latest 100",
+        "199",
+        "custom `--output`",
+        "shared scope",
+        "_observability/index.html",
+        "_observability/gate-decisions-v1.json",
+        "observability/gate-decisions.html",
+        "mutable",
+        "tamper-evident",
+        "SNAPSHOT:",
+        "DASHBOARD:",
+        "OBSERVABILITY_DATA:",
+        "stdout",
+        "stderr",
+        "non-gating",
+    ):
+        assert phrase.casefold() in text.casefold()
+
+
+def test_installed_smoke_checks_the_observability_schema() -> None:
+    smoke = _read("scripts/smoke_installed.py")
+    assert "gate-decisions-v1.schema.json" in smoke
+    assert "Draft202012Validator.check_schema" in smoke
 
 
 def test_current_release_workflows_and_qualification_use_package_version() -> None:
