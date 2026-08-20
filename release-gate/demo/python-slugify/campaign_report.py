@@ -7,10 +7,17 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import os
 import re
+import secrets
+import stat
 from collections import Counter, defaultdict
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from math import isfinite, sqrt
+from pathlib import Path
 from statistics import NormalDist
 from typing import Any
 
@@ -40,6 +47,66 @@ _EXPECTED_CLASSIFICATION = {
 
 class CampaignError(RuntimeError):
     """An expected private-campaign validation or publication error."""
+
+
+@dataclass(frozen=True, slots=True)
+class CampaignPaths:
+    """Absolute paths published by a campaign operation."""
+
+    record: Path | None
+    data: Path
+    report: Path
+
+
+def record_and_refresh(root: Path, record: dict[str, Any]) -> CampaignPaths:
+    """Append one immutable record and regenerate both private aggregates."""
+
+    validated = validate_record(record)
+    campaign_root = _prepare_root(root)
+    with _campaign_lock(campaign_root):
+        records_dir, data_path, report_path = _prepare_layout(campaign_root)
+        records = _load_records(records_dir)
+        matching = [
+            item
+            for item in records
+            if item["run_id"].casefold() == validated["run_id"].casefold()
+        ]
+        record_path = records_dir / f"{validated['run_id']}.json"
+        if matching:
+            existing = matching[0]
+            if existing["run_id"] != validated["run_id"] or not _same_attempt(
+                existing, validated
+            ):
+                raise CampaignError(
+                    f"run_id {validated['run_id']!r} already exists with different data"
+                )
+            validated = existing
+            record_path = records_dir / f"{existing['run_id']}.json"
+        else:
+            _atomic_write(record_path, _json_bytes(validated))
+            records.append(validated)
+
+        _publish_aggregates(records, data_path, report_path)
+        return CampaignPaths(
+            record=record_path.absolute(),
+            data=data_path.absolute(),
+            report=report_path.absolute(),
+        )
+
+
+def refresh(root: Path) -> CampaignPaths:
+    """Regenerate aggregates from every validated immutable record."""
+
+    campaign_root = _prepare_root(root)
+    with _campaign_lock(campaign_root):
+        records_dir, data_path, report_path = _prepare_layout(campaign_root)
+        records = _load_records(records_dir)
+        _publish_aggregates(records, data_path, report_path)
+        return CampaignPaths(
+            record=None,
+            data=data_path.absolute(),
+            report=report_path.absolute(),
+        )
 
 
 def wilson_interval(
@@ -494,3 +561,137 @@ def _categorical(records: list[dict[str, Any]], key: str) -> dict[str, int]:
             ).items()
         )
     )
+
+
+def _prepare_root(root: Path) -> Path:
+    campaign_root = Path(os.path.abspath(root))
+    if campaign_root.exists() or campaign_root.is_symlink():
+        _refuse_link(campaign_root)
+        if not campaign_root.is_dir():
+            raise CampaignError(f"campaign root is not a directory: {campaign_root}")
+    else:
+        campaign_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+        _refuse_link(campaign_root)
+        if not campaign_root.is_dir():
+            raise CampaignError(f"campaign root is not a directory: {campaign_root}")
+    return campaign_root
+
+
+def _prepare_layout(root: Path) -> tuple[Path, Path, Path]:
+    records_dir = root / "records"
+    data_path = root / "campaign-v1.json"
+    report_path = root / "index.html"
+    for path in (records_dir, data_path, report_path):
+        if path.exists() or path.is_symlink():
+            _refuse_link(path)
+    if records_dir.exists():
+        if not records_dir.is_dir():
+            raise CampaignError(f"records path is not a directory: {records_dir}")
+    else:
+        records_dir.mkdir(mode=0o700)
+    os.chmod(records_dir, 0o700)
+    for path in (data_path, report_path):
+        if path.exists() and not path.is_file():
+            raise CampaignError(f"publication target is not a regular file: {path}")
+    return records_dir, data_path, report_path
+
+
+def _refuse_link(path: Path) -> None:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    if stat.S_ISLNK(metadata.st_mode) or (reparse and attributes & reparse):
+        raise CampaignError(f"refusing symlink or reparse-point path: {path}")
+
+
+@contextmanager
+def _campaign_lock(root: Path) -> Iterator[None]:
+    lock_path = root / ".campaign.lock"
+    try:
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as error:
+        raise CampaignError(
+            f"campaign is locked; inspect and remove stale lock manually: {lock_path}"
+        ) from error
+    try:
+        os.write(descriptor, f"pid={os.getpid()}\n".encode())
+        os.fsync(descriptor)
+        yield
+    finally:
+        os.close(descriptor)
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _load_records(records_dir: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for path in sorted(records_dir.glob("*.json"), key=lambda item: item.name):
+        try:
+            _refuse_link(path)
+            if not path.is_file():
+                raise CampaignError("record is not a regular file")
+            decoded = json.loads(path.read_text(encoding="utf-8"))
+            record = validate_record(decoded)
+            if path.name != f"{record['run_id']}.json":
+                raise CampaignError("record filename does not match run_id")
+            folded = record["run_id"].casefold()
+            if folded in seen:
+                raise CampaignError("case-insensitive run_id collision")
+            seen.add(folded)
+            records.append(record)
+        except (CampaignError, OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise CampaignError(f"invalid campaign record {path.name}: {error}") from error
+    return records
+
+
+def _same_attempt(existing: dict[str, Any], incoming: dict[str, Any]) -> bool:
+    stored = json.loads(json.dumps(existing))
+    proposed = json.loads(json.dumps(incoming))
+    stored["oracle"].pop("graded_at")
+    proposed["oracle"].pop("graded_at")
+    return stored == proposed
+
+
+def _publish_aggregates(
+    records: list[dict[str, Any]], data_path: Path, report_path: Path
+) -> None:
+    data = build_campaign_data(records)
+    _atomic_write(data_path, _json_bytes(data))
+    _atomic_write(report_path, render_campaign_html(data).encode("utf-8"))
+
+
+def _json_bytes(value: object) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
+
+
+def _atomic_write(path: Path, payload: bytes) -> None:
+    _refuse_link(path)
+    temporary = path.with_name(
+        f".{path.name}.tmp-{os.getpid()}-{secrets.token_hex(8)}"
+    )
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            descriptor = None
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass

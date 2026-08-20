@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 import sys
+import threading
 from copy import deepcopy
 from pathlib import Path
 from types import ModuleType
@@ -235,3 +238,164 @@ def test_html_displays_false_release_counts_and_wilson_denominators() -> None:
     assert "FALSE_RELEASE" in rendered
     assert "1 / 1" in rendered
     assert "95% Wilson interval" in rendered
+
+
+def test_record_and_refresh_creates_private_record_and_matching_aggregates(
+    tmp_path: Path,
+) -> None:
+    campaign = load_campaign()
+    root = tmp_path / "campaign"
+
+    paths = campaign.record_and_refresh(root, record("first"))
+
+    assert paths.record == (root / "records" / "first.json").resolve()
+    assert paths.data == (root / "campaign-v1.json").resolve()
+    assert paths.report == (root / "index.html").resolve()
+    stored = json.loads(paths.record.read_text())
+    aggregate = json.loads(paths.data.read_text())
+    assert stored["run_id"] == "first"
+    assert aggregate["record_count"] == 1
+    assert aggregate["generation_id"] in paths.report.read_text()
+    assert paths.record.stat().st_mode & 0o777 == 0o600
+    assert (root / "records").stat().st_mode & 0o777 == 0o700
+
+
+def test_identical_repeat_is_idempotent_and_preserves_record_bytes(
+    tmp_path: Path,
+) -> None:
+    campaign = load_campaign()
+    root = tmp_path / "campaign"
+    value = record("repeat")
+    first = campaign.record_and_refresh(root, value)
+    before = first.record.read_bytes()
+
+    second = campaign.record_and_refresh(root, deepcopy(value))
+
+    assert second.record.read_bytes() == before
+    assert json.loads(second.data.read_text())["record_count"] == 1
+
+
+def test_same_run_id_with_changed_metadata_fails_without_changing_files(
+    tmp_path: Path,
+) -> None:
+    campaign = load_campaign()
+    root = tmp_path / "campaign"
+    campaign.record_and_refresh(root, record("collision"))
+    before = {
+        path: path.read_bytes()
+        for path in (
+            root / "records" / "collision.json",
+            root / "campaign-v1.json",
+            root / "index.html",
+        )
+    }
+    changed = record("collision", model="different-model")
+
+    with pytest.raises(campaign.CampaignError, match="already exists"):
+        campaign.record_and_refresh(root, changed)
+
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_refresh_fails_closed_on_malformed_record_and_preserves_aggregates(
+    tmp_path: Path,
+) -> None:
+    campaign = load_campaign()
+    root = tmp_path / "campaign"
+    paths = campaign.record_and_refresh(root, record("valid"))
+    before = (paths.data.read_bytes(), paths.report.read_bytes())
+    (root / "records" / "broken.json").write_text('{"version": 99}\n')
+
+    with pytest.raises(campaign.CampaignError, match=r"broken\.json"):
+        campaign.refresh(root)
+
+    assert (paths.data.read_bytes(), paths.report.read_bytes()) == before
+
+
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlinks unavailable")
+@pytest.mark.parametrize("target_name", ["records", "campaign-v1.json", "index.html"])
+def test_publication_refuses_symlink_targets(
+    tmp_path: Path, target_name: str
+) -> None:
+    campaign = load_campaign()
+    root = tmp_path / "campaign"
+    root.mkdir()
+    victim = tmp_path / "victim"
+    victim.write_text("do not overwrite")
+    target = root / target_name
+    if target_name == "records":
+        victim.unlink()
+        victim.mkdir()
+    target.symlink_to(victim, target_is_directory=target_name == "records")
+
+    with pytest.raises(campaign.CampaignError, match=r"symlink|reparse"):
+        campaign.record_and_refresh(root, record("unsafe"))
+
+    if victim.is_file():
+        assert victim.read_text() == "do not overwrite"
+    else:
+        assert list(victim.iterdir()) == []
+
+
+def test_aggregate_write_failure_leaves_record_for_later_recovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    campaign = load_campaign()
+    root = tmp_path / "campaign"
+    original = campaign._atomic_write
+
+    def fail_aggregate(path: Path, payload: bytes) -> None:
+        if path.name == "campaign-v1.json":
+            raise OSError("injected aggregate failure")
+        original(path, payload)
+
+    monkeypatch.setattr(campaign, "_atomic_write", fail_aggregate)
+    with pytest.raises(OSError, match="injected"):
+        campaign.record_and_refresh(root, record("recoverable"))
+
+    assert (root / "records" / "recoverable.json").exists()
+    monkeypatch.setattr(campaign, "_atomic_write", original)
+    paths = campaign.refresh(root)
+    assert json.loads(paths.data.read_text())["record_count"] == 1
+
+
+def test_existing_global_lock_fails_closed(tmp_path: Path) -> None:
+    campaign = load_campaign()
+    root = tmp_path / "campaign"
+    root.mkdir()
+    (root / ".campaign.lock").write_text("held")
+
+    with pytest.raises(campaign.CampaignError, match="locked"):
+        campaign.record_and_refresh(root, record("blocked"))
+
+    assert not (root / "records" / "blocked.json").exists()
+
+
+def test_competing_writers_cannot_both_publish_conflicting_run_ids(
+    tmp_path: Path,
+) -> None:
+    campaign = load_campaign()
+    root = tmp_path / "campaign"
+    barrier = threading.Barrier(2)
+    outcomes: list[str] = []
+
+    def write(value: dict[str, Any]) -> None:
+        barrier.wait()
+        try:
+            campaign.record_and_refresh(root, value)
+        except campaign.CampaignError:
+            outcomes.append("rejected")
+        else:
+            outcomes.append("published")
+
+    threads = [
+        threading.Thread(target=write, args=(record("race", model="a"),)),
+        threading.Thread(target=write, args=(record("race", model="b"),)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcomes) == ["published", "rejected"]
+    assert len(list((root / "records").glob("*.json"))) == 1
