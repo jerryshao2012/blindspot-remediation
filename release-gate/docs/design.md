@@ -167,7 +167,8 @@ successful finalization, it rescans under the held lock and atomically replaces
 the stable `_observability/gate-decisions-v1.json` and
 `_observability/index.html` files independently. A deterministic generation ID
 in both files detects a publication mismatch, and each HTML file embeds its
-complete data without scripts, assets, telemetry, or network access.
+complete data without executable or external scripts, assets, telemetry, or
+network access.
 
 History reconciliation considers at most the newest 1,000 real run
 directories under a 64 MiB read budget. It accepts only completed,
