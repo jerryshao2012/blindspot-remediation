@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from copy import deepcopy
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -18,6 +20,50 @@ def load_campaign() -> ModuleType:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def record(
+    run_id: str,
+    *,
+    run_kind: str = "trial",
+    verdict: str = "PASS",
+    truth: bool | None = True,
+    classification: str = "good_pass",
+    wall_seconds: float | None = 10.0,
+    usage_value: float | None = 2.0,
+    usage_unit: str | None = "AIC",
+    model: str | None = "model-a",
+    human_step: str | None = "none",
+) -> dict[str, Any]:
+    digit = str((sum(map(ord, run_id)) % 9) + 1)
+    return {
+        "version": 1,
+        "run_id": run_id,
+        "run_kind": run_kind,
+        "gate": {
+            "verdict": verdict,
+            "finished_at": "2026-08-20T12:00:00Z",
+            "duration_ms": 1200,
+            "base_commit": digit * 40,
+            "candidate_tree": digit * 40,
+            "patch_sha256": digit * 64,
+            "config_sha256": digit * 64,
+            "result_sha256": digit * 64,
+        },
+        "oracle": {
+            "truth": truth,
+            "classification": classification,
+            "source_sha256": "a" * 64,
+            "graded_at": "2026-08-20T12:05:00Z",
+        },
+        "ai": {
+            "wall_seconds": wall_seconds,
+            "usage_value": usage_value,
+            "usage_unit": usage_unit,
+            "model": model,
+            "human_step": human_step,
+        },
+    }
 
 
 @pytest.mark.parametrize(
@@ -52,3 +98,102 @@ def test_wilson_zero_denominator_is_unknown_and_invalid_counts_are_rejected() ->
     }
     with pytest.raises(ValueError, match="events"):
         campaign.wilson_interval(events=2, trials=1)
+
+
+def test_campaign_uses_only_primary_oracle_valid_trials_for_safety_metrics() -> None:
+    campaign = load_campaign()
+    records = [
+        record("trial-good"),
+        record(
+            "trial-false-release", truth=False, classification="FALSE_RELEASE"
+        ),
+        record(
+            "trial-oracle-error",
+            truth=None,
+            classification="oracle_error",
+            wall_seconds=None,
+            usage_value=None,
+            usage_unit=None,
+        ),
+        record("assisted", run_kind="re-gate", human_step="fixed dependency"),
+        record(
+            "control",
+            run_kind="control",
+            verdict="FAIL",
+            truth=False,
+            classification="good_catch",
+        ),
+    ]
+
+    data = campaign.build_campaign_data(records)
+
+    assert data["record_count"] == 5
+    assert data["run_kind_counts"] == {"trial": 3, "re-gate": 1, "control": 1}
+    primary = data["primary"]
+    assert primary["attempts"] == 3
+    assert primary["oracle_valid"] == 2
+    assert primary["oracle_errors"] == 1
+    assert primary["classification_counts"]["FALSE_RELEASE"] == 1
+    assert primary["metrics"]["false_release_per_total"]["numerator"] == 1
+    assert primary["metrics"]["false_release_per_total"]["denominator"] == 2
+    assert primary["metrics"]["false_release_given_pass"]["denominator"] == 2
+    assert primary["wall_time"]["known_count"] == 2
+    assert primary["wall_time"]["unknown_count"] == 1
+    assert primary["usage_by_unit"]["AIC"]["known_count"] == 2
+    assert [item["run_id"] for item in data["records"]] == [
+        "assisted",
+        "control",
+        "trial-false-release",
+        "trial-good",
+        "trial-oracle-error",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("version",), 2),
+        (("run_kind",), "unknown"),
+        (("gate", "verdict"), "ALLOW"),
+        (("oracle", "classification"), "great"),
+        (("gate", "patch_sha256"), "not-a-digest"),
+        (("ai", "wall_seconds"), -1.0),
+        (("ai", "usage_value"), float("nan")),
+    ],
+)
+def test_record_validation_rejects_invalid_fields(
+    path: tuple[str, ...], value: object
+) -> None:
+    campaign = load_campaign()
+    candidate = record("invalid")
+    target: dict[str, Any] = candidate
+    for component in path[:-1]:
+        target = target[component]
+    target[path[-1]] = value
+
+    with pytest.raises(campaign.CampaignError):
+        campaign.validate_record(candidate)
+
+
+def test_record_validation_enforces_oracle_classification_matrix() -> None:
+    campaign = load_campaign()
+    candidate = record("mismatch", truth=False, classification="good_pass")
+
+    with pytest.raises(campaign.CampaignError, match="classification"):
+        campaign.validate_record(candidate)
+
+    error = record("oracle-error", truth=None, classification="oracle_error")
+    assert campaign.validate_record(error)["oracle"]["truth"] is None
+
+
+def test_human_step_text_never_changes_structured_primary_cohort() -> None:
+    campaign = load_campaign()
+    assisted_words = record("words", human_step="re-gate after human fix")
+    actual_re_gate = deepcopy(assisted_words)
+    actual_re_gate["run_id"] = "structured"
+    actual_re_gate["run_kind"] = "re-gate"
+
+    data = campaign.build_campaign_data([assisted_words, actual_re_gate])
+
+    assert data["run_kind_counts"] == {"trial": 1, "re-gate": 1, "control": 0}
+    assert data["primary"]["attempts"] == 1
