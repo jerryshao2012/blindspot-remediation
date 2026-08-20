@@ -458,6 +458,79 @@ def test_lock_linked_after_validation_never_mutates_outside_bytes(
         session.close()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="factorized lock rename uses POSIX")
+@pytest.mark.parametrize("backend", ("posix", "windows"))
+def test_held_lock_case_alias_blocks_snapshot_and_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+    session = RefreshSession.acquire(root, _summary("run-one"))
+    assert session.locked
+    assert session.namespace is not None
+    lock = session.namespace / ".refresh.lock"
+    alias = session.namespace / ".REFRESH.LOCK"
+    lock.rename(alias)
+    try:
+        class _NoSnapshotWrite:
+            def try_write_optional_artifact(self, *_: object, **__: object) -> Path:
+                raise AssertionError("unsafe lock must stop snapshot generation")
+
+        snapshot = session.write_snapshot(_NoSnapshotWrite())  # type: ignore[arg-type]
+        assert ObservabilityWarning.PATH_UNSAFE in snapshot.warnings
+        result = session.publish()
+        assert ObservabilityWarning.PATH_UNSAFE in result.warnings
+        assert not (session.namespace / "index.html").exists()
+        assert not (
+            session.namespace / "gate-decisions-v1.json"
+        ).exists()
+        assert alias.exists()
+    finally:
+        session.close()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="factorized lock swap uses POSIX")
+@pytest.mark.parametrize("backend", ("posix", "windows"))
+def test_held_lock_identity_swap_blocks_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+    session = RefreshSession.acquire(root, _summary("run-one"))
+    assert session.namespace is not None
+    lock = session.namespace / ".refresh.lock"
+    lock.rename(session.namespace / "saved-lock")
+    lock.write_bytes(b"replacement")
+    try:
+        result = session.publish()
+        assert ObservabilityWarning.PATH_UNSAFE in result.warnings
+        assert lock.read_bytes() == b"replacement"
+        assert result.data_path is None
+        assert result.dashboard_path is None
+    finally:
+        session.close()
+
+
 @pytest.mark.skipif(os.name == "nt", reason="factorized swap uses POSIX links")
 @pytest.mark.parametrize("backend", ("posix", "windows"))
 def test_stage_swapped_after_validation_never_remains_at_stable_target(
@@ -581,6 +654,53 @@ def test_same_length_stage_rewrite_is_repaired_before_success(
     assert result.warning_codes
 
 
+def test_installed_windows_stage_repairs_through_held_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    target = namespace / "gate-decisions-v1.json"
+    trusted = b'{"trusted":true}'
+    target.write_bytes(trusted)
+    descriptor = os.open(target, os.O_RDWR)
+    staged = runtime._StagedPath(
+        target,
+        runtime._file_snapshot(os.fstat(descriptor)),
+        descriptor,
+        trusted,
+        hashlib.sha256(trusted).hexdigest(),
+    )
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    assert os.write(descriptor, b"x" * len(trusted)) == len(trusted)
+    os.fsync(descriptor)
+    session = RefreshSession(root, _summary("run-one"))
+    session.namespace = namespace
+    session._namespace_fd = os.open(namespace, os.O_RDONLY)
+    monkeypatch.setattr(RefreshSession, "_safe_namespace", lambda self: True)
+    monkeypatch.setattr(
+        runtime,
+        "_replace_windows_child",
+        lambda *_: (_ for _ in ()).throw(
+            AssertionError("installed repair must not replace an open target")
+        ),
+    )
+
+    try:
+        assert runtime._restore_staged_path(
+            session, target, staged, installed=True
+        ) == (True, False)
+        assert target.read_bytes() == trusted
+        assert runtime._read_staged_payload(staged) == trusted
+    finally:
+        os.close(descriptor)
+        assert session._namespace_fd is not None
+        os.close(session._namespace_fd)
+
+
 def test_malformed_history_maps_to_bounded_history_warning(tmp_path: Path) -> None:
     from release_gate.observability_runtime import (
         ObservabilityWarning,
@@ -625,6 +745,35 @@ def test_history_read_budget_maps_to_bounded_budget_warning(
     report = json.loads(result.data_path.read_bytes())
     assert "RUN_TOO_LARGE" in report["diagnostics"]["warnings"]
     assert ObservabilityWarning.BUDGET_EXHAUSTED in result.warnings
+
+
+def test_retention_only_truncation_does_not_emit_budget_warning(
+    tmp_path: Path,
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability import build_report_from_summaries
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    summaries = [
+        {
+            "run_id": f"run-{index:03}",
+            "finished_at": f"2026-01-01T00:{index // 60:02}:{index % 60:02}Z",
+            "verdict": "PASS",
+            "config_sha256": "a" * 64,
+        }
+        for index in range(200)
+    ]
+    report = build_report_from_summaries(summaries)
+    session = RefreshSession(tmp_path, _summary("pending"))
+
+    runtime._record_report_warnings(session, report)
+
+    assert report["diagnostics"]["truncated"] is True
+    assert report["diagnostics"]["warnings"] == []
+    assert ObservabilityWarning.BUDGET_EXHAUSTED not in session.warnings
 
 
 @pytest.mark.skipif(os.name == "nt", reason="factorized swap uses POSIX renames")

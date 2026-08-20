@@ -404,7 +404,7 @@ class RefreshSession:
         )
         if not namespace_is_safe:
             return False
-        return (
+        scope_is_safe = (
             self._root_fd is not None
             and self._root_identity is not None
             and _directory_fd_identity(self._root_fd) == self._root_identity
@@ -416,6 +416,21 @@ class RefreshSession:
                 _directory_identity(self.root) == self._root_identity
                 and self.namespace == self.root / _NAMESPACE
             )
+        )
+        if not scope_is_safe:
+            return False
+        if self._lock_fd is None:
+            return True
+        assert self.namespace is not None
+        assert self._namespace_fd is not None
+        if _uses_windows_backend():
+            return _same_open_file_path(
+                self._lock_fd,
+                self.namespace / _LOCK_NAME,
+                self._namespace_fd,
+            )
+        return _same_open_file_at(
+            self._lock_fd, self._namespace_fd, _LOCK_NAME
         )
 
     def _warn(self, warning: ObservabilityWarning) -> Self:
@@ -474,7 +489,7 @@ def _record_report_warnings(
     warning_values = {
         value for value in raw_warnings if isinstance(value, str)
     } if isinstance(raw_warnings, list) else set()
-    if warning_values & _BUDGET_DIAGNOSTICS or diagnostics.get("truncated") is True:
+    if warning_values & _BUDGET_DIAGNOSTICS:
         session._warn(ObservabilityWarning.BUDGET_EXHAUSTED)
     if warning_values - _BUDGET_DIAGNOSTICS:
         session._warn(ObservabilityWarning.HISTORY_INVALID)
@@ -1905,7 +1920,11 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
                     or not session._safe_namespace()
                 ):
                     session._warn(ObservabilityWarning.PATH_UNSAFE)
-                    if _restore_staged_path(session, target, staged):
+                    restored, repair_renamed = _restore_staged_path(
+                        session, target, staged, installed=True
+                    )
+                    renamed = renamed or repair_renamed
+                    if restored:
                         _fsync_directory_path(session)
                         paths[name] = target
                     else:
@@ -1915,7 +1934,11 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
                 paths[name] = target
             except OSError:
                 session._warn(ObservabilityWarning.PATH_UNSAFE)
-                if _restore_staged_path(session, target, staged):
+                restored, repair_renamed = _restore_staged_path(
+                    session, target, staged, installed=renamed
+                )
+                renamed = renamed or repair_renamed
+                if restored:
                     _fsync_directory_path(session)
                     paths[name] = target
                 else:
@@ -1963,14 +1986,74 @@ def _canonical_child_safe_path(path: Path, directory_fd: int | None) -> bool:
 
 
 def _restore_staged_path(
-    session: RefreshSession, target: Path, trusted: _StagedPath
-) -> bool:
+    session: RefreshSession,
+    target: Path,
+    trusted: _StagedPath,
+    *,
+    installed: bool,
+) -> tuple[bool, bool]:
     if (
         not _staged_descriptor_identity_matches(trusted)
         or session._namespace_fd is None
     ):
+        return False, False
+    if not _rewrite_staged_payload(trusted):
+        return False, False
+    if installed:
+        after = _safe_target_snapshot_path(target, session._namespace_fd)
+        installed_is_trusted = (
+            after is not None
+            and after.exists
+            and after.file == trusted.file
+        )
+        if installed_is_trusted:
+            return (
+                _read_staged_payload(trusted) == trusted.payload
+                and session._safe_namespace(),
+                False,
+            )
+        return _restore_staged_path_by_replacement(
+            session, target, trusted.payload
+        ), False
+    if not _same_staged_path(session, trusted):
+        return False, False
+    renamed = False
+    try:
+        _replace_windows_child(session._namespace_fd, trusted, target.name)
+        renamed = True
+        after = _safe_target_snapshot_path(target, session._namespace_fd)
+        repaired = (
+            after is not None
+            and after.exists
+            and after.file == trusted.file
+            and _read_staged_payload(trusted) == trusted.payload
+            and session._safe_namespace()
+        )
+        return repaired, renamed
+    except OSError:
+        return False, renamed
+
+
+def _rewrite_staged_payload(staged: _StagedPath) -> bool:
+    if not _staged_descriptor_identity_matches(staged):
         return False
-    payload = trusted.payload
+    try:
+        _write_descriptor(staged.descriptor, staged.payload)
+        os.ftruncate(staged.descriptor, len(staged.payload))
+        os.fsync(staged.descriptor)
+    except OSError:
+        return False
+    return (
+        _staged_descriptor_identity_matches(staged)
+        and _read_staged_payload(staged) == staged.payload
+    )
+
+
+def _restore_staged_path_by_replacement(
+    session: RefreshSession, target: Path, payload: bytes
+) -> bool:
+    if session._namespace_fd is None:
+        return False
     recovery = _stage_path(session, payload)
     if recovery is None:
         return False
@@ -1983,14 +2066,13 @@ def _restore_staged_path(
         )
         renamed = True
         after = _safe_target_snapshot_path(target, session._namespace_fd)
-        installed = (
+        return (
             after is not None
             and after.exists
             and after.file == recovery.file
             and _read_staged_payload(recovery) == payload
             and session._safe_namespace()
         )
-        return installed
     except OSError:
         return False
     finally:
