@@ -400,6 +400,7 @@ def test_history_rejects_directory_symlinks_and_detects_result_swap(
 ) -> None:
     import release_gate.observability as observability
 
+    monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)  # type: ignore[union-attr]
     root = tmp_path / "evidence"
     root.mkdir()
     run = write_valid_run(root, "valid")
@@ -458,6 +459,56 @@ def test_history_path_fallback_collects_a_valid_run(
     collected = observability.collect_history(root)
 
     assert [item.run_id for item in collected.source_runs] == ["valid"]
+
+
+def test_history_path_fallback_rejects_a_symlink_evidence_root(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import release_gate.observability as observability
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    write_valid_run(root, "valid")
+    linked_root = tmp_path / "linked-evidence"
+    linked_root.symlink_to(root, target_is_directory=True)
+    monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)  # type: ignore[union-attr]
+
+    collected = observability.collect_history(linked_root)
+
+    assert collected.source_runs == ()
+    assert collected.skipped_runs == 1
+    assert observability.WarningCategory.RUN_DIRECTORY_UNSAFE in collected.warnings
+
+
+def test_history_skips_deeply_nested_cache_and_run_json(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import release_gate.observability as observability
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    run = root / "deep-json"
+    run.mkdir()
+    deeply_nested = b"[" * 1100 + b"]" * 1100
+    (run / "result.json").write_bytes(deeply_nested)
+    (run / "manifest.json").write_bytes(deeply_nested)
+    cache = tmp_path / "cache.json"
+    cache.write_bytes(deeply_nested)
+    original_loads = observability.json.loads
+
+    def recursive_loads(value: object, *args: object, **kwargs: object) -> object:
+        if value == deeply_nested:
+            raise RecursionError("deep JSON")
+        return original_loads(value, *args, **kwargs)
+
+    monkeypatch.setattr(observability.json, "loads", recursive_loads)  # type: ignore[union-attr]
+
+    collected = observability.collect_history(root, cache=cache)
+
+    assert collected.source_runs == ()
+    assert collected.skipped_runs == 2
+    assert observability.WarningCategory.CACHE_INVALID in collected.warnings
+    assert observability.WarningCategory.MALFORMED_RUN in collected.warnings
 
 
 def test_gate_decisions_schema_validates_report() -> None:

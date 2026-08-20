@@ -425,6 +425,24 @@ def _collect_path_fallback(
 ) -> HistoryCollection:
     """Windows-safe path traversal without ``dir_fd`` or descriptor scandir."""
 
+    try:
+        root_metadata = _path_lstat(evidence_root)
+    except OSError:
+        return _collected(
+            candidates,
+            skipped + 1,
+            warnings | {WarningCategory.RUN_DIRECTORY_UNSAFE},
+            False,
+        )
+    if not _is_safe_directory(root_metadata):
+        return _collected(
+            candidates,
+            skipped + 1,
+            warnings | {WarningCategory.RUN_DIRECTORY_UNSAFE},
+            False,
+        )
+    root_identity = _identity(root_metadata)
+    cached_count = len(candidates)
     selected: list[_ScanCandidate] = []
     scan_truncated = False
     try:
@@ -460,6 +478,11 @@ def _collect_path_fallback(
     if scan_truncated:
         warnings.add(WarningCategory.SCAN_LIMIT_REACHED)
     for candidate in sorted(selected, key=lambda item: (-item.mtime, item.name)):
+        if not _path_is_safe_identity(evidence_root, root_identity):
+            candidates = candidates[:cached_count]
+            skipped += 1
+            warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
+            return _collected(candidates, skipped, warnings, scan_truncated)
         directory = evidence_root / candidate.name
         descriptor = _open_directory(directory, expected=candidate.identity)
         if descriptor is None:
@@ -473,6 +496,10 @@ def _collect_path_fallback(
             warnings.add(reason)
         else:
             candidates.append(parsed)
+    if not _path_is_safe_identity(evidence_root, root_identity):
+        candidates = candidates[:cached_count]
+        skipped += 1
+        warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
     return _collected(candidates, skipped, warnings, scan_truncated)
 
 
@@ -538,7 +565,7 @@ def _decode_completed_run(
     try:
         result = json.loads(result_bytes)
         manifest = json.loads(manifest_bytes)
-    except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
+    except (RecursionError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
         return None, WarningCategory.MALFORMED_RUN
     if not isinstance(result, Mapping) or not isinstance(manifest, Mapping):
         return None, WarningCategory.MALFORMED_RUN
@@ -575,7 +602,7 @@ def _cache_summaries(
             return [], WarningCategory.CACHE_INVALID
         try:
             value = json.loads(content)
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except (RecursionError, UnicodeDecodeError, json.JSONDecodeError):
             return [], WarningCategory.CACHE_INVALID
     if not isinstance(value, Mapping) or not isinstance(value.get("source_runs"), list):
         return [], WarningCategory.CACHE_INVALID
@@ -694,7 +721,7 @@ def _valid_result_document(result: Mapping[str, Any]) -> bool:
         )
         validator = Draft202012Validator(schema, format_checker=FormatChecker())
         return not any(validator.iter_errors(dict(result)))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, RecursionError, json.JSONDecodeError):
         return False
 
 
@@ -744,6 +771,14 @@ def _identity(metadata: os.stat_result) -> tuple[int, int, int]:
 
 def _same_identity(first: os.stat_result, second: os.stat_result) -> bool:
     return _identity(first) == _identity(second)
+
+
+def _path_is_safe_identity(path: Path, identity: tuple[int, int, int]) -> bool:
+    try:
+        metadata = _path_lstat(path)
+    except OSError:
+        return False
+    return _is_safe_directory(metadata) and _identity(metadata) == identity
 
 
 def _timestamp_key(value: str) -> int:
