@@ -13,6 +13,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from functools import cache
 from importlib.resources import files
 from pathlib import Path
 from string import Template
@@ -29,6 +30,7 @@ MAX_AGGREGATE_READ_BYTES = 64 * 1024 * 1024
 RESULT_READ_LIMIT = 2 * 1024 * 1024
 MANIFEST_READ_LIMIT = 4 * 1024 * 1024
 _RUN_ID = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9_-])?$")
+_DOS_DEVICE = re.compile(r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)", re.I)
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _TIMESTAMP = re.compile(
     r"^(?P<date>\d{4}-\d{2}-\d{2})T(?P<time>\d{2}:\d{2}:\d{2})"
@@ -572,11 +574,19 @@ def _decode_completed_run(
     try:
         result = json.loads(result_bytes)
         manifest = json.loads(manifest_bytes)
-    except (RecursionError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+    except (
+        RecursionError,
+        TypeError,
+        UnicodeDecodeError,
+        ValueError,
+        json.JSONDecodeError,
+    ):
         return None, WarningCategory.MALFORMED_RUN
     if not isinstance(result, Mapping) or not isinstance(manifest, Mapping):
         return None, WarningCategory.MALFORMED_RUN
     if not _valid_result_document(result):
+        return None, WarningCategory.RUN_SCHEMA_INVALID
+    if not _valid_manifest_document(manifest):
         return None, WarningCategory.RUN_SCHEMA_INVALID
     if (
         result.get("run_id") != directory_name
@@ -609,7 +619,7 @@ def _cache_summaries(
             return [], WarningCategory.CACHE_INVALID
         try:
             value = json.loads(content)
-        except (RecursionError, UnicodeDecodeError, json.JSONDecodeError):
+        except (RecursionError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
             return [], WarningCategory.CACHE_INVALID
     if not isinstance(value, Mapping) or not isinstance(value.get("source_runs"), list):
         return [], WarningCategory.CACHE_INVALID
@@ -674,8 +684,10 @@ def _coerce_summary(value: Mapping[str, Any]) -> DecisionSummary:
     if any(not isinstance(value.get(field), str) for field in fields):
         raise ValueError("summary fields must be strings")
     summary = DecisionSummary(*(value[field] for field in fields))
-    if not _RUN_ID.fullmatch(summary.run_id) or not _SHA256.fullmatch(
-        summary.config_sha256
+    if (
+        not _RUN_ID.fullmatch(summary.run_id)
+        or _DOS_DEVICE.match(summary.run_id)
+        or not _SHA256.fullmatch(summary.config_sha256)
     ):
         raise ValueError("summary identity is invalid")
     if summary.verdict not in _VERDICTS:
@@ -721,15 +733,28 @@ def _generation_id(summaries: tuple[DecisionSummary, ...]) -> str:
 
 def _valid_result_document(result: Mapping[str, Any]) -> bool:
     try:
-        schema = json.loads(
-            files("release_gate.schemas")
-            .joinpath("result-v1.schema.json")
-            .read_text(encoding="utf-8")
+        return not any(
+            _schema_validator("result-v1.schema.json").iter_errors(dict(result))
         )
-        validator = Draft202012Validator(schema, format_checker=FormatChecker())
-        return not any(validator.iter_errors(dict(result)))
-    except (OSError, RecursionError, json.JSONDecodeError):
+    except (OSError, RecursionError, ValueError, json.JSONDecodeError):
         return False
+
+
+def _valid_manifest_document(manifest: Mapping[str, Any]) -> bool:
+    try:
+        return not any(
+            _schema_validator("manifest-v1.schema.json").iter_errors(dict(manifest))
+        )
+    except (OSError, RecursionError, ValueError, json.JSONDecodeError):
+        return False
+
+
+@cache
+def _schema_validator(name: str) -> Draft202012Validator:
+    schema = json.loads(
+        files("release_gate.schemas").joinpath(name).read_text(encoding="utf-8")
+    )
+    return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
 def _result_artifact(manifest: Mapping[str, Any]) -> dict[str, Any] | None:

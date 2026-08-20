@@ -62,22 +62,68 @@ def write_valid_run(root: Path, run_id: str, *, digest: str | None = None) -> Pa
     run.mkdir()
     result_bytes = json.dumps(valid_result(run_id)).encode()
     (run / "result.json").write_bytes(result_bytes)
-    (run / "manifest.json").write_text(
-        json.dumps(
+
+    def artifact(path: str, size: int = 0) -> dict[str, object]:
+        return {
+            "path": path,
+            "media_type": "application/json",
+            "size_bytes": size,
+            "sha256": digest or hashlib.sha256(result_bytes).hexdigest(),
+            "truncated": False,
+        }
+
+    manifest = {
+        "version": 1,
+        "run_id": run_id,
+        "hash_algorithm": "sha256",
+        "created_at": "2026-01-01T00:00:00Z",
+        "started_at": "2026-01-01T00:00:00Z",
+        "finished_at": "2026-01-01T00:00:00Z",
+        "duration_ms": 0,
+        "base_commit": "a" * 40,
+        "candidate_tree": "b" * 40,
+        "patch_sha256": "c" * 64,
+        "config_sha256": "a" * 64,
+        "engine_version": "test",
+        "platform": {
+            "family": "linux",
+            "system": "Linux",
+            "release": "test",
+            "machine": "x86_64",
+        },
+        "runtime": {
+            "implementation": "CPython",
+            "version": "3.11",
+            "executable": "python",
+            "executable_sha256": "d" * 64,
+        },
+        "reason_codes": [],
+        "executions": [
             {
-                "version": 1,
-                "run_id": run_id,
-                "artifacts": [
-                    {
-                        "path": "result.json",
-                        "size_bytes": len(result_bytes),
-                        "sha256": digest or hashlib.sha256(result_bytes).hexdigest(),
-                    }
-                ],
+                "control_id": "tests",
+                "phase": "check",
+                "side": "candidate",
+                "argv": ["x"],
+                "cwd": ".",
+                "environment_keys": [],
+                "started_at": "2026-01-01T00:00:00Z",
+                "finished_at": "2026-01-01T00:00:00Z",
+                "duration_ms": 0,
+                "classification": "pass",
+                "exit_code": 0,
+                "timed_out": False,
+                "reason_codes": [],
+                "metrics": {},
             }
-        ),
-        encoding="utf-8",
-    )
+        ],
+        "artifacts": [
+            artifact("result.json", len(result_bytes)),
+            artifact("candidate.patch"),
+            artifact("effective-config.json"),
+            artifact("trace.json"),
+        ],
+    }
+    (run / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     return run
 
 
@@ -515,6 +561,38 @@ def test_invalid_decision_summary_instances_are_skipped() -> None:
     assert report["source_runs"] == []
     assert report["diagnostics"]["skipped_runs"] == 4
     assert report["diagnostics"]["warnings"] == ["INVALID_SUMMARY"]
+
+
+def test_history_skips_integer_limit_json_for_cache_and_run(tmp_path: Path) -> None:
+    from release_gate.observability import WarningCategory, collect_history
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    run = root / "large-int"
+    run.mkdir()
+    payload = b'{"value":' + b"9" * 5000 + b"}"
+    (run / "result.json").write_bytes(payload)
+    (run / "manifest.json").write_bytes(payload)
+    cache = tmp_path / "cache.json"
+    cache.write_bytes(payload)
+
+    collected = collect_history(root, cache=cache)
+
+    assert collected.source_runs == ()
+    assert collected.skipped_runs == 2
+    assert WarningCategory.CACHE_INVALID in collected.warnings
+    assert WarningCategory.MALFORMED_RUN in collected.warnings
+
+
+def test_portable_dos_run_ids_are_rejected() -> None:
+    from release_gate.observability import build_report_from_summaries
+
+    report = build_report_from_summaries(
+        [summary(value, "2026-01-01T00:00:00Z") for value in ("CON", "nul.txt", "Com1")]
+    )
+
+    assert report["source_runs"] == []
+    assert report["diagnostics"]["skipped_runs"] == 3
 
 
 def test_history_path_fallback_rejects_a_symlink_evidence_root(
