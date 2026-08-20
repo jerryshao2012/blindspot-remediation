@@ -659,6 +659,25 @@ def test_committed_demo_assets_are_self_contained() -> None:
     assert "workbench/" in (DEMO / ".gitignore").read_text(encoding="utf-8")
 
 
+def test_private_campaign_workflow_is_documented_and_gitignored() -> None:
+    ignore = (DEMO / ".gitignore").read_text(encoding="utf-8")
+    readme = (DEMO / "README.md").read_text(encoding="utf-8")
+
+    assert "private-campaign/" in ignore
+    for phrase in (
+        "campaign-report",
+        "CAMPAIGN_RECORD",
+        "FALSE_RELEASE",
+        "false releases given PASS",
+        "Wilson",
+        "--run-kind re-gate",
+        "--run-kind control",
+        "not encrypted",
+        "X1 repeatability",
+    ):
+        assert phrase in readme
+
+
 def test_trusted_base_validation_checks_origin_parent_and_policy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

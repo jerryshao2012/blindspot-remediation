@@ -232,6 +232,113 @@ are:
 `PASS` means only that the recorded policy accepted this candidate. It is not
 a merge, deployment, security attestation, or proof that no defect exists.
 
+### Build the private campaign report
+
+`grade` verifies the evidence package, reconstructs the exact recorded
+candidate in a disposable local clone, runs the hidden oracle there, and appends
+one immutable private campaign record. Optional operator-supplied AI cost fields
+make the same command useful for the first five bill-sizing runs.
+
+#### Windows PowerShell
+
+```powershell
+py -3 demo.py grade `
+  --result "C:\absolute\path\to\result.json" `
+  --run-kind trial `
+  --wall-seconds 103 `
+  --usage-value 16.6 `
+  --usage-unit AIC `
+  --model "claude-haiku-4.5" `
+  --human-step "none"
+```
+
+#### macOS zsh
+
+```zsh
+python3 demo.py grade \
+  --result "/absolute/path/to/result.json" \
+  --run-kind trial \
+  --wall-seconds 103 \
+  --usage-value 16.6 \
+  --usage-unit AIC \
+  --model "claude-haiku-4.5" \
+  --human-step "none"
+```
+
+The usage value and unit must be supplied together. Omit metadata that is not
+known; the report shows known and unknown counts instead of silently treating
+unknown cost as zero. Successful recording prints:
+
+```text
+CAMPAIGN_RECORD: .../private-campaign/records/x1-run-01.json
+CAMPAIGN_REPORT: .../private-campaign/index.html
+CAMPAIGN_DATA: .../private-campaign/campaign-v1.json
+```
+
+The generated local layout is:
+
+```text
+private-campaign/
+├── records/             # one append-only JSON record per gate run ID
+├── campaign-v1.json     # machine-readable aggregate and denominators
+└── index.html           # self-contained private report
+```
+
+If an aggregate is deleted or a previous publication was interrupted after the
+record became durable, rebuild it without rerunning the gate or oracle:
+
+```powershell
+py -3 demo.py campaign-report
+```
+
+```zsh
+python3 demo.py campaign-report
+```
+
+The campaign report is local and gitignored, but it is **not encrypted**. It
+contains hidden-oracle truth, classifications, model names, and human-step
+labels, so do not publish it or place it in normal gate evidence. The normal
+Release Gate dashboard continues to contain gate decisions only; the portable
+`release-gate` skill and public observability format are unchanged.
+
+### Cohorts, denominators, and what “clean” means
+
+Use `--run-kind trial` for an independent first attempt. Those records form the
+primary safety and cost cohort. A candidate graded after human intervention must
+be explicitly labeled `--run-kind re-gate`; a deterministic demo/control run
+must use `--run-kind control`. Re-gates and controls remain visible but cannot
+improve the primary trial rates.
+
+For this report, “N clean runs” in the false-release claim means N oracle-valid
+primary trials with zero `FALSE_RELEASE` events. It does not mean the pipeline
+is proven safe. Report counts with denominators:
+
+- `false_release_per_total`: false releases / all oracle-valid primary trials;
+- `false_release_given_pass`: false releases given PASS, meaning false releases
+  / oracle-valid primary trials for which the gate returned PASS;
+- oracle errors are reported separately and excluded from correctness-rate
+  denominators.
+
+The HTML labels the second measure as “False releases given PASS”; in plain
+language, it is the rate of false releases given PASS. The report shows a 95%
+Wilson interval for every rate. With zero observed false releases, the
+upper bound remains wide:
+
+| Oracle-valid primary trials | True false-release rate could still be up to |
+|---:|---:|
+| 5 | 43% |
+| 10 | 28% |
+| 20 | 16% |
+| 30 | 11% |
+| 100 | 4% |
+
+Thus run 1 proves the plumbing, runs 2–5 estimate time and usage, and 30 or 100
+runs provide progressively stronger—but still benchmark-specific—evidence.
+Repeated runs of this one task measure **X1 repeatability**, not general Release
+Gate safety. Correlated attempts, benchmark quality, and oracle quality remain
+limitations. Prefer statements such as “1 false release in 30 oracle-valid
+primary trials” over a denominator-free quality score.
+
 ## 7. Demonstrate all three verdicts through Copilot
 
 Each `control` command resets the repository first. The `fail` and
