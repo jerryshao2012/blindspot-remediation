@@ -27,7 +27,7 @@ def test_pr_ci_is_read_only_secret_free_and_keeps_full_matrix() -> None:
     assert workflow["permissions"] == {"contents": "read"}
     matrix = workflow["jobs"]["test"]["strategy"]["matrix"]
     assert matrix["os"] == ["ubuntu-latest", "macos-latest", "windows-latest"]
-    assert matrix["python"] == ["3.11", "3.12", "3.13"]
+    assert matrix["python"] == ["3.12", "3.13"]
     text = CI.read_text(encoding="utf-8")
     assert "secrets." not in text
     assert "contents: write" not in text

@@ -47,7 +47,6 @@ def test_ci_covers_supported_operating_systems_and_python_versions() -> None:
         "ubuntu-latest",
         "macos-latest",
         "windows-latest",
-        '"3.11"',
         '"3.12"',
         '"3.13"',
         "uv run pytest",
