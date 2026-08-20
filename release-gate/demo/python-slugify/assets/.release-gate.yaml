@@ -9,11 +9,19 @@ scope:
   forbidden_paths:
     - "/test.py"
     - ".github/**"
+    - "/.vscode/**"
   review_required_paths:
     - "/.release-gate.yaml"
     - "/.release-gate-venv/"
     - "/SECURITY.md"
     - "/LICENSE*"
+    - "/pyproject.toml"
+    - "/CHANGELOG.md"
+    - "/MANIFEST.in"
+    - "/dev.requirements.txt"
+    - "/format.sh"
+    - "/tea.yaml"
+    - "/.gitignore"
 
 prepare:
   - id: create-demo-venv
