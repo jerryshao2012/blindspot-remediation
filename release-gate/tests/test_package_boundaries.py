@@ -29,6 +29,7 @@ def test_package_contains_all_v1_schemas() -> None:
         "config-v1.schema.json",
         "result-v1.schema.json",
         "manifest-v1.schema.json",
+        "gate-decisions-v1.schema.json",
         "qualification-v1.schema.json",
     }
 

@@ -24,7 +24,12 @@ def errors(schema: dict[str, Any], value: Any) -> list[str]:
 
 @pytest.mark.parametrize(
     "name",
-    ["config-v1.schema.json", "result-v1.schema.json", "manifest-v1.schema.json"],
+    [
+        "config-v1.schema.json",
+        "result-v1.schema.json",
+        "manifest-v1.schema.json",
+        "gate-decisions-v1.schema.json",
+    ],
 )
 def test_checked_in_schemas_are_valid_draft_2020_12(name: str) -> None:
     Draft202012Validator.check_schema(load_schema(name))
