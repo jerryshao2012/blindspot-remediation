@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -67,7 +68,6 @@ def test_refresh_rejects_casefold_and_symlink_namespace(tmp_path: Path) -> None:
     (root / "_OBSERVABILITY").mkdir()
     result = RefreshSession.acquire(root, _summary("run-one"))
     assert ObservabilityWarning.PATH_UNSAFE in result.warnings
-
     (root / "_OBSERVABILITY").rmdir()
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -75,6 +75,106 @@ def test_refresh_rejects_casefold_and_symlink_namespace(tmp_path: Path) -> None:
     result = RefreshSession.acquire(root, _summary("run-one"))
     assert ObservabilityWarning.PATH_UNSAFE in result.warnings
 
+
+@pytest.mark.parametrize("backend", _BACKENDS)
+def test_refresh_rejects_casefold_lock_alias_without_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    alias = namespace / ".REFRESH.LOCK"
+    alias.write_bytes(b"alias-owned")
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+
+    session = RefreshSession.acquire(root, _summary("run-one"))
+    try:
+        assert not session.locked
+        assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+        assert alias.read_bytes() == b"alias-owned"
+        assert ".refresh.lock" not in {entry.name for entry in namespace.iterdir()}
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("backend", _BACKENDS)
+@pytest.mark.parametrize(
+    ("alias_name", "canonical_name"),
+    (
+        ("INDEX.HTML", "index.html"),
+        ("GATE-DECISIONS-V1.JSON", "gate-decisions-v1.json"),
+    ),
+)
+def test_publish_rejects_casefold_target_alias_without_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+    alias_name: str,
+    canonical_name: str,
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    alias = namespace / alias_name
+    alias.write_bytes(b"alias-owned")
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        assert session.locked
+        result = session.publish()
+
+    assert ObservabilityWarning.PATH_UNSAFE in result.warnings
+    assert alias.read_bytes() == b"alias-owned"
+    assert canonical_name not in {entry.name for entry in namespace.iterdir()}
+
+
+@pytest.mark.parametrize("backend", _BACKENDS)
+def test_publish_rejects_casefold_stage_alias_without_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    monkeypatch.setattr(runtime.secrets, "token_hex", lambda _: "abc123")
+    alias = namespace / ".RELEASE-GATE-ABC123"
+    alias.write_bytes(b"alias-owned")
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+
+    assert ObservabilityWarning.PATH_UNSAFE in result.warnings
+    assert alias.read_bytes() == b"alias-owned"
+    assert ".release-gate-abc123" not in {
+        entry.name for entry in namespace.iterdir()
+    }
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX record-lock behavior")
 def test_refresh_lock_busy_is_a_non_gating_outcome(tmp_path: Path) -> None:
@@ -416,6 +516,115 @@ def test_stage_swapped_after_validation_never_remains_at_stable_target(
     assert json.loads(target.read_bytes())["version"] == 1
     assert attacker.read_bytes() == b"attacker-controlled"
     assert result.warning_codes
+
+
+@pytest.mark.parametrize("backend", _BACKENDS)
+def test_same_length_stage_rewrite_is_repaired_before_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    (namespace / "gate-decisions-v1.json").write_bytes(b'{"prior":true}')
+    corrupted = False
+
+    def rewrite(staged: runtime._StagedFile | runtime._StagedPath) -> None:
+        nonlocal corrupted
+        if corrupted:
+            return
+        corrupted = True
+        os.lseek(staged.descriptor, 0, os.SEEK_SET)
+        replacement = b"x" * staged.file.size
+        assert os.write(staged.descriptor, replacement) == len(replacement)
+        os.fsync(staged.descriptor)
+
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+        original_same = runtime._same_staged_path
+
+        def rewrite_path(
+            session: RefreshSession, staged: runtime._StagedPath
+        ) -> bool:
+            valid = original_same(session, staged)
+            if valid:
+                rewrite(staged)
+            return valid
+
+        monkeypatch.setattr(runtime, "_same_staged_path", rewrite_path)
+    else:
+        original_same_at = runtime._same_staged_file_at
+
+        def rewrite_at(
+            directory_fd: int, staged: runtime._StagedFile
+        ) -> bool:
+            valid = original_same_at(directory_fd, staged)
+            if valid:
+                rewrite(staged)
+            return valid
+
+        monkeypatch.setattr(runtime, "_same_staged_file_at", rewrite_at)
+
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+
+    assert corrupted
+    assert result.data_path is not None
+    assert result.dashboard_path is not None
+    data = json.loads(result.data_path.read_bytes())
+    assert data["version"] == 1
+    assert data["generation_id"].encode() in result.dashboard_path.read_bytes()
+    assert result.warning_codes
+
+
+def test_malformed_history_maps_to_bounded_history_warning(tmp_path: Path) -> None:
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    malformed = root / "malformed"
+    malformed.mkdir(parents=True)
+    (malformed / "result.json").write_text("{", encoding="utf-8")
+    (malformed / "manifest.json").write_text("{", encoding="utf-8")
+
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+
+    assert result.data_path is not None
+    report = json.loads(result.data_path.read_bytes())
+    assert "MALFORMED_RUN" in report["diagnostics"]["warnings"]
+    assert ObservabilityWarning.HISTORY_INVALID in result.warnings
+
+
+def test_history_read_budget_maps_to_bounded_budget_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability as observability
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    oversized = root / "oversized"
+    oversized.mkdir(parents=True)
+    (oversized / "result.json").write_bytes(b"{}")
+    (oversized / "manifest.json").write_bytes(b"{}")
+    monkeypatch.setattr(observability, "MAX_AGGREGATE_READ_BYTES", 1)
+
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+
+    assert result.data_path is not None
+    report = json.loads(result.data_path.read_bytes())
+    assert "RUN_TOO_LARGE" in report["diagnostics"]["warnings"]
+    assert ObservabilityWarning.BUDGET_EXHAUSTED in result.warnings
 
 
 @pytest.mark.skipif(os.name == "nt", reason="factorized swap uses POSIX renames")
@@ -994,6 +1203,30 @@ def test_native_windows_child_stat_is_handle_relative(
     assert calls == [(23, "owned")]
 
 
+def test_native_windows_casefold_scan_uses_pinned_directory_handle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    calls: list[int] = []
+    monkeypatch.setattr(runtime, "_uses_native_windows_paths", lambda: True)
+    monkeypatch.setattr(
+        runtime,
+        "_windows_directory_names_native",
+        lambda descriptor: calls.append(descriptor) or ["index.html"],
+    )
+    monkeypatch.setattr(
+        runtime.os,
+        "scandir",
+        lambda *_: (_ for _ in ()).throw(
+            AssertionError("native Windows enumeration must use the pinned handle")
+        ),
+    )
+
+    assert runtime._canonical_child_exact(41, "index.html")
+    assert calls == [41]
+
+
 def test_native_windows_replace_is_handle_relative(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1008,6 +1241,7 @@ def test_native_windows_replace_is_handle_relative(
         runtime._file_snapshot(metadata),
         descriptor,
         b"trusted",
+        hashlib.sha256(b"trusted").hexdigest(),
     )
     calls: list[tuple[int, int, str]] = []
     monkeypatch.setattr(
@@ -1050,6 +1284,7 @@ def test_windows_stage_descriptor_closes_when_disposition_fails(
         runtime._file_snapshot(os.fstat(descriptor)),
         descriptor,
         b"trusted",
+        hashlib.sha256(b"trusted").hexdigest(),
     )
     closed: list[int] = []
     monkeypatch.setattr(runtime, "_uses_native_windows_paths", lambda: True)

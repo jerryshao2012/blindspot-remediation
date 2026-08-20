@@ -189,12 +189,52 @@ def test_shared_custom_root_rolls_up_all_three_gate_verdicts(
 
 
 @pytest.mark.parametrize("operation", ("acquire", "write_snapshot", "publish", "close"))
+@pytest.mark.parametrize(
+    ("command", "severity", "exit_code", "verdict", "reason_codes"),
+    (
+        ([sys.executable, "-c", "print('ok')"], "blocking", 0, "PASS", []),
+        (
+            [sys.executable, "-c", "raise SystemExit(1)"],
+            "blocking",
+            1,
+            "FAIL",
+            ["COMMAND_FAILED"],
+        ),
+        (
+            [sys.executable, "-c", "raise SystemExit(1)"],
+            "advisory",
+            2,
+            "NEEDS_HUMAN",
+            ["COMMAND_FAILED"],
+        ),
+    ),
+)
 def test_observability_runtime_exceptions_do_not_change_a_valid_gate(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
     operation: str,
+    command: list[str],
+    severity: str,
+    exit_code: int,
+    verdict: str,
+    reason_codes: list[str],
 ) -> None:
-    repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
+    repo = repository(tmp_path, command, severity=severity)
     output = tmp_path / "evidence"
+    finalized_result: bytes | None = None
+    original_finalize = EvidenceRun.finalize
+
+    def capture_finalize(
+        self: EvidenceRun,
+        result: dict[str, object],
+        manifest: dict[str, object],
+        trace: bytes,
+    ) -> Path:
+        nonlocal finalized_result
+        completed = original_finalize(self, result, manifest, trace)
+        finalized_result = (completed / "result.json").read_bytes()
+        return completed
+
+    monkeypatch.setattr(EvidenceRun, "finalize", capture_finalize)
 
     def fail(*_: object, **__: object) -> None:
         raise RuntimeError(operation)
@@ -208,12 +248,59 @@ def test_observability_runtime_exceptions_do_not_change_a_valid_gate(
             "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
             "--run-id", "runtime-error",
         ]
-    ) == 0
+    ) == exit_code
     captured = capsys.readouterr()
     result = output / "runtime-error/result.json"
-    assert captured.out == f"VERDICT: PASS\nRESULT: {result}\n"
+    assert captured.out == f"VERDICT: {verdict}\nRESULT: {result}\n"
     assert "WARNING: OBSERVABILITY_PUBLISH_FAILED\n" in captured.err
+    assert finalized_result is not None
+    assert result.read_bytes() == finalized_result
+    result_document = json.loads(finalized_result)
+    assert result_document["verdict"] == verdict
+    assert result_document["reason_codes"] == reason_codes
     verify_run(output / "runtime-error")
+
+
+@pytest.mark.parametrize(
+    ("budget", "warning"),
+    (
+        (False, "OBSERVABILITY_HISTORY_INVALID"),
+        (True, "OBSERVABILITY_BUDGET_EXHAUSTED"),
+    ),
+)
+def test_history_diagnostics_are_bounded_and_never_change_the_verdict(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    budget: bool,
+    warning: str,
+) -> None:
+    import release_gate.observability as observability
+
+    repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
+    output = tmp_path / "evidence"
+    malformed = output / "malformed"
+    malformed.mkdir(parents=True)
+    (malformed / "result.json").write_bytes(b"{}" if budget else b"{")
+    (malformed / "manifest.json").write_bytes(b"{}" if budget else b"{")
+    if budget:
+        monkeypatch.setattr(observability, "MAX_AGGREGATE_READ_BYTES", 1)
+
+    assert main(
+        [
+            "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
+            "--run-id", "bounded-warning",
+        ]
+    ) == 0
+
+    captured = capsys.readouterr()
+    result = output / "bounded-warning/result.json"
+    assert captured.out == f"VERDICT: PASS\nRESULT: {result}\n"
+    assert f"WARNING: {warning}\n" in captured.err
+    document = json.loads(result.read_bytes())
+    assert document["verdict"] == "PASS"
+    assert document["reason_codes"] == []
+    verify_run(output / "bounded-warning")
 
 
 def test_exit_three_never_attempts_observability(
