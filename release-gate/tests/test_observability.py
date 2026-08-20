@@ -154,6 +154,19 @@ def test_conflicting_duplicate_resolution_is_input_order_independent() -> None:
     )
 
 
+def test_equal_finished_instants_tie_break_by_run_id_not_timestamp_spelling() -> None:
+    from release_gate.observability import build_report_from_summaries
+
+    report = build_report_from_summaries(
+        [
+            summary("z-run", "2025-12-31T19:00:00-05:00"),
+            summary("a-run", "2026-01-01T00:00:00Z"),
+        ]
+    )
+
+    assert [item["run_id"] for item in report["source_runs"]] == ["a-run", "z-run"]
+
+
 def test_renderers_are_safe_accessible_and_self_contained() -> None:
     from release_gate.observability import (
         build_report_from_summaries,
@@ -267,6 +280,130 @@ def test_history_collection_is_bounded_to_latest_199_summaries(tmp_path: Path) -
 
     assert len(collected.source_runs) == 199
     assert collected.truncated is True
+
+
+def test_schema_rejects_non_profile_timestamps_and_ten_window_overflow() -> None:
+    root = Path(__file__).resolve().parents[1]
+    schema = json.loads(
+        (root / "schemas" / "gate-decisions-v1.schema.json").read_text()
+    )
+    valid = {
+        "version": 1,
+        "generation_id": "a" * 64,
+        "generated_at": "2026-01-01T00:00:00Z",
+        "scope": "evidence_root",
+        "window_sizes": [10, 100],
+        "source_runs": [summary("one", "2026-01-01T00:00:00Z")],
+        "series": [
+            summary("one", "2026-01-01T00:00:00Z")
+            | {
+                "config_changed": False,
+                "windows": {
+                    "10": {
+                        "sample_size": 1,
+                        "counts": {"releasing": 1, "failing": 0, "human_review": 0},
+                        "rates": {
+                            "releasing": 1.0,
+                            "failing": 0.0,
+                            "human_review": 0.0,
+                        },
+                    },
+                    "100": {
+                        "sample_size": 1,
+                        "counts": {"releasing": 1, "failing": 0, "human_review": 0},
+                        "rates": {
+                            "releasing": 1.0,
+                            "failing": 0.0,
+                            "human_review": 0.0,
+                        },
+                    },
+                },
+            }
+        ],
+        "diagnostics": {"skipped_runs": 0, "truncated": False, "warnings": []},
+    }
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+
+    for invalid in (
+        "2026-01-01T00:00:00-00:00",
+        "2026-01-01T00:00:00+14:01",
+        "2026-01-01t00:00:00z",
+    ):
+        candidate = json.loads(json.dumps(valid))
+        candidate["generated_at"] = invalid
+        assert list(validator.iter_errors(candidate))
+    candidate = json.loads(json.dumps(valid))
+    candidate["series"][0]["windows"]["10"]["sample_size"] = 11
+    assert list(validator.iter_errors(candidate))
+
+
+def test_history_scans_at_most_1000_safe_directories(tmp_path: Path) -> None:
+    from release_gate.observability import WarningCategory, collect_history
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    for number in range(1001):
+        directory = root / f"run-{number:04}"
+        directory.mkdir()
+        (directory / ".incomplete").write_text("", encoding="utf-8")
+
+    collected = collect_history(root)
+
+    assert collected.skipped_runs == 1000
+    assert collected.truncated is True
+    assert WarningCategory.SCAN_LIMIT_REACHED in collected.warnings
+
+
+def test_history_respects_aggregate_read_budget_and_rejects_oversized_cache(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import release_gate.observability as observability
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    write_valid_run(root, "first")
+    write_valid_run(root, "second")
+    result_size = (root / "first" / "result.json").stat().st_size
+    monkeypatch.setattr(observability, "MAX_AGGREGATE_READ_BYTES", result_size + 1)  # type: ignore[union-attr]
+    cache_path = tmp_path / "cache.json"
+    cache_path.write_bytes(b"x" * (2 * 1024 * 1024 + 1))
+
+    collected = observability.collect_history(root, cache=cache_path)
+
+    assert collected.source_runs == ()
+    assert collected.skipped_runs == 3
+    assert observability.WarningCategory.CACHE_INVALID in collected.warnings
+    assert observability.WarningCategory.RUN_TOO_LARGE in collected.warnings
+
+
+def test_history_rejects_directory_symlinks_and_detects_result_swap(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import release_gate.observability as observability
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    run = write_valid_run(root, "valid")
+    (root / "directory-link").symlink_to(run, target_is_directory=True)
+    replacement = run / "replacement.json"
+    replacement.write_bytes((run / "result.json").read_bytes())
+    original_read = observability.os.read
+    swapped = False
+
+    def swap_after_read(fd: int, size: int) -> bytes:
+        nonlocal swapped
+        content = original_read(fd, size)
+        if not swapped:
+            swapped = True
+            replacement.replace(run / "result.json")
+        return content
+
+    monkeypatch.setattr(observability.os, "read", swap_after_read)  # type: ignore[union-attr]
+    collected = observability.collect_history(root)
+
+    assert collected.source_runs == ()
+    assert collected.skipped_runs == 2
+    assert observability.WarningCategory.RUN_DIRECTORY_UNSAFE in collected.warnings
 
 
 def test_gate_decisions_schema_validates_report() -> None:

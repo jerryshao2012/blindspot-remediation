@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import html
 import json
 import os
@@ -141,46 +142,74 @@ def collect_history(
     candidates: list[DecisionSummary | Mapping[str, Any]] = []
     skipped = 0
     warnings: set[WarningCategory] = set()
-    cache_values, cache_warning = _cache_summaries(cache)
+    budget = _ReadBudget(MAX_AGGREGATE_READ_BYTES)
+    cache_values, cache_warning = _cache_summaries(cache, budget)
     if cache_warning is not None:
         skipped += 1
         warnings.add(cache_warning)
     candidates.extend(cache_values)
 
-    try:
-        entries = list(evidence_root.iterdir())
-    except OSError:
+    root_fd = _open_directory(evidence_root)
+    if root_fd is None:
         return _collected(
-            candidates, skipped + 1, warnings | {WarningCategory.MALFORMED_RUN}, False
+            candidates,
+            skipped + 1,
+            warnings | {WarningCategory.RUN_DIRECTORY_UNSAFE},
+            False,
         )
-    safe_directories: list[tuple[float, Path]] = []
-    for entry in entries:
-        if entry.name == "_observability":
-            continue
-        try:
-            metadata = os.lstat(entry)
-        except OSError:
+    candidates_to_scan: list[_ScanCandidate] = []
+    scan_truncated = False
+    try:
+        with os.scandir(root_fd) as entries:
+            for entry in entries:
+                if entry.name == "_observability":
+                    continue
+                try:
+                    metadata = _path_lstat(entry.name, dir_fd=root_fd)
+                except OSError:
+                    skipped += 1
+                    warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
+                    continue
+                if not _is_safe_directory(metadata):
+                    if stat.S_ISLNK(metadata.st_mode) or _is_reparse_point(metadata):
+                        skipped += 1
+                        warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
+                    continue
+                candidate = _ScanCandidate(
+                    entry.name, metadata.st_mtime, _identity(metadata)
+                )
+                if len(candidates_to_scan) < MAX_SCAN_DIRECTORIES:
+                    heapq.heappush(candidates_to_scan, candidate)
+                elif candidates_to_scan[0] < candidate:
+                    heapq.heapreplace(candidates_to_scan, candidate)
+                    scan_truncated = True
+                else:
+                    scan_truncated = True
+    except OSError:
+        skipped += 1
+        warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
+    if scan_truncated:
+        warnings.add(WarningCategory.SCAN_LIMIT_REACHED)
+    for candidate in sorted(
+        candidates_to_scan, key=lambda item: (-item.mtime, item.name)
+    ):
+        directory_fd = _open_directory(
+            candidate.name, dir_fd=root_fd, expected=candidate.identity
+        )
+        if directory_fd is None:
             skipped += 1
             warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
             continue
-        if not _is_safe_directory(metadata):
-            if entry.is_dir() or stat.S_ISLNK(metadata.st_mode):
-                skipped += 1
-                warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
-            continue
-        safe_directories.append((metadata.st_mtime, entry))
-    safe_directories.sort(key=lambda item: (-item[0], item[1].name))
-    scan_truncated = len(safe_directories) > MAX_SCAN_DIRECTORIES
-    if scan_truncated:
-        warnings.add(WarningCategory.SCAN_LIMIT_REACHED)
-    budget = _ReadBudget(MAX_AGGREGATE_READ_BYTES)
-    for _, directory in safe_directories[:MAX_SCAN_DIRECTORIES]:
-        parsed, reason = _read_completed_run(directory, budget)
+        try:
+            parsed, reason = _read_completed_run(directory_fd, candidate.name, budget)
+        finally:
+            os.close(directory_fd)
         if parsed is None:
             skipped += 1
             warnings.add(reason)
         else:
             candidates.append(parsed)
+    os.close(root_fd)
     return _collected(candidates, skipped, warnings, scan_truncated)
 
 
@@ -261,46 +290,139 @@ def render_html(report: Mapping[str, Any]) -> bytes:
 class _ReadBudget:
     remaining: int
 
-    def read(self, path: Path, limit: int) -> bytes | None:
-        try:
-            metadata = os.lstat(path)
-        except OSError:
-            return None
+    def charge(self, size: int) -> None:
+        self.remaining -= size
+
+
+@dataclass(frozen=True, slots=True)
+class _ScanCandidate:
+    name: str
+    mtime: float
+    identity: tuple[int, int, int]
+
+    def __lt__(self, other: _ScanCandidate) -> bool:
+        """Heap order: older candidates and later names are less desirable."""
+
+        return (self.mtime, _ReverseName(self.name)) < (
+            other.mtime,
+            _ReverseName(other.name),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _ReverseName:
+    value: str
+
+    def __lt__(self, other: _ReverseName) -> bool:
+        return self.value > other.value
+
+
+def _read_pinned_file(
+    path: str | Path,
+    budget: _ReadBudget,
+    limit: int,
+    *,
+    dir_fd: int | None = None,
+) -> tuple[bytes | None, WarningCategory]:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
+    try:
+        descriptor = _open_path(path, flags, dir_fd)
+        before = os.fstat(descriptor)
+        at_path = _path_lstat(path, dir_fd=dir_fd)
+        if not _is_safe_file(before) or not _same_identity(before, at_path):
+            return None, WarningCategory.RUN_DIRECTORY_UNSAFE
+        if before.st_size > limit or before.st_size > budget.remaining:
+            return None, WarningCategory.RUN_TOO_LARGE
+        chunks: list[bytes] = []
+        remaining = before.st_size
+        while remaining:
+            chunk = os.read(descriptor, min(64 * 1024, remaining))
+            if not chunk:
+                return None, WarningCategory.RUN_DIRECTORY_UNSAFE
+            chunks.append(chunk)
+            budget.charge(len(chunk))
+            remaining -= len(chunk)
+        after = os.fstat(descriptor)
+        current = _path_lstat(path, dir_fd=dir_fd)
         if (
-            not _is_safe_file(metadata)
-            or metadata.st_size > limit
-            or metadata.st_size > self.remaining
+            before.st_size != after.st_size
+            or before.st_mtime_ns != after.st_mtime_ns
+            or not _same_identity(before, current)
         ):
+            return None, WarningCategory.RUN_DIRECTORY_UNSAFE
+        return b"".join(chunks), WarningCategory.MALFORMED_RUN
+    except OSError:
+        return None, WarningCategory.RUN_DIRECTORY_UNSAFE
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _open_directory(
+    path: str | Path,
+    *,
+    dir_fd: int | None = None,
+    expected: tuple[int, int, int] | None = None,
+) -> int | None:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor: int | None = None
+    try:
+        descriptor = _open_path(path, flags, dir_fd)
+        opened = os.fstat(descriptor)
+        at_path = _path_lstat(path, dir_fd=dir_fd)
+        if (
+            not _is_safe_directory(opened)
+            or not _same_identity(opened, at_path)
+            or (expected is not None and _identity(opened) != expected)
+        ):
+            os.close(descriptor)
             return None
-        try:
-            content = path.read_bytes()
-        except OSError:
-            return None
-        if len(content) != metadata.st_size:
-            return None
-        self.remaining -= len(content)
-        return content
+        return descriptor
+    except OSError:
+        if descriptor is not None:
+            os.close(descriptor)
+        return None
+
+
+def _open_path(path: str | Path, flags: int, dir_fd: int | None) -> int:
+    if dir_fd is None:
+        return os.open(path, flags)
+    return os.open(path, flags, dir_fd=dir_fd)
+
+
+def _path_lstat(path: str | Path, *, dir_fd: int | None = None) -> os.stat_result:
+    if dir_fd is None:
+        return os.lstat(path)
+    return os.stat(path, dir_fd=dir_fd, follow_symlinks=False)
 
 
 def _read_completed_run(
-    directory: Path, budget: _ReadBudget
+    directory_fd: int, directory_name: str, budget: _ReadBudget
 ) -> tuple[DecisionSummary | None, WarningCategory]:
     try:
-        if os.path.lexists(directory / ".incomplete"):
-            return None, WarningCategory.INCOMPLETE_RUN
+        _path_lstat(".incomplete", dir_fd=directory_fd)
+    except FileNotFoundError:
+        pass
     except OSError:
         return None, WarningCategory.RUN_DIRECTORY_UNSAFE
-    for filename in ("result.json", "manifest.json"):
-        try:
-            metadata = os.lstat(directory / filename)
-        except OSError:
-            return None, WarningCategory.MALFORMED_RUN
-        if not _is_safe_file(metadata):
-            return None, WarningCategory.RUN_DIRECTORY_UNSAFE
-    result_bytes = budget.read(directory / "result.json", RESULT_READ_LIMIT)
-    manifest_bytes = budget.read(directory / "manifest.json", MANIFEST_READ_LIMIT)
-    if result_bytes is None or manifest_bytes is None:
-        return None, WarningCategory.RUN_TOO_LARGE
+    else:
+        return None, WarningCategory.INCOMPLETE_RUN
+    result_bytes, result_reason = _read_pinned_file(
+        "result.json", budget, RESULT_READ_LIMIT, dir_fd=directory_fd
+    )
+    if result_bytes is None:
+        return None, result_reason
+    manifest_bytes, manifest_reason = _read_pinned_file(
+        "manifest.json", budget, MANIFEST_READ_LIMIT, dir_fd=directory_fd
+    )
+    if manifest_bytes is None:
+        return None, manifest_reason
     try:
         result = json.loads(result_bytes)
         manifest = json.loads(manifest_bytes)
@@ -311,8 +433,8 @@ def _read_completed_run(
     if not _valid_result_document(result):
         return None, WarningCategory.RUN_SCHEMA_INVALID
     if (
-        result.get("run_id") != directory.name
-        or manifest.get("run_id") != directory.name
+        result.get("run_id") != directory_name
+        or manifest.get("run_id") != directory_name
     ):
         return None, WarningCategory.RUN_ID_MISMATCH
     record = _result_artifact(manifest)
@@ -330,17 +452,18 @@ def _read_completed_run(
 
 def _cache_summaries(
     cache: Mapping[str, Any] | Path | None,
+    budget: _ReadBudget,
 ) -> tuple[list[Mapping[str, Any]], WarningCategory | None]:
     if cache is None:
         return [], None
     value: Any = cache
     if isinstance(cache, Path):
+        content, _ = _read_pinned_file(cache, budget, RESULT_READ_LIMIT)
+        if content is None:
+            return [], WarningCategory.CACHE_INVALID
         try:
-            metadata = os.lstat(cache)
-            if not _is_safe_file(metadata) or metadata.st_size > RESULT_READ_LIMIT:
-                return [], WarningCategory.CACHE_INVALID
-            value = json.loads(cache.read_bytes())
-        except (OSError, json.JSONDecodeError):
+            value = json.loads(content)
+        except json.JSONDecodeError:
             return [], WarningCategory.CACHE_INVALID
     if not isinstance(value, Mapping) or not isinstance(value.get("source_runs"), list):
         return [], WarningCategory.CACHE_INVALID
@@ -483,25 +606,36 @@ def _result_artifact(manifest: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _is_safe_directory(metadata: os.stat_result) -> bool:
-    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     return (
         stat.S_ISDIR(metadata.st_mode)
         and not stat.S_ISLNK(metadata.st_mode)
-        and not (getattr(metadata, "st_file_attributes", 0) & reparse)
+        and not _is_reparse_point(metadata)
     )
 
 
 def _is_safe_file(metadata: os.stat_result) -> bool:
-    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     return (
         stat.S_ISREG(metadata.st_mode)
         and not stat.S_ISLNK(metadata.st_mode)
-        and not (getattr(metadata, "st_file_attributes", 0) & reparse)
+        and not _is_reparse_point(metadata)
     )
 
 
-def _timestamp_key(value: str) -> tuple[float, str]:
-    return (parse_timestamp(value).timestamp(), value)
+def _is_reparse_point(metadata: os.stat_result) -> bool:
+    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    return bool(getattr(metadata, "st_file_attributes", 0) & reparse)
+
+
+def _identity(metadata: os.stat_result) -> tuple[int, int, int]:
+    return (metadata.st_dev, metadata.st_ino, stat.S_IFMT(metadata.st_mode))
+
+
+def _same_identity(first: os.stat_result, second: os.stat_result) -> bool:
+    return _identity(first) == _identity(second)
+
+
+def _timestamp_key(value: str) -> float:
+    return parse_timestamp(value).timestamp()
 
 
 def _summary_identity(value: DecisionSummary) -> tuple[str, str, str, str]:
