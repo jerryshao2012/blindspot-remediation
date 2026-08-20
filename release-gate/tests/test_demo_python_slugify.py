@@ -41,6 +41,28 @@ def test_parser_exposes_documented_commands() -> None:
     for command in ("inspect", "grade"):
         parsed = parser.parse_args([command, "--result", "result.json"])
         assert parsed.command == command
+    parsed = parser.parse_args(
+        [
+            "grade",
+            "--result",
+            "result.json",
+            "--run-kind",
+            "re-gate",
+            "--wall-seconds",
+            "103",
+            "--usage-value",
+            "16.6",
+            "--usage-unit",
+            "AIC",
+            "--model",
+            "model-x",
+            "--human-step",
+            "dependency install",
+        ]
+    )
+    assert parsed.run_kind == "re-gate"
+    assert parsed.wall_seconds == 103.0
+    assert parser.parse_args(["campaign-report"]).command == "campaign-report"
     assert parser.parse_args(["control", "pass"]).scenario == "pass"
     with pytest.raises(SystemExit):
         parser.parse_args(["control", "unknown"])
@@ -73,6 +95,12 @@ def test_result_summary_requires_a_complete_v1_result(tmp_path: Path) -> None:
             {
                 "version": 1,
                 "run_id": "control-pass",
+                "finished_at": "2026-08-20T12:00:00Z",
+                "duration_ms": 1200,
+                "base_commit": "a" * 40,
+                "candidate_tree": "b" * 40,
+                "patch_sha256": "c" * 64,
+                "config_sha256": "d" * 64,
                 "verdict": "PASS",
                 "reason_codes": [],
                 "scope": {
@@ -99,12 +127,84 @@ def test_result_summary_requires_a_complete_v1_result(tmp_path: Path) -> None:
 
     assert summary.run_id == "control-pass"
     assert summary.verdict == "PASS"
+    assert summary.finished_at == "2026-08-20T12:00:00Z"
+    assert summary.duration_ms == 1200
+    assert summary.base_commit == "a" * 40
+    assert summary.candidate_tree == "b" * 40
+    assert summary.patch_sha256 == "c" * 64
+    assert summary.config_sha256 == "d" * 64
     assert summary.changed_paths == ("setup.py",)
     assert summary.checks == (("tests-and-coverage", "PASS", ()),)
 
     result.write_text("{}", encoding="utf-8")
     with pytest.raises(driver.DemoError, match="version"):
         driver.read_result_summary(result)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"usage_value": 1.0}, "supplied together"),
+        ({"usage_unit": "AIC"}, "supplied together"),
+        ({"wall_seconds": -1.0}, "finite and non-negative"),
+        ({"wall_seconds": float("nan")}, "finite and non-negative"),
+        ({"usage_value": float("inf"), "usage_unit": "AIC"}, "finite"),
+        ({"model": ""}, "model"),
+        ({"model": "x" * 257}, "model"),
+        ({"usage_value": 1.0, "usage_unit": "bad\nunit"}, "usage_unit"),
+        ({"human_step": "bad\x00step"}, "human_step"),
+    ],
+)
+def test_campaign_metadata_rejects_invalid_values(
+    changes: dict[str, object], message: str
+) -> None:
+    driver = load_driver()
+    values: dict[str, object] = {
+        "run_kind": "trial",
+        "wall_seconds": None,
+        "usage_value": None,
+        "usage_unit": None,
+        "model": None,
+        "human_step": None,
+    }
+    values.update(changes)
+
+    with pytest.raises(driver.DemoError, match=message):
+        driver.CampaignMetadata(**values)
+
+
+def test_result_summary_rejects_missing_or_invalid_identity(tmp_path: Path) -> None:
+    driver = load_driver()
+    base = {
+        "version": 1,
+        "run_id": "identity",
+        "finished_at": "2026-08-20T12:00:00Z",
+        "duration_ms": 1,
+        "base_commit": "a" * 40,
+        "candidate_tree": "b" * 40,
+        "patch_sha256": "c" * 64,
+        "config_sha256": "d" * 64,
+        "verdict": "PASS",
+        "reason_codes": [],
+        "scope": {
+            "changed_paths": [],
+            "outside_allowed_paths": [],
+            "forbidden_paths": [],
+            "review_required_paths": [],
+        },
+        "checks": [],
+        "manifest_path": "manifest.json",
+    }
+    result = tmp_path / "result.json"
+    for key, value in (("base_commit", None), ("duration_ms", -1)):
+        candidate = dict(base)
+        if value is None:
+            candidate.pop(key)
+        else:
+            candidate[key] = value
+        result.write_text(json.dumps(candidate), encoding="utf-8")
+        with pytest.raises(driver.DemoError, match=key):
+            driver.read_result_summary(result)
 
 
 def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:

@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -24,11 +26,16 @@ REPOSITORY = WORKBENCH / "python-slugify"
 TASK_VENV = WORKBENCH / "task-venv"
 ORACLE_VENV = WORKBENCH / "oracle-venv"
 CONTROL_EVIDENCE = WORKBENCH / "evidence"
+PRIVATE_CAMPAIGN = DEMO_ROOT / "private-campaign"
 UPSTREAM_URL = "https://github.com/un33k/python-slugify.git"
 UPSTREAM_SHA = "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
 BASE_REF = "release-gate-demo-base"
 EXPECTED_GATE_VERSION = "release-gate 0.3.0"
 TEST_TOOLS = ("pytest==8.4.2",)
+RUN_KINDS = ("trial", "re-gate", "control")
+_HEX_40 = re.compile(r"^[0-9a-f]{40}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class DemoError(RuntimeError):
@@ -38,6 +45,12 @@ class DemoError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class ResultSummary:
     run_id: str
+    finished_at: str
+    duration_ms: int
+    base_commit: str
+    candidate_tree: str
+    patch_sha256: str
+    config_sha256: str
     verdict: str
     reason_codes: tuple[str, ...]
     changed_paths: tuple[str, ...]
@@ -46,6 +59,27 @@ class ResultSummary:
     review_required_paths: tuple[str, ...]
     checks: tuple[tuple[str, str, tuple[str, ...]], ...]
     manifest_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class CampaignMetadata:
+    run_kind: str = "trial"
+    wall_seconds: float | None = None
+    usage_value: float | None = None
+    usage_unit: str | None = None
+    model: str | None = None
+    human_step: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.run_kind not in RUN_KINDS:
+            raise DemoError(f"unsupported run_kind: {self.run_kind}")
+        _optional_number(self.wall_seconds, "wall_seconds")
+        _optional_number(self.usage_value, "usage_value")
+        if (self.usage_value is None) != (self.usage_unit is None):
+            raise DemoError("usage_value and usage_unit must be supplied together")
+        _optional_metadata_text(self.usage_unit, "usage_unit", 32)
+        _optional_metadata_text(self.model, "model", 256)
+        _optional_metadata_text(self.human_step, "human_step", 256)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -58,9 +92,19 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("reset", help="restore the trusted demo baseline")
     control = commands.add_parser("control", help="apply a deterministic candidate")
     control.add_argument("scenario", choices=("pass", "fail", "needs-human"))
-    for name in ("inspect", "grade"):
-        command = commands.add_parser(name)
-        command.add_argument("--result", required=True, type=Path)
+    inspect = commands.add_parser("inspect")
+    inspect.add_argument("--result", required=True, type=Path)
+    grade = commands.add_parser("grade")
+    grade.add_argument("--result", required=True, type=Path)
+    grade.add_argument("--run-kind", choices=RUN_KINDS, default="trial")
+    grade.add_argument("--wall-seconds", type=float)
+    grade.add_argument("--usage-value", type=float)
+    grade.add_argument("--usage-unit")
+    grade.add_argument("--model")
+    grade.add_argument("--human-step")
+    commands.add_parser(
+        "campaign-report", help="regenerate the private campaign report"
+    )
     commands.add_parser("verify", help="exercise all three verdicts without Copilot")
     return parser
 
@@ -91,9 +135,26 @@ def classify_oracle(verdict: str, correct: bool) -> str:
 
 def read_result_summary(path: Path) -> ResultSummary:
     try:
-        value: object = json.loads(path.read_text(encoding="utf-8"))
+        result_bytes = path.read_bytes()
+        value: object = json.loads(result_bytes)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise DemoError(f"unable to read result JSON: {path}") from error
+    return _parse_result_summary(value)
+
+
+def load_result(path: Path) -> tuple[Path, bytes, ResultSummary]:
+    """Load a result once, preserving the exact bytes used for its identity."""
+
+    try:
+        resolved = path.expanduser().resolve(strict=True)
+        result_bytes = resolved.read_bytes()
+        value: object = json.loads(result_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DemoError(f"unable to read result JSON: {path}") from error
+    return resolved, result_bytes, _parse_result_summary(value)
+
+
+def _parse_result_summary(value: object) -> ResultSummary:
     if not isinstance(value, dict):
         raise DemoError("result must be a JSON object")
     if value.get("version") != 1:
@@ -119,6 +180,12 @@ def read_result_summary(path: Path) -> ResultSummary:
         )
     return ResultSummary(
         run_id=run_id,
+        finished_at=_required_string(value, "finished_at"),
+        duration_ms=_required_non_negative_int(value, "duration_ms"),
+        base_commit=_required_digest(value, "base_commit", _HEX_40),
+        candidate_tree=_required_digest(value, "candidate_tree", _HEX_40),
+        patch_sha256=_required_digest(value, "patch_sha256", _SHA256),
+        config_sha256=_required_digest(value, "config_sha256", _SHA256),
         verdict=verdict,
         reason_codes=_string_tuple(value, "reason_codes"),
         changed_paths=_string_tuple(scope, "changed_paths"),
@@ -128,6 +195,45 @@ def read_result_summary(path: Path) -> ResultSummary:
         checks=tuple(checks),
         manifest_path=_required_string(value, "manifest_path"),
     )
+
+
+def _required_non_negative_int(value: dict[str, Any], key: str) -> int:
+    item = value.get(key)
+    if isinstance(item, bool) or not isinstance(item, int) or item < 0:
+        raise DemoError(f"result {key} must be a non-negative integer")
+    return item
+
+
+def _required_digest(
+    value: dict[str, Any], key: str, pattern: re.Pattern[str]
+) -> str:
+    item = value.get(key)
+    if not isinstance(item, str) or not pattern.fullmatch(item):
+        raise DemoError(f"result {key} is invalid")
+    return item
+
+
+def _optional_number(value: object, label: str) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise DemoError(f"{label} must be numeric")
+    if not math.isfinite(float(value)) or value < 0:
+        raise DemoError(f"{label} must be finite and non-negative")
+
+
+def _optional_metadata_text(
+    value: object, label: str, maximum_length: int
+) -> None:
+    if value is None:
+        return
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > maximum_length
+        or _CONTROL_CHARACTER.search(value)
+    ):
+        raise DemoError(f"{label} is invalid")
 
 
 def _required_mapping(value: dict[str, Any], key: str) -> dict[str, Any]:
@@ -303,8 +409,7 @@ def control(scenario: str) -> None:
 
 
 def inspect_result(path: Path) -> ResultSummary:
-    resolved = path.expanduser().resolve(strict=True)
-    summary = read_result_summary(resolved)
+    resolved, _, summary = load_result(path)
     manifest = resolved.parent / summary.manifest_path
     if not manifest.is_file() or (resolved.parent / ".incomplete").exists():
         raise DemoError("evidence package is incomplete or missing manifest.json")
@@ -325,7 +430,8 @@ def inspect_result(path: Path) -> ResultSummary:
     return summary
 
 
-def grade(path: Path) -> str:
+def grade(path: Path, *, metadata: CampaignMetadata | None = None) -> str:
+    metadata = metadata or CampaignMetadata()
     _verify_repository()
     summary = inspect_result(path)
     correct = _oracle_truth()
@@ -515,7 +621,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif arguments.command == "inspect":
             inspect_result(arguments.result)
         elif arguments.command == "grade":
-            grade(arguments.result)
+            metadata = CampaignMetadata(
+                run_kind=arguments.run_kind,
+                wall_seconds=arguments.wall_seconds,
+                usage_value=arguments.usage_value,
+                usage_unit=arguments.usage_unit,
+                model=arguments.model,
+                human_step=arguments.human_step,
+            )
+            grade(arguments.result, metadata=metadata)
+        elif arguments.command == "campaign-report":
+            raise DemoError("campaign reporting is not yet available")
         elif arguments.command == "verify":
             verify()
         else:
