@@ -92,6 +92,7 @@ class RefreshSession:
     root: Path
     pending_result: Mapping[str, Any]
     namespace: Path | None = None
+    _ancestor_fds: list[int] = field(default_factory=list)
     _root_fd: int | None = None
     _root_identity: tuple[int, int] | None = None
     _namespace_identity: tuple[int, int] | None = None
@@ -233,6 +234,9 @@ class RefreshSession:
             if not _close_quietly(self._root_fd):
                 self._warn(ObservabilityWarning.PUBLISH_FAILED)
             self._root_fd = None
+        while self._ancestor_fds:
+            if not _close_quietly(self._ancestor_fds.pop()):
+                self._warn(ObservabilityWarning.PUBLISH_FAILED)
         if self._local_lock is not None:
             try:
                 self._local_lock.release()
@@ -364,6 +368,10 @@ class RefreshSession:
             self._root_fd is not None
             and self._root_identity is not None
             and _directory_fd_identity(self._root_fd) == self._root_identity
+            and all(
+                _directory_fd_identity(descriptor) is not None
+                for descriptor in self._ancestor_fds
+            )
             and (
                 _directory_identity(self.root) == self._root_identity
                 and self.namespace == self.root / _NAMESPACE
@@ -497,27 +505,65 @@ def _directory_fd_identity(descriptor: int) -> tuple[int, int] | None:
 
 
 def _open_directory(path: Path) -> int | None:
-    inspected = _lstat(path)
-    if not _safe_directory(inspected):
+    return _open_posix_directory_chain(path)
+
+
+def _open_posix_directory_chain(path: Path) -> int | None:
+    """Open an absolute directory by walking from a trusted root descriptor."""
+
+    if not path.is_absolute() or not path.anchor:
         return None
     descriptor: int | None = None
     try:
         descriptor = os.open(
-            path,
+            path.anchor,
             os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
         )
-        opened = os.fstat(descriptor)
-        current = _lstat(path)
-        if (
-            not _safe_directory(opened)
-            or not _safe_directory(current)
-            or inspected is None
-            or current is None
-            or (inspected.st_dev, inspected.st_ino)
-            != (opened.st_dev, opened.st_ino)
-            or (opened.st_dev, opened.st_ino)
-            != (current.st_dev, current.st_ino)
-        ):
+        if not _safe_directory(os.fstat(descriptor)):
+            return None
+        for component in path.parts[1:]:
+            if component in {"", ".", ".."} or not _exact_component(
+                descriptor, component
+            ):
+                return None
+            inspected = os.stat(
+                component, dir_fd=descriptor, follow_symlinks=False
+            )
+            if not _safe_directory(inspected):
+                return None
+            child: int | None = None
+            try:
+                child = os.open(
+                    component,
+                    os.O_RDONLY
+                    | getattr(os, "O_DIRECTORY", 0)
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=descriptor,
+                )
+                opened = os.fstat(child)
+                current = os.stat(
+                    component, dir_fd=descriptor, follow_symlinks=False
+                )
+            except OSError:
+                if child is not None:
+                    _close_quietly(child)
+                return None
+            if (
+                not _safe_directory(opened)
+                or not _safe_directory(current)
+                or (inspected.st_dev, inspected.st_ino)
+                != (opened.st_dev, opened.st_ino)
+                or (opened.st_dev, opened.st_ino)
+                != (current.st_dev, current.st_ino)
+            ):
+                assert child is not None
+                _close_quietly(child)
+                return None
+            _close_quietly(descriptor)
+            assert child is not None
+            descriptor = child
+        identity = _directory_fd_identity(descriptor)
+        if identity is None or _directory_identity(path) != identity:
             return None
         result = descriptor
         descriptor = None
@@ -527,6 +573,19 @@ def _open_directory(path: Path) -> int | None:
     finally:
         if descriptor is not None:
             _close_quietly(descriptor)
+
+
+def _exact_component(directory_fd: int, component: str) -> bool:
+    try:
+        with os.scandir(directory_fd) as entries:
+            matches = [
+                entry.name
+                for entry in entries
+                if entry.name.casefold() == component.casefold()
+            ]
+    except OSError:
+        return False
+    return matches == [component]
 
 
 def _open_lock_at(directory_fd: int) -> int | None:
@@ -685,9 +744,10 @@ def _acquire_windows(
 ) -> RefreshSession:
     """Path backend for Windows hosts, where Python lacks ``dir_fd`` support."""
 
-    session._root_fd = _open_windows_directory(session.root)
-    if session._root_fd is None:
+    opened_root = _open_windows_directory_chain(session.root)
+    if opened_root is None:
         return session._warn(ObservabilityWarning.PATH_UNSAFE)
+    session._root_fd, session._ancestor_fds = opened_root
     session._root_identity = _directory_fd_identity(session._root_fd)
     if (
         session._root_identity is None
@@ -741,7 +801,7 @@ def _acquire_windows(
                 )
             wait(min(0.05, max(0.0, deadline - clock())))
         if not session._safe_namespace() or not _same_open_file_path(
-            descriptor, namespace / _LOCK_NAME
+            descriptor, namespace / _LOCK_NAME, session._namespace_fd
         ):
             return _failed_windows_acquire(
                 session, descriptor, True, ObservabilityWarning.PATH_UNSAFE
@@ -817,6 +877,53 @@ def _open_windows_directory(path: Path) -> int | None:
     finally:
         if descriptor is not None:
             _close_quietly(descriptor)
+
+
+def _open_windows_directory_chain(path: Path) -> tuple[int, list[int]] | None:
+    """Pin every Windows ancestor before accepting the evidence root."""
+
+    if os.name != "nt":
+        descriptor = _open_posix_directory_chain(path)
+        return (descriptor, []) if descriptor is not None else None
+    if not path.is_absolute() or not path.anchor:
+        return None
+    pinned: list[int] = []
+    completed = False
+    try:
+        current = Path(path.anchor)
+        anchor = _open_windows_directory(current)
+        if anchor is None:
+            return None
+        pinned.append(anchor)
+        for component in path.parts[1:]:
+            if component in {"", ".", ".."} or not _exact_path_component(
+                current, component
+            ):
+                return None
+            current = current / component
+            child = _open_windows_directory(current)
+            if child is None:
+                return None
+            pinned.append(child)
+        final = pinned.pop()
+        completed = True
+        return final, pinned
+    finally:
+        if not completed:
+            while pinned:
+                _close_quietly(pinned.pop())
+
+
+def _exact_path_component(parent: Path, component: str) -> bool:
+    try:
+        matches = [
+            entry.name
+            for entry in parent.iterdir()
+            if entry.name.casefold() == component.casefold()
+        ]
+    except OSError:
+        return False
+    return matches == [component]
 
 
 def _open_windows_directory_native(path: Path) -> int | None:
@@ -937,7 +1044,9 @@ def _open_windows_child(
     flags: int,
     mode: int,
 ) -> int:
-    if os.name == "nt" or directory_fd is None:
+    if _uses_native_windows_paths() and directory_fd is not None:
+        return _open_windows_relative_native(directory_fd, path.name, flags)
+    if directory_fd is None:
         return os.open(path, flags, mode)
     return os.open(path.name, flags, mode, dir_fd=directory_fd)
 
@@ -945,9 +1054,306 @@ def _open_windows_child(
 def _windows_child_lstat(
     directory_fd: int | None, path: Path
 ) -> os.stat_result:
-    if os.name == "nt" or directory_fd is None:
+    if _uses_native_windows_paths() and directory_fd is not None:
+        return _stat_windows_relative_native(directory_fd, path.name)
+    if directory_fd is None:
         return path.lstat()
     return os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+
+
+def _replace_windows_child(
+    directory_fd: int, source: str, target: str
+) -> None:
+    if _uses_native_windows_paths():
+        _replace_windows_relative_native(directory_fd, source, target)
+        return
+    os.replace(
+        source,
+        target,
+        src_dir_fd=directory_fd,
+        dst_dir_fd=directory_fd,
+    )
+
+
+def _uses_native_windows_paths() -> bool:
+    return os.name == "nt"
+
+
+def _open_windows_relative_native(
+    directory_fd: int, name: str, flags: int
+) -> int:
+    desired_access = 0x00100080  # SYNCHRONIZE | FILE_READ_ATTRIBUTES
+    if flags & os.O_RDWR:
+        desired_access |= 0x80000000 | 0x40000000  # GENERIC_READ | GENERIC_WRITE
+    elif flags & os.O_WRONLY:
+        desired_access |= 0x40000000  # GENERIC_WRITE
+    else:
+        desired_access |= 0x80000000  # GENERIC_READ
+    disposition = 1  # FILE_OPEN
+    if flags & os.O_CREAT:
+        disposition = 2 if flags & os.O_EXCL else 3  # FILE_CREATE / FILE_OPEN_IF
+    handle = _nt_create_relative_handle(
+        directory_fd,
+        name,
+        desired_access=desired_access,
+        share_access=0x0001 | 0x0002,  # FILE_SHARE_READ | FILE_SHARE_WRITE
+        disposition=disposition,
+    )
+    return _windows_fd_from_handle(handle, flags)
+
+
+def _stat_windows_relative_native(
+    directory_fd: int, name: str
+) -> os.stat_result:
+    handle = _nt_create_relative_handle(
+        directory_fd,
+        name,
+        desired_access=0x00100080,  # SYNCHRONIZE | FILE_READ_ATTRIBUTES
+        share_access=0x0001 | 0x0002 | 0x0004,
+        disposition=1,
+    )
+    descriptor = _windows_fd_from_handle(handle, os.O_RDONLY)
+    try:
+        return os.fstat(descriptor)
+    finally:
+        _close_quietly(descriptor)
+
+
+def _replace_windows_relative_native(
+    directory_fd: int, source: str, target: str
+) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    source_handle = _nt_create_relative_handle(
+        directory_fd,
+        source,
+        desired_access=0x00110080,  # DELETE | SYNCHRONIZE | FILE_READ_ATTRIBUTES
+        share_access=0x0001 | 0x0002 | 0x0004,
+        disposition=1,
+    )
+    try:
+        parent_handle = _windows_handle_from_fd(directory_fd)
+
+        class _FileRenameInformation(ctypes.Structure):
+            _fields_ = (
+                ("replace_if_exists", wintypes.BOOLEAN),
+                ("root_directory", wintypes.HANDLE),
+                ("file_name_length", wintypes.DWORD),
+                ("file_name", wintypes.WCHAR * (len(target) + 1)),
+            )
+
+        information = _FileRenameInformation()
+        information.replace_if_exists = 1
+        information.root_directory = wintypes.HANDLE(parent_handle)
+        information.file_name_length = len(target.encode("utf-16-le"))
+        information.file_name = target
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        set_information = kernel32.SetFileInformationByHandle
+        set_information.argtypes = (
+            wintypes.HANDLE,
+            ctypes.c_int,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+        )
+        set_information.restype = wintypes.BOOL
+        if not set_information(
+            wintypes.HANDLE(source_handle),
+            3,  # FileRenameInfo
+            ctypes.byref(information),
+            ctypes.sizeof(information),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+    finally:
+        _close_windows_handle(source_handle)
+
+
+def _unlink_windows_child(directory_fd: int, name: str) -> None:
+    try:
+        if _uses_native_windows_paths():
+            _unlink_windows_relative_native(directory_fd, name)
+        else:
+            os.unlink(name, dir_fd=directory_fd)
+    except OSError:
+        pass
+
+
+def _unlink_windows_relative_native(directory_fd: int, name: str) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    handle = _nt_create_relative_handle(
+        directory_fd,
+        name,
+        desired_access=0x00110080,  # DELETE | SYNCHRONIZE | FILE_READ_ATTRIBUTES
+        share_access=0x0001 | 0x0002 | 0x0004,
+        disposition=1,
+    )
+    try:
+        class _FileDispositionInformation(ctypes.Structure):
+            _fields_ = (("delete_file", wintypes.BOOLEAN),)
+
+        information = _FileDispositionInformation(1)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        set_information = kernel32.SetFileInformationByHandle
+        set_information.argtypes = (
+            wintypes.HANDLE,
+            ctypes.c_int,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+        )
+        set_information.restype = wintypes.BOOL
+        if not set_information(
+            wintypes.HANDLE(handle),
+            4,  # FileDispositionInfo
+            ctypes.byref(information),
+            ctypes.sizeof(information),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+    finally:
+        _close_windows_handle(handle)
+
+
+def _nt_create_relative_handle(
+    directory_fd: int,
+    name: str,
+    *,
+    desired_access: int,
+    share_access: int,
+    disposition: int,
+) -> int:
+    import ctypes
+    from ctypes import wintypes
+
+    if not name or "\\" in name or "/" in name or name in {".", ".."}:
+        raise OSError("unsafe Windows child name")
+
+    class _UnicodeString(ctypes.Structure):
+        _fields_ = (
+            ("length", wintypes.USHORT),
+            ("maximum_length", wintypes.USHORT),
+            ("buffer", wintypes.LPWSTR),
+        )
+
+    class _ObjectAttributes(ctypes.Structure):
+        _fields_ = (
+            ("length", wintypes.ULONG),
+            ("root_directory", wintypes.HANDLE),
+            ("object_name", ctypes.POINTER(_UnicodeString)),
+            ("attributes", wintypes.ULONG),
+            ("security_descriptor", wintypes.LPVOID),
+            ("security_quality_of_service", wintypes.LPVOID),
+        )
+
+    class _IoStatusBlock(ctypes.Structure):
+        _fields_ = (
+            ("status", wintypes.LPVOID),
+            ("information", ctypes.c_size_t),
+        )
+
+    name_buffer = ctypes.create_unicode_buffer(name)
+    length = len(name.encode("utf-16-le"))
+    unicode_name = _UnicodeString(length, length + 2, name_buffer)
+    attributes = _ObjectAttributes(
+        ctypes.sizeof(_ObjectAttributes),
+        wintypes.HANDLE(_windows_handle_from_fd(directory_fd)),
+        ctypes.pointer(unicode_name),
+        0x40,  # OBJ_CASE_INSENSITIVE
+        None,
+        None,
+    )
+    io_status = _IoStatusBlock()
+    result_handle = wintypes.HANDLE()
+    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined]
+    nt_create_file = ntdll.NtCreateFile
+    nt_create_file.argtypes = (
+        ctypes.POINTER(wintypes.HANDLE),
+        wintypes.DWORD,
+        ctypes.POINTER(_ObjectAttributes),
+        ctypes.POINTER(_IoStatusBlock),
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+    )
+    nt_create_file.restype = wintypes.LONG
+    status = int(
+        nt_create_file(
+            ctypes.byref(result_handle),
+            desired_access,
+            ctypes.byref(attributes),
+            ctypes.byref(io_status),
+            None,
+            0x80,  # FILE_ATTRIBUTE_NORMAL
+            share_access,
+            disposition,
+            0x00000020 | 0x00000040 | 0x00200000,
+            None,
+            0,
+        )
+    )
+    if status < 0:
+        _raise_windows_status(status, name)
+    if result_handle.value is None:
+        raise OSError("NtCreateFile returned no handle")
+    return int(result_handle.value)
+
+
+def _windows_handle_from_fd(descriptor: int) -> int:
+    import msvcrt
+
+    get_osfhandle: Callable[[int], int]
+    get_osfhandle = msvcrt.get_osfhandle  # type: ignore[attr-defined]
+    return int(get_osfhandle(descriptor))
+
+
+def _windows_fd_from_handle(handle: int, flags: int) -> int:
+    import msvcrt
+
+    if flags & os.O_RDWR:
+        descriptor_flags = os.O_RDWR
+    elif flags & os.O_WRONLY:
+        descriptor_flags = os.O_WRONLY
+    else:
+        descriptor_flags = os.O_RDONLY
+    descriptor_flags |= getattr(os, "O_BINARY", 0)
+    try:
+        open_osfhandle: Callable[[int, int], int]
+        open_osfhandle = msvcrt.open_osfhandle  # type: ignore[attr-defined]
+        return int(open_osfhandle(handle, descriptor_flags))
+    except Exception:
+        _close_windows_handle(handle)
+        raise
+
+
+def _raise_windows_status(status: int, name: str) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined]
+    convert = ntdll.RtlNtStatusToDosError
+    convert.argtypes = (wintypes.LONG,)
+    convert.restype = wintypes.ULONG
+    error = int(convert(status))
+    if error in {2, 3}:
+        raise FileNotFoundError(error, "Windows child does not exist", name)
+    if error in {80, 183}:
+        raise FileExistsError(error, "Windows child already exists", name)
+    raise OSError(error, "Windows relative file operation failed", name)
+
+
+def _close_windows_handle(handle: int) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = (wintypes.HANDLE,)
+    close_handle.restype = wintypes.BOOL
+    close_handle(wintypes.HANDLE(handle))
 
 
 def _single_link(metadata: os.stat_result) -> bool:
@@ -1013,17 +1419,19 @@ def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
             not completed
             and opened_identity is not None
             and session._safe_namespace()
-            and _path_has_identity(path, opened_identity)
+            and _path_has_identity(
+                path, opened_identity, session._namespace_fd
+            )
         ):
-            try:
-                path.unlink()
-            except OSError:
-                pass
+            assert session._namespace_fd is not None
+            _unlink_windows_child(session._namespace_fd, path.name)
 
 
-def _path_has_identity(path: Path, identity: tuple[int, int]) -> bool:
+def _path_has_identity(
+    path: Path, identity: tuple[int, int], directory_fd: int | None = None
+) -> bool:
     try:
-        metadata = path.lstat()
+        metadata = _windows_child_lstat(directory_fd, path)
     except OSError:
         return False
     return (
@@ -1035,17 +1443,15 @@ def _path_has_identity(path: Path, identity: tuple[int, int]) -> bool:
 
 def _same_staged_path(session: RefreshSession, staged: _StagedPath) -> bool:
     return session._safe_namespace() and _path_has_identity(
-        staged.path, staged.file.identity
+        staged.path, staged.file.identity, session._namespace_fd
     )
 
 
 def _remove_staged_path(session: RefreshSession, staged: _StagedPath) -> None:
     if not _same_staged_path(session, staged):
         return
-    try:
-        staged.path.unlink()
-    except OSError:
-        pass
+    assert session._namespace_fd is not None
+    _unlink_windows_child(session._namespace_fd, staged.path.name)
 
 
 def _fsync_directory_path(session: RefreshSession) -> None:
@@ -1085,7 +1491,8 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
         )
         for name, payload in payloads:
             target = session.namespace / name
-            before = _safe_target_snapshot_path(target)
+            assert session._namespace_fd is not None
+            before = _safe_target_snapshot_path(target, session._namespace_fd)
             if before is None or not session._safe_namespace():
                 session._warn(ObservabilityWarning.PATH_UNSAFE)
                 continue
@@ -1096,12 +1503,15 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
             try:
                 if (
                     not _same_staged_path(session, staged)
-                    or _safe_target_snapshot_path(target) != before
+                    or _safe_target_snapshot_path(target, session._namespace_fd)
+                    != before
                 ):
                     session._warn(ObservabilityWarning.PATH_UNSAFE)
                     continue
-                os.replace(staged.path, target)
-                after = _safe_target_snapshot_path(target)
+                _replace_windows_child(
+                    session._namespace_fd, staged.path.name, target.name
+                )
+                after = _safe_target_snapshot_path(target, session._namespace_fd)
                 if (
                     after is None
                     or not after.exists
@@ -1127,9 +1537,11 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
     return session.result
 
 
-def _safe_target_snapshot_path(path: Path) -> _TargetSnapshot | None:
+def _safe_target_snapshot_path(
+    path: Path, directory_fd: int | None = None
+) -> _TargetSnapshot | None:
     try:
-        metadata = path.lstat()
+        metadata = _windows_child_lstat(directory_fd, path)
     except FileNotFoundError:
         return _TargetSnapshot(False, None)
     except OSError:

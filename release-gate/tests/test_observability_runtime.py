@@ -263,9 +263,9 @@ def test_target_lstat_error_is_unsafe_and_never_replaced(
         monkeypatch.setattr(
             runtime,
             "_safe_target_snapshot_path",
-            lambda path: None
+            lambda path, directory_fd=None: None
             if path.name == "gate-decisions-v1.json"
-            else original_path_snapshot(path),
+            else original_path_snapshot(path, directory_fd),
         )
     else:
         monkeypatch.setattr(runtime.os, "stat", denied)
@@ -409,7 +409,11 @@ def test_root_swap_during_open_never_touches_replacement_lock(
 
     def swap_then_open(path: object, *args: object, **kwargs: object) -> int:
         nonlocal swapped
-        if Path(path) == root and not swapped:
+        if (
+            Path(path).name == root.name
+            and kwargs.get("dir_fd") is not None
+            and not swapped
+        ):
             swapped = True
             root.rename(saved)
             replacement_lock.parent.mkdir(parents=True)
@@ -422,6 +426,68 @@ def test_root_swap_during_open_never_touches_replacement_lock(
     assert not session.locked
     assert replacement_lock.read_bytes() == b"outside-owned"
     assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX ancestor symlink regression")
+def test_posix_static_ancestor_symlink_never_touches_outside_lock(
+    tmp_path: Path,
+) -> None:
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    outside_parent = tmp_path / "outside"
+    outside_lock = outside_parent / "evidence/_observability/.refresh.lock"
+    outside_lock.parent.mkdir(parents=True)
+    outside_lock.write_bytes(b"SECRET")
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(outside_parent, target_is_directory=True)
+
+    session = RefreshSession.acquire(
+        linked_parent / "evidence", _summary("run-one")
+    )
+
+    assert not session.locked
+    assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+    assert outside_lock.read_bytes() == b"SECRET"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX ancestor symlink regression")
+def test_posix_ancestor_swap_before_final_inspection_never_touches_outside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    parent = tmp_path / "parent"
+    root = parent / "evidence"
+    root.mkdir(parents=True)
+    saved = tmp_path / "saved-parent"
+    outside_parent = tmp_path / "outside"
+    outside_lock = outside_parent / "evidence/_observability/.refresh.lock"
+    outside_lock.parent.mkdir(parents=True)
+    outside_lock.write_bytes(b"SECRET")
+    original_lstat = runtime._lstat
+    swapped = False
+
+    def swap_before_final(path: Path) -> os.stat_result | None:
+        nonlocal swapped
+        if path == root and not swapped:
+            swapped = True
+            parent.rename(saved)
+            parent.symlink_to(outside_parent, target_is_directory=True)
+        return original_lstat(path)
+
+    monkeypatch.setattr(runtime, "_lstat", swap_before_final)
+    session = RefreshSession.acquire(root, _summary("run-one"))
+
+    assert not session.locked
+    assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+    assert outside_lock.read_bytes() == b"SECRET"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor backend regression")
@@ -456,6 +522,45 @@ def test_posix_root_open_closes_descriptor_when_fstat_fails(
 
     assert runtime._open_directory(root) is None
     assert closed == opened
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor backend regression")
+def test_posix_component_walk_closes_child_when_validation_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    original_open = runtime.os.open
+    original_close = runtime._close_quietly
+    original_fstat = runtime.os.fstat
+    opened: list[int] = []
+    closed: list[int] = []
+    fstat_calls = 0
+
+    def record_open(*args: object, **kwargs: object) -> int:
+        descriptor = original_open(*args, **kwargs)
+        opened.append(descriptor)
+        return descriptor
+
+    def record_close(descriptor: int) -> bool:
+        closed.append(descriptor)
+        return original_close(descriptor)
+
+    def fail_child(descriptor: int) -> os.stat_result:
+        nonlocal fstat_calls
+        fstat_calls += 1
+        if fstat_calls == 2:
+            raise PermissionError("denied")
+        return original_fstat(descriptor)
+
+    monkeypatch.setattr(runtime.os, "open", record_open)
+    monkeypatch.setattr(runtime.os, "fstat", fail_child)
+    monkeypatch.setattr(runtime, "_close_quietly", record_close)
+
+    assert runtime._open_directory(root) is None
+    assert sorted(closed) == sorted(opened)
 
 
 def test_pending_incomplete_run_is_excluded_from_snapshot_diagnostics(
@@ -641,6 +746,126 @@ def test_windows_backend_dispatch_avoids_descriptor_operations(
     assert data["generation_id"].encode() in result.dashboard_path.read_bytes()
 
 
+def test_native_windows_child_open_is_handle_relative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    calls: list[tuple[int, str, int]] = []
+    monkeypatch.setattr(
+        runtime, "_uses_native_windows_paths", lambda: True, raising=False
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_open_windows_relative_native",
+        lambda directory_fd, name, flags: calls.append(
+            (directory_fd, name, flags)
+        )
+        or 91,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        runtime.os,
+        "open",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("native Windows child open must be handle-relative")
+        ),
+    )
+
+    descriptor = runtime._open_windows_child(
+        17, tmp_path / "child.lock", os.O_RDWR | os.O_CREAT, 0o600
+    )
+
+    assert descriptor == 91
+    assert calls == [(17, "child.lock", os.O_RDWR | os.O_CREAT)]
+
+
+def test_native_windows_child_stat_is_handle_relative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    owned = tmp_path / "owned"
+    owned.write_bytes(b"owned")
+    expected = owned.stat()
+    calls: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        runtime, "_uses_native_windows_paths", lambda: True, raising=False
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_stat_windows_relative_native",
+        lambda directory_fd, name: calls.append((directory_fd, name)) or expected,
+        raising=False,
+    )
+
+    metadata = runtime._windows_child_lstat(23, tmp_path / "owned")
+
+    assert metadata == expected
+    assert calls == [(23, "owned")]
+
+
+def test_native_windows_replace_is_handle_relative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    calls: list[tuple[int, str, str]] = []
+    monkeypatch.setattr(
+        runtime, "_uses_native_windows_paths", lambda: True, raising=False
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_replace_windows_relative_native",
+        lambda directory_fd, source, target: calls.append(
+            (directory_fd, source, target)
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        runtime.os,
+        "replace",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("native Windows replace must be handle-relative")
+        ),
+    )
+
+    runtime._replace_windows_child(29, "stage", "index.html")
+
+    assert calls == [(29, "stage", "index.html")]
+
+
+def test_windows_acquire_validates_lock_through_namespace_handle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    original = runtime._same_open_file_path
+    calls: list[int | None] = []
+
+    def record_validation(
+        descriptor: int, path: Path, directory_fd: int | None = None
+    ) -> bool:
+        calls.append(directory_fd)
+        return original(descriptor, path, directory_fd)
+
+    monkeypatch.setattr(runtime, "_same_open_file_path", record_validation)
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+    try:
+        assert session.locked
+        assert calls == [session._namespace_fd, session._namespace_fd]
+    finally:
+        session.close()
+
+
 def test_windows_lock_wait_reuses_acquired_local_mutex(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -776,8 +1001,9 @@ def test_windows_directory_pins_deny_root_and_namespace_rename(
     import release_gate.observability_runtime as runtime
     from release_gate.observability_runtime import RefreshSession
 
-    root = tmp_path / "evidence"
-    root.mkdir()
+    parent = tmp_path / "container/parent"
+    root = parent / "evidence"
+    root.mkdir(parents=True)
     session = runtime._acquire_windows(
         RefreshSession(root, _summary("windows-run")),
         0.0,
@@ -787,6 +1013,8 @@ def test_windows_directory_pins_deny_root_and_namespace_rename(
     assert session.locked
     assert session.namespace is not None
     try:
+        with pytest.raises(OSError):
+            parent.rename(parent.parent / "moved-parent")
         with pytest.raises(OSError):
             root.rename(tmp_path / "moved-root")
         with pytest.raises(OSError):
@@ -833,6 +1061,113 @@ def test_windows_parent_swap_cannot_create_lock_in_replacement(
     assert not session.locked
     assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
     assert list(replacement_namespace.iterdir()) == []
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="factorized ancestor-symlink simulation runs on POSIX"
+)
+def test_windows_backend_rejects_static_ancestor_symlink(
+    tmp_path: Path,
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    outside_parent = tmp_path / "outside"
+    outside_lock = outside_parent / "evidence/_observability/.refresh.lock"
+    outside_lock.parent.mkdir(parents=True)
+    outside_lock.write_bytes(b"SECRET")
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(outside_parent, target_is_directory=True)
+
+    session = runtime._acquire_windows(
+        RefreshSession(linked_parent / "evidence", _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+
+    assert not session.locked
+    assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+    assert outside_lock.read_bytes() == b"SECRET"
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="factorized ancestor-symlink simulation runs on POSIX"
+)
+def test_windows_backend_rejects_early_ancestor_substitution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    parent = tmp_path / "parent"
+    root = parent / "evidence"
+    root.mkdir(parents=True)
+    saved = tmp_path / "saved-parent"
+    outside_parent = tmp_path / "outside"
+    outside_lock = outside_parent / "evidence/_observability/.refresh.lock"
+    outside_lock.parent.mkdir(parents=True)
+    outside_lock.write_bytes(b"SECRET")
+    original_lstat = runtime._lstat
+    swapped = False
+
+    def swap_before_final(path: Path) -> os.stat_result | None:
+        nonlocal swapped
+        if path == root and not swapped:
+            swapped = True
+            parent.rename(saved)
+            parent.symlink_to(outside_parent, target_is_directory=True)
+        return original_lstat(path)
+
+    monkeypatch.setattr(runtime, "_lstat", swap_before_final)
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+
+    assert not session.locked
+    assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+    assert outside_lock.read_bytes() == b"SECRET"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires a Windows junction")
+def test_windows_native_backend_rejects_static_ancestor_junction(
+    tmp_path: Path,
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    outside_parent = tmp_path / "outside"
+    outside_lock = outside_parent / "evidence/_observability/.refresh.lock"
+    outside_lock.parent.mkdir(parents=True)
+    outside_lock.write_bytes(b"SECRET")
+    linked_parent = tmp_path / "linked-parent"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(linked_parent), str(outside_parent)],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("Windows junction creation is unavailable")
+
+    session = runtime._acquire_windows(
+        RefreshSession(linked_parent / "evidence", _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+
+    assert not session.locked
+    assert outside_lock.read_bytes() == b"SECRET"
 
 
 @pytest.mark.skipif(
@@ -985,9 +1320,11 @@ def test_windows_target_substitution_is_not_replaced(
     original = runtime._safe_target_snapshot_path
     inspected = False
 
-    def substitute_after_snapshot(path: Path) -> runtime._TargetSnapshot | None:
+    def substitute_after_snapshot(
+        path: Path, directory_fd: int | None = None
+    ) -> runtime._TargetSnapshot | None:
         nonlocal inspected
-        snapshot = original(path)
+        snapshot = original(path, directory_fd)
         if path == target and not inspected:
             inspected = True
             os.link(outside, target)
