@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
+import secrets
 import stat
-import tempfile
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -75,7 +75,7 @@ class _TargetSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class _StagedFile:
-    path: Path
+    name: str
     file: _FileSnapshot
 
 
@@ -226,6 +226,7 @@ class RefreshSession:
         if not self.locked or not self._safe_namespace():
             return self._warn(ObservabilityWarning.PATH_UNSAFE).result
         assert self.namespace is not None
+        assert self._namespace_fd is not None
         try:
             report = self._report(include_pending=False)
             if WarningCategory.CACHE_INVALID.value in report["diagnostics"]["warnings"]:
@@ -236,22 +237,26 @@ class RefreshSession:
             )
             paths: dict[str, Path] = {}
             for name, payload in payloads:
-                target = self.namespace / name
-                before = _safe_target_snapshot(target)
+                before = _safe_target_snapshot_at(self._namespace_fd, name)
                 if before is None:
                     self._warn(ObservabilityWarning.PATH_UNSAFE)
                     continue
-                temporary = _stage(self.namespace, payload)
+                temporary = _stage_at(self._namespace_fd, payload)
                 try:
                     if (
                         not self._safe_namespace()
-                        or not _same_staged_file(temporary)
-                        or _safe_target_snapshot(target) != before
+                        or not _same_staged_file_at(self._namespace_fd, temporary)
+                        or _safe_target_snapshot_at(self._namespace_fd, name) != before
                     ):
                         self._warn(ObservabilityWarning.PATH_UNSAFE)
                         continue
-                    os.replace(temporary.path, target)
-                    after = _safe_target_snapshot(target)
+                    os.replace(
+                        temporary.name,
+                        name,
+                        src_dir_fd=self._namespace_fd,
+                        dst_dir_fd=self._namespace_fd,
+                    )
+                    after = _safe_target_snapshot_at(self._namespace_fd, name)
                     if (
                         after is None
                         or not after.exists
@@ -259,13 +264,13 @@ class RefreshSession:
                     ):
                         self._warn(ObservabilityWarning.PUBLISH_FAILED)
                         continue
-                    _fsync_directory(self.namespace)
-                    paths[name] = target
+                    _fsync_directory_fd(self._namespace_fd)
+                    paths[name] = self.namespace / name
                 except Exception:
                     self._warn(ObservabilityWarning.PUBLISH_FAILED)
                 finally:
                     try:
-                        temporary.path.unlink()
+                        os.unlink(temporary.name, dir_fd=self._namespace_fd)
                     except (FileNotFoundError, OSError):
                         pass
             self._result = ObservabilityResult(
@@ -435,9 +440,11 @@ def _unlock(descriptor: int) -> None:
         fcntl.lockf(descriptor, fcntl.LOCK_UN, 1, 0, os.SEEK_SET)
 
 
-def _safe_target_snapshot(path: Path) -> _TargetSnapshot | None:
+def _safe_target_snapshot_at(
+    directory_fd: int, name: str
+) -> _TargetSnapshot | None:
     try:
-        metadata = path.lstat()
+        metadata = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
     except FileNotFoundError:
         return _TargetSnapshot(False, None)
     except OSError:
@@ -447,8 +454,10 @@ def _safe_target_snapshot(path: Path) -> _TargetSnapshot | None:
     return _TargetSnapshot(True, _file_snapshot(metadata))
 
 
-def _stage(directory: Path, payload: bytes) -> _StagedFile:
-    descriptor, temporary = tempfile.mkstemp(prefix=".release-gate-", dir=directory)
+def _stage_at(directory_fd: int, payload: bytes) -> _StagedFile:
+    name = f".release-gate-{secrets.token_hex(12)}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(name, flags, 0o600, dir_fd=directory_fd)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(payload)
@@ -459,19 +468,23 @@ def _stage(directory: Path, payload: bytes) -> _StagedFile:
             os.close(descriptor)
         except OSError:
             pass
-        Path(temporary).unlink(missing_ok=True)
+        try:
+            os.unlink(name, dir_fd=directory_fd)
+        except OSError:
+            pass
         raise
-    path = Path(temporary)
-    metadata = _lstat(path)
+    metadata = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
     if not _safe_file(metadata):
-        path.unlink(missing_ok=True)
+        os.unlink(name, dir_fd=directory_fd)
         raise OSError("staged observability file is unsafe")
-    assert metadata is not None
-    return _StagedFile(path, _file_snapshot(metadata))
+    return _StagedFile(name, _file_snapshot(metadata))
 
 
-def _same_staged_file(staged: _StagedFile) -> bool:
-    metadata = _lstat(staged.path)
+def _same_staged_file_at(directory_fd: int, staged: _StagedFile) -> bool:
+    try:
+        metadata = os.stat(staged.name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError:
+        return False
     return (
         _safe_file(metadata)
         and metadata is not None
@@ -483,14 +496,8 @@ def _file_snapshot(metadata: os.stat_result) -> _FileSnapshot:
     return _FileSnapshot((metadata.st_dev, metadata.st_ino), metadata.st_size)
 
 
-def _fsync_directory(directory: Path) -> None:
-    if os.name == "nt":
-        return
-    descriptor = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+def _fsync_directory_fd(descriptor: int) -> None:
+    os.fsync(descriptor)
 
 
 def _close_quietly(descriptor: int) -> bool:

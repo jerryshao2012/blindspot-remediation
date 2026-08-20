@@ -192,12 +192,13 @@ def test_partial_replace_failure_leaves_the_other_file_readable(
     def fail_second(
         source: str | bytes | os.PathLike[str] | os.PathLike[bytes],
         target: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        **kwargs: object,
     ) -> None:
         nonlocal calls
         calls += 1
         if calls == 2:
             raise OSError("replace denied")
-        original(source, target)
+        original(source, target, **kwargs)
 
     monkeypatch.setattr(runtime.os, "replace", fail_second)
     with RefreshSession.acquire(root, _summary("run-one")) as session:
@@ -214,7 +215,7 @@ def test_swapped_staged_file_is_never_installed(
 
     root = tmp_path / "evidence"
     root.mkdir()
-    monkeypatch.setattr(runtime, "_same_staged_file", lambda _: False)
+    monkeypatch.setattr(runtime, "_same_staged_file_at", lambda *_: False)
     with RefreshSession.acquire(root, _summary("run-one")) as session:
         result = session.publish()
     assert "OBSERVABILITY_PATH_UNSAFE" in result.warning_codes
@@ -232,22 +233,22 @@ def test_target_lstat_error_is_unsafe_and_never_replaced(
     namespace.mkdir(parents=True)
     target = namespace / "gate-decisions-v1.json"
     target.write_bytes(b"owned")
-    original_lstat = Path.lstat
+    original_stat = runtime.os.stat
     replaced: list[object] = []
 
-    def denied(path: Path) -> os.stat_result:
-        if path == target:
+    def denied(path: object, *args: object, **kwargs: object) -> os.stat_result:
+        if path == "gate-decisions-v1.json" and kwargs.get("dir_fd") is not None:
             raise PermissionError("denied")
-        return original_lstat(path)
+        return original_stat(path, *args, **kwargs)
 
     def replace(_: object, destination: object) -> None:
         replaced.append(destination)
 
-    monkeypatch.setattr(Path, "lstat", denied)
+    monkeypatch.setattr(runtime.os, "stat", denied)
     monkeypatch.setattr(runtime.os, "replace", replace)
     with RefreshSession.acquire(root, _summary("run-one")) as session:
         result = session.publish()
-    assert target not in replaced
+    assert "gate-decisions-v1.json" not in replaced
     assert target.read_bytes() == b"owned"
     assert "OBSERVABILITY_PATH_UNSAFE" in result.warning_codes
 
@@ -302,3 +303,30 @@ def test_lock_busy_does_not_add_path_unsafe_warning(tmp_path: Path) -> None:
     session._result = session.result.with_warning(ObservabilityWarning.LOCK_BUSY)
     snapshot = session.write_snapshot(object())  # type: ignore[arg-type]
     assert snapshot.warnings == (ObservabilityWarning.LOCK_BUSY,)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink replacement is POSIX-specific")
+def test_namespace_swap_after_stage_cannot_redirect_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    original_stage = runtime._stage_at
+
+    def swap(directory_fd: int, payload: bytes) -> object:
+        staged = original_stage(directory_fd, payload)
+        namespace.rename(root / "saved-namespace")
+        namespace.symlink_to(outside, target_is_directory=True)
+        return staged
+
+    monkeypatch.setattr(runtime, "_stage_at", swap)
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+    assert "OBSERVABILITY_PATH_UNSAFE" in result.warning_codes
+    assert not list(outside.iterdir())
