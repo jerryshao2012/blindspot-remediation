@@ -274,6 +274,7 @@
       .nav-dot.active { border-color: var(--orange); background: var(--orange); box-shadow: 0 0 clamp(.45rem,.8vw,.8rem) rgba(0,117,190,.42); transform: scale(1.35); }
       .keyboard-hint { position: fixed; right: clamp(.7rem,1.5vw,1.5rem); bottom: clamp(.65rem,1.3vw,1.3rem); z-index: 7000; display: flex; align-items: center; gap: clamp(.35rem,.65vw,.65rem); color: rgba(23,23,20,.48); font-family: var(--font-mono); font-size: clamp(.5rem,.6vw,.62rem); pointer-events: none; }
       .key { min-width: clamp(1.15rem,1.55vw,1.55rem); padding: clamp(.1rem,.22vw,.22rem) clamp(.25rem,.45vw,.45rem); border: 1px solid var(--line); border-radius: clamp(.24rem,.4vw,.4rem); background: rgba(255,255,255,.66); text-align: center; }
+      .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); clip-path: inset(50%); white-space: nowrap; }
 
       /* === SLIDE 1 === */
       .title-content { align-items: center; justify-content: space-between; text-align: center; }
@@ -473,7 +474,8 @@
     <!-- === GLOBAL CONTROLS === -->
     <div class="progress-track" aria-hidden="true"><div class="progress-bar" id="progressBar" role="progressbar" aria-label="Presentation progress" aria-valuemin="1" aria-valuemax="5" aria-valuenow="1"></div></div>
     <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
-    <div class="keyboard-hint" aria-hidden="true"><span class="key">←</span><span class="key">→</span><span>navigate · N notes · E edit</span></div>
+    <div class="keyboard-hint" aria-hidden="true"><span class="key">←</span><span class="key">→</span><span>navigate · F fullscreen · N notes · E edit</span></div>
+    <div class="sr-only" id="fullscreenStatus" role="status" aria-live="polite"></div>
     <div class="edit-hotzone" id="editHotzone" title="Toggle edit mode"></div>
     <button class="edit-toggle" id="editToggle" type="button" title="Edit mode (E)" aria-label="Toggle edit mode">✎</button>
     <div class="edit-banner" role="status" aria-live="polite">Editing · autosave on · Ctrl/Cmd+S exports HTML</div>
@@ -685,14 +687,17 @@
           this.slides = Array.from(document.querySelectorAll(".slide"));
           this.currentSlide = 0; this.demoStep = 0; this.maxDemoStep = 3; this.wheelLocked = false; this.touchStartY = null; this.notes = null;
           this.reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-          this.progressBar = document.getElementById("progressBar"); this.navDots = document.getElementById("navDots"); this.demoStatus = document.getElementById("demoStatus");
-          this.setupDots(); this.setupObserver(); this.setupKeyboard(); this.setupWheel(); this.setupTouch(); this.setupDemo(); this.setupTilt(); this.restoreHash(); this.updateDemo(0); this.updateChrome();
+          this.progressBar = document.getElementById("progressBar"); this.navDots = document.getElementById("navDots"); this.demoStatus = document.getElementById("demoStatus"); this.fullscreenStatus = document.getElementById("fullscreenStatus");
+          this.setupDots(); this.setupObserver(); this.setupKeyboard(); this.setupFullscreen(); this.setupWheel(); this.setupTouch(); this.setupDemo(); this.setupTilt(); this.restoreHash(); this.updateDemo(0); this.updateChrome();
         }
         connectNotes(notes) { this.notes = notes; notes.render(this.currentSlide); }
-        blocked(event) { const t = event?.target; return document.body.classList.contains("edit-active") || this.notes?.isOpen || t?.isContentEditable || ["INPUT","TEXTAREA","SELECT"].includes(t?.tagName); }
+        typing(event) { const t = event?.target; return t?.isContentEditable || ["INPUT","TEXTAREA","SELECT"].includes(t?.tagName); }
+        blocked(event) { return document.body.classList.contains("edit-active") || this.notes?.isOpen || this.typing(event); }
         setupDots() { this.navDots.innerHTML = ""; this.slides.forEach((slide,index) => { const dot = document.createElement("button"); dot.type = "button"; dot.className = "nav-dot"; dot.setAttribute("aria-label",`Go to slide ${index+1}: ${slide.dataset.title}`); dot.addEventListener("click",() => this.goTo(index)); this.navDots.appendChild(dot); }); }
         setupObserver() { const observer = new IntersectionObserver(entries => entries.forEach(entry => { if (!entry.isIntersecting) return; entry.target.classList.add("visible"); const index = this.slides.indexOf(entry.target); if (entry.intersectionRatio >= .58) { this.currentSlide = index; this.updateChrome(); this.notes?.render(index); } }),{threshold:[.2,.58,.9]}); this.slides.forEach(slide => observer.observe(slide)); }
-        setupKeyboard() { document.addEventListener("keydown",event => { if (this.blocked(event)) return; if (["ArrowRight","ArrowDown","PageDown"," "].includes(event.key)) { event.preventDefault(); this.next(); } else if (["ArrowLeft","ArrowUp","PageUp"].includes(event.key)) { event.preventDefault(); this.previous(); } else if (event.key === "Home") { event.preventDefault(); this.goTo(0); } else if (event.key === "End") { event.preventDefault(); this.goTo(this.slides.length-1); } }); }
+        setupKeyboard() { document.addEventListener("keydown",event => { const fullscreenKey = event.key.toLowerCase() === "f" && !event.metaKey && !event.ctrlKey && !event.altKey; if (fullscreenKey && !document.body.classList.contains("edit-active") && !this.typing(event)) { event.preventDefault(); this.toggleFullscreen(); return; } if (this.blocked(event)) return; if (["ArrowRight","ArrowDown","PageDown"," "].includes(event.key)) { event.preventDefault(); this.next(); } else if (["ArrowLeft","ArrowUp","PageUp"].includes(event.key)) { event.preventDefault(); this.previous(); } else if (event.key === "Home") { event.preventDefault(); this.goTo(0); } else if (event.key === "End") { event.preventDefault(); this.goTo(this.slides.length-1); } }); }
+        setupFullscreen() { const announce = () => { const active = Boolean(document.fullscreenElement || document.webkitFullscreenElement); this.fullscreenStatus.textContent = active ? "Fullscreen enabled" : "Fullscreen exited"; }; document.addEventListener("fullscreenchange",announce); document.addEventListener("webkitfullscreenchange",announce); }
+        async toggleFullscreen() { const active = document.fullscreenElement || document.webkitFullscreenElement; try { if (active) { const exit = document.exitFullscreen || document.webkitExitFullscreen; if (!exit) throw new Error("Fullscreen exit is unavailable"); await exit.call(document); } else { const root = document.documentElement; const request = root.requestFullscreen || root.webkitRequestFullscreen; if (!request) throw new Error("Fullscreen is unavailable"); await request.call(root); } } catch (error) { console.warn("Could not toggle fullscreen",error); this.fullscreenStatus.textContent = "Fullscreen is unavailable in this browser context"; } }
         setupWheel() { window.addEventListener("wheel",event => { if (this.blocked(event) || Math.abs(event.deltaY) < 24 || this.wheelLocked) return; event.preventDefault(); this.wheelLocked = true; event.deltaY > 0 ? this.next() : this.previous(); setTimeout(() => { this.wheelLocked = false; },620); },{passive:false}); }
         setupTouch() { window.addEventListener("touchstart",event => { if (!this.blocked(event)) this.touchStartY = event.changedTouches[0]?.clientY ?? null; },{passive:true}); window.addEventListener("touchend",event => { if (this.blocked(event) || this.touchStartY === null) return; const delta = this.touchStartY - (event.changedTouches[0]?.clientY ?? this.touchStartY); this.touchStartY = null; if (Math.abs(delta) >= 48) delta > 0 ? this.next() : this.previous(); },{passive:true}); }
         setupDemo() { document.querySelectorAll("[data-demo-target]").forEach(button => button.addEventListener("click",() => this.updateDemo(Number(button.dataset.demoTarget)))); }
