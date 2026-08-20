@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A five-slide internal engineering presentation about skill and plugin development for code assistants, using Release Gate as a real case study." />
+    <title>From Prompt to Product — Skill &amp; Plugin Development</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23001928'/%3E%3Cpath d='M18 20h18l10 12-10 12H18z' fill='%230075be'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+
+    <style>
+      /* === THEME TOKENS === */
+      :root {
+        --paper: #f5f6f7;
+        --paper-deep: #e6f9fe;
+        --white: #fefefe;
+        --ink: #001928;
+        --muted: #646c76;
+        --line: rgba(0, 25, 40, 0.16);
+        --soft-line: rgba(0, 25, 40, 0.09);
+        --terminal: #001928;
+        --terminal-soft: #003552;
+        /* Legacy token name retained to avoid changing the presentation controller; value is BMO brand blue. */
+        --orange: #0075be;
+        --orange-soft: rgba(0, 117, 190, 0.12);
+        --green: #00e7b4;
+        --amber: #ffc827;
+        --red: #e9425f;
+        --sky: #73c3eb;
+        --font-display: "Heebo", Arial, sans-serif;
+        --font-mono: "IBM Plex Mono", monospace;
+        --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        --title-size: clamp(2.2rem, 6.2vw, 6.2rem);
+        --h2-size: clamp(1.55rem, 3.4vw, 3.55rem);
+        --h3-size: clamp(0.86rem, 1.18vw, 1.22rem);
+        --body-size: clamp(0.72rem, 1vw, 1rem);
+        --small-size: clamp(0.56rem, 0.7vw, 0.74rem);
+        --slide-padding: clamp(1rem, 3.7vw, 4.5rem);
+        --content-gap: clamp(0.65rem, 1.7vw, 1.8rem);
+        --element-gap: clamp(0.3rem, 0.75vw, 0.8rem);
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      button, a { font: inherit; }
+
+      /* ===========================================
+         VIEWPORT FITTING: MANDATORY BASE STYLES
+         Include this ENTIRE file in every presentation.
+         These styles ensure slides fit exactly in the viewport.
+         =========================================== */
+
+      /* 1. Lock html/body to viewport */
+      html, body {
+          height: 100%;
+          overflow-x: hidden;
+      }
+
+      html {
+          scroll-snap-type: y mandatory;
+          scroll-behavior: smooth;
+      }
+
+      /* 2. Each slide = exact viewport height */
+      .slide {
+          width: 100vw;
+          height: 100vh;
+          height: 100dvh; /* Dynamic viewport height for mobile browsers */
+          overflow: hidden; /* CRITICAL: Prevent ANY overflow */
+          scroll-snap-align: start;
+          display: flex;
+          flex-direction: column;
+          position: relative;
+      }
+
+      /* 3. Content container with flex for centering */
+      .slide-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          max-height: 100%;
+          overflow: hidden; /* Double-protection against overflow */
+          padding: var(--slide-padding);
+      }
+
+      /* 4. ALL typography uses clamp() for responsive scaling */
+      :root {
+          /* Titles scale from mobile to desktop */
+          --title-size: clamp(1.5rem, 5vw, 4rem);
+          --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+          --h3-size: clamp(1rem, 2.5vw, 1.75rem);
+
+          /* Body text */
+          --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+          --small-size: clamp(0.65rem, 1vw, 0.875rem);
+
+          /* Spacing scales with viewport */
+          --slide-padding: clamp(1rem, 4vw, 4rem);
+          --content-gap: clamp(0.5rem, 2vw, 2rem);
+          --element-gap: clamp(0.25rem, 1vw, 1rem);
+      }
+
+      /* 5. Cards/containers use viewport-relative max sizes */
+      .card, .container, .content-box {
+          max-width: min(90vw, 1000px);
+          max-height: min(80vh, 700px);
+      }
+
+      /* 6. Lists auto-scale with viewport */
+      .feature-list, .bullet-list {
+          gap: clamp(0.4rem, 1vh, 1rem);
+      }
+
+      .feature-list li, .bullet-list li {
+          font-size: var(--body-size);
+          line-height: 1.4;
+      }
+
+      /* 7. Grids adapt to available space */
+      .grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+          gap: clamp(0.5rem, 1.5vw, 1rem);
+      }
+
+      /* 8. Images constrained to viewport */
+      img, .image-container {
+          max-width: 100%;
+          max-height: min(50vh, 400px);
+          object-fit: contain;
+      }
+
+      /* ===========================================
+         RESPONSIVE BREAKPOINTS
+         Aggressive scaling for smaller viewports
+         =========================================== */
+
+      /* Short viewports (< 700px height) */
+      @media (max-height: 700px) {
+          :root {
+              --slide-padding: clamp(0.75rem, 3vw, 2rem);
+              --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+              --title-size: clamp(1.25rem, 4.5vw, 2.5rem);
+              --h2-size: clamp(1rem, 3vw, 1.75rem);
+          }
+      }
+
+      /* Very short viewports (< 600px height) */
+      @media (max-height: 600px) {
+          :root {
+              --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+              --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+              --title-size: clamp(1.1rem, 4vw, 2rem);
+              --body-size: clamp(0.7rem, 1.2vw, 0.95rem);
+          }
+
+          /* Hide non-essential elements */
+          .nav-dots, .keyboard-hint, .decorative {
+              display: none;
+          }
+      }
+
+      /* Extremely short (landscape phones, < 500px height) */
+      @media (max-height: 500px) {
+          :root {
+              --slide-padding: clamp(0.4rem, 2vw, 1rem);
+              --title-size: clamp(1rem, 3.5vw, 1.5rem);
+              --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+              --body-size: clamp(0.65rem, 1vw, 0.85rem);
+          }
+      }
+
+      /* Narrow viewports (< 600px width) */
+      @media (max-width: 600px) {
+          :root {
+              --title-size: clamp(1.25rem, 7vw, 2.5rem);
+          }
+
+          /* Stack grids vertically */
+          .grid {
+              grid-template-columns: 1fr;
+          }
+      }
+
+      /* ===========================================
+         REDUCED MOTION
+         Respect user preferences
+         =========================================== */
+      @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+              animation-duration: 0.01ms !important;
+              transition-duration: 0.2s !important;
+          }
+
+          html {
+              scroll-behavior: auto;
+          }
+      }
+
+      /* === FOUNDATION === */
+      body {
+        color: var(--ink);
+        background: var(--paper);
+        font-family: var(--font-display);
+        font-size: var(--body-size);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      body::before {
+        position: fixed; inset: 0; z-index: 10000; pointer-events: none; content: ""; opacity: 0.04;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      ::selection { color: var(--ink); background: var(--orange-soft); }
+      .slide {
+        isolation: isolate;
+        background: radial-gradient(circle at 86% 12%, rgba(115,195,235,.24), transparent 30%), linear-gradient(135deg, var(--white), var(--paper) 62%, var(--paper-deep));
+      }
+      .slide::after {
+        position: absolute; inset: clamp(.5rem, 1.1vw, 1.1rem); z-index: -1; content: ""; pointer-events: none;
+        border: 1px solid var(--soft-line); border-radius: clamp(1rem, 2vw, 2rem);
+      }
+      .slide-dark { color: #fefefe; background: radial-gradient(circle at 76% 16%, rgba(0,158,201,.22), transparent 34%), var(--terminal); }
+      .slide-dark::after { border-color: rgba(255,255,255,.08); }
+      #slide-1 .slide-content { position: relative; z-index: 1; }
+      .ambient-light-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+      .ambient-light {
+        position: absolute; width: clamp(16rem,34vw,42rem); aspect-ratio: 1; border-radius: 50%; opacity: .34;
+        filter: blur(clamp(2.6rem,5vw,5.5rem)); will-change: transform;
+        animation: ambient-drift var(--duration,18s) ease-in-out var(--delay,0s) infinite alternate;
+      }
+      .ambient-light-a { top: -22%; left: -5%; --duration: 19s; --delay: -7s; --dx: 12vw; --dy: 8vh; --dx2: 5vw; --dy2: 16vh; background: radial-gradient(circle,rgba(115,195,235,.7),rgba(115,195,235,0) 70%); }
+      .ambient-light-b { top: 5%; right: -13%; --duration: 23s; --delay: -12s; --dx: -14vw; --dy: 12vh; --dx2: -7vw; --dy2: -5vh; background: radial-gradient(circle,rgba(0,117,190,.42),rgba(0,117,190,0) 70%); }
+      .ambient-light-c { bottom: -34%; left: 31%; --duration: 21s; --delay: -4s; --dx: 9vw; --dy: -14vh; --dx2: -11vw; --dy2: -7vh; background: radial-gradient(circle,rgba(0,231,180,.28),rgba(0,231,180,0) 70%); }
+      @keyframes ambient-drift {
+        0% { transform: translate3d(0,0,0) scale(.92); }
+        52% { transform: translate3d(var(--dx),var(--dy),0) scale(1.08); }
+        100% { transform: translate3d(var(--dx2),var(--dy2),0) scale(.98); }
+      }
+      .slide-content { width: min(100%, 96rem); margin-inline: auto; gap: var(--content-gap); }
+      .slide-header { display: flex; flex: 0 0 auto; align-items: flex-end; justify-content: space-between; gap: var(--content-gap); }
+      .slide-header-copy { min-width: 0; }
+      .eyebrow {
+        display: flex; align-items: center; gap: clamp(.35rem,.7vw,.7rem); color: var(--orange);
+        font-family: var(--font-mono); font-size: clamp(.64rem,.78vw,.84rem); font-weight: 600;
+        letter-spacing: clamp(.08em,.16vw,.18em); line-height: 1.3; text-transform: uppercase;
+      }
+      .eyebrow::before { width: clamp(1.4rem,2.8vw,3rem); height: 1px; content: ""; background: currentColor; }
+      h1, h2, h3, p { text-wrap: balance; }
+      h1, h2, h3 { letter-spacing: -.035em; }
+      h1 { max-width: min(92vw,74rem); font-size: var(--title-size); font-weight: 500; line-height: .96; }
+      h2 { margin-top: clamp(.25rem,.55vw,.6rem); font-size: var(--h2-size); font-weight: 500; line-height: 1.02; }
+      .slide-number { flex: 0 0 auto; color: rgba(37,33,28,.42); font-family: var(--font-mono); font-size: clamp(.64rem,.82vw,.88rem); letter-spacing: .12em; }
+      .slide-dark .slide-number { color: rgba(255,255,255,.32); }
+      .mono { font-family: var(--font-mono); }
+      .accent { color: var(--orange); }
+
+      /* === REVEALS === */
+      .reveal, .reveal-left, .reveal-scale {
+        opacity: 0; transition: opacity 650ms var(--ease), transform 650ms var(--ease), filter 650ms var(--ease);
+        transition-delay: var(--delay, 0ms); will-change: opacity, transform;
+      }
+      .reveal { transform: translateY(clamp(.8rem,2vw,1.8rem)); }
+      .reveal-left { transform: translateX(calc(-1 * clamp(.8rem,2vw,1.8rem))); }
+      .reveal-scale { filter: blur(clamp(.1rem,.35vw,.3rem)); transform: scale(.96); }
+      .slide.visible .reveal, .slide.visible .reveal-left, .slide.visible .reveal-scale { opacity: 1; filter: blur(0); transform: translate(0) scale(1); }
+
+      /* === GLOBAL CHROME === */
+      .progress-track { position: fixed; inset: 0 0 auto; z-index: 9000; height: clamp(.18rem,.32vw,.3rem); background: rgba(34,31,26,.08); }
+      .progress-bar { width: 100%; height: 100%; background: var(--orange); transform: scaleX(.04); transform-origin: left; transition: transform 240ms ease; }
+      .nav-dots { position: fixed; top: 50%; right: clamp(.55rem,1.3vw,1.35rem); z-index: 8000; display: flex; flex-direction: column; gap: clamp(.38rem,.7vw,.72rem); transform: translateY(-50%); }
+      .nav-dot { width: clamp(.48rem,.62vw,.64rem); aspect-ratio: 1; border: 1px solid rgba(23,23,20,.38); border-radius: 50%; background: rgba(248,245,238,.72); cursor: pointer; transition: 240ms; }
+      .nav-dot.active { border-color: var(--orange); background: var(--orange); box-shadow: 0 0 clamp(.45rem,.8vw,.8rem) rgba(0,117,190,.42); transform: scale(1.35); }
+      .keyboard-hint { position: fixed; right: clamp(.7rem,1.5vw,1.5rem); bottom: clamp(.65rem,1.3vw,1.3rem); z-index: 7000; display: flex; align-items: center; gap: clamp(.35rem,.65vw,.65rem); color: rgba(23,23,20,.48); font-family: var(--font-mono); font-size: clamp(.5rem,.6vw,.62rem); pointer-events: none; }
+      .key { min-width: clamp(1.15rem,1.55vw,1.55rem); padding: clamp(.1rem,.22vw,.22rem) clamp(.25rem,.45vw,.45rem); border: 1px solid var(--line); border-radius: clamp(.24rem,.4vw,.4rem); background: rgba(255,255,255,.66); text-align: center; }
+
+      /* === SLIDE 1 === */
+      .title-content { align-items: center; justify-content: space-between; text-align: center; }
+      .title-topline { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: var(--element-gap); color: var(--muted); font-family: var(--font-mono); font-size: var(--small-size); letter-spacing: .12em; text-transform: uppercase; }
+      .title-copy { display: flex; flex: 1; min-height: 0; flex-direction: column; align-items: center; justify-content: center; gap: clamp(.65rem,1.55vw,1.55rem); }
+      .title-copy h1 span { display: block; }
+      .outline-word { color: transparent; -webkit-text-stroke: clamp(.06rem,.1vw,.1rem) var(--orange); }
+      .title-subtitle { max-width: min(82vw,56rem); color: var(--muted); font-size: clamp(.8rem,1.18vw,1.2rem); line-height: 1.5; }
+      .artifact-flow { display: grid; width: min(88vw,61rem); grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: clamp(.35rem,.85vw,.85rem); }
+      .artifact-node { padding: clamp(.5rem,.95vw,.95rem); border: 1px solid var(--line); border-radius: clamp(.65rem,1.15vw,1.15rem); background: rgba(254,254,254,.9); box-shadow: 0 clamp(.45rem,1.2vw,1.2rem) clamp(1rem,2.4vw,2.4rem) rgba(0,25,40,.08); }
+      .artifact-node strong { display: block; margin-bottom: clamp(.12rem,.28vw,.28rem); font-family: var(--font-mono); font-size: clamp(.61rem,.76vw,.8rem); }
+      .artifact-node span { color: var(--muted); font-size: clamp(.56rem,.66vw,.68rem); }
+      .flow-arrow { position: relative; width: clamp(1.2rem,2.7vw,2.7rem); height: 1px; background: var(--line); }
+      .flow-arrow::after { position: absolute; top: 50%; right: 0; width: clamp(.3rem,.5vw,.5rem); aspect-ratio: 1; border-top: 1px solid var(--orange); border-right: 1px solid var(--orange); content: ""; transform: translateY(-50%) rotate(45deg); }
+
+      /* === SLIDE 2: BEGINNER MAP + DEVELOPMENT LOOP === */
+      .extension-layout { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0,1fr) auto; gap: clamp(.55rem,1.25vw,1.25rem); }
+      .mechanism-grid { display: grid; min-height: 0; grid-template-columns: repeat(5,minmax(0,1fr)); gap: clamp(.42rem,.85vw,.85rem); }
+      .mechanism-card { position: relative; display: grid; min-height: 0; overflow: hidden; grid-template-rows: auto auto minmax(0,1fr) auto auto; gap: clamp(.42rem,.78vw,.78rem); padding: clamp(.7rem,1.2vw,1.2rem); border: 1px solid var(--line); border-radius: clamp(.7rem,1.2vw,1.2rem); background: rgba(254,254,254,.94); box-shadow: 0 clamp(.3rem,.7vw,.7rem) clamp(.8rem,1.7vw,1.7rem) rgba(0,25,40,.07); transition: 240ms; }
+      .mechanism-card:hover { border-color: rgba(0,117,190,.52); box-shadow: 0 clamp(.55rem,1vw,1rem) clamp(1.2rem,2.2vw,2.2rem) rgba(0,85,135,.13); transform: translateY(calc(-1 * clamp(.1rem,.25vw,.25rem))); }
+      .mechanism-card.skill { color: #fff; border-color: var(--orange); background: linear-gradient(145deg,#0075be,#005587); }
+      .mechanism-index { position: relative; z-index: 1; display: grid; width: clamp(1.55rem,2.2vw,2.2rem); aspect-ratio: 1; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: var(--white); font-family: var(--font-mono); font-size: clamp(.6rem,.7vw,.74rem); }
+      .skill .mechanism-index { color: var(--orange); border-color: #fff; background: #fff; }
+      .mechanism-glyph { position: absolute; top: clamp(.65rem,1.15vw,1.15rem); right: clamp(.65rem,1.1vw,1.1rem); color: rgba(37,33,28,.08); font-family: var(--font-mono); font-size: clamp(1.8rem,3.4vw,3.6rem); font-weight: 600; letter-spacing: -.08em; line-height: 1; pointer-events: none; }
+      .skill .mechanism-glyph { color: rgba(255,255,255,.08); }
+      .mechanism-question { position: relative; z-index: 1; max-width: 12rem; color: var(--orange) !important; font-family: var(--font-mono); font-size: clamp(.78rem,.9vw,.98rem) !important; font-weight: 500; line-height: 1.32 !important; }
+      .mechanism-copy { align-self: center; }
+      .mechanism-card h3 { font-size: clamp(.92rem,1.2vw,1.3rem); line-height: 1.08; }
+      .mechanism-card .mechanism-copy p { margin-top: clamp(.18rem,.34vw,.34rem); color: var(--muted); font-size: clamp(.82rem,.95vw,1.02rem); line-height: 1.42; }
+      .skill .mechanism-question { color: #fff !important; }
+      .skill .mechanism-copy p { color: rgba(255,255,255,.76); }
+      .mechanism-example { width: max-content; max-width: 100%; overflow: hidden; padding: clamp(.28rem,.45vw,.45rem) clamp(.42rem,.64vw,.64rem); border: 1px solid rgba(0,25,40,.11); border-radius: 999px; color: var(--ink); background: rgba(0,25,40,.045); font-family: var(--font-mono); font-size: clamp(.68rem,.76vw,.82rem); line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+      .skill .mechanism-example { color: rgba(255,255,255,.82); border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.06); }
+      .mechanism-trigger { padding-top: clamp(.42rem,.72vw,.72rem); border-top: 1px solid var(--soft-line); color: var(--orange); font-family: var(--font-mono); font-size: clamp(.68rem,.76vw,.82rem); font-weight: 500; line-height: 1.35; }
+      .skill .mechanism-trigger { color: #fff; border-color: rgba(255,255,255,.2); }
+      .development-loop { display: grid; grid-template-columns: auto repeat(4,minmax(0,1fr)); align-items: stretch; gap: clamp(.35rem,.7vw,.7rem); }
+      .loop-label { display: flex; align-items: center; padding: clamp(.5rem,.88vw,.88rem); border-radius: clamp(.55rem,.85vw,.85rem); color: var(--orange); background: var(--orange-soft); font-family: var(--font-mono); font-size: clamp(.58rem,.68vw,.73rem); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+      .loop-step { position: relative; padding: clamp(.45rem,.8vw,.8rem); border: 1px solid var(--line); border-radius: clamp(.55rem,.85vw,.85rem); background: rgba(255,255,255,.54); }
+      .loop-step:not(:last-child)::after { position: absolute; top: 50%; left: calc(100% + clamp(.08rem,.16vw,.16rem)); z-index: 2; color: var(--orange); content: "→"; font-family: var(--font-mono); font-size: clamp(.55rem,.7vw,.72rem); transform: translateY(-50%); }
+      .loop-step b { display: block; font-size: clamp(.78rem,.9vw,.97rem); }
+      .loop-step span { display: block; margin-top: clamp(.14rem,.26vw,.26rem); color: var(--muted); font-size: clamp(.68rem,.78vw,.84rem); line-height: 1.38; }
+
+      /* === SLIDE 3: RELEASE GATE ANATOMY === */
+      .anatomy-stage { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(0,.95fr) minmax(clamp(2.5rem,6vw,6rem),.18fr) minmax(0,1.1fr); align-items: stretch; }
+      .anatomy-card { display: flex; min-height: 0; flex-direction: column; padding: clamp(.65rem,1.25vw,1.25rem); border: 1px solid rgba(255,255,255,.1); border-radius: clamp(.85rem,1.55vw,1.55rem); background: rgba(255,255,255,.035); }
+      .anatomy-title { display: flex; align-items: center; justify-content: space-between; gap: var(--element-gap); padding-bottom: clamp(.5rem,.9vw,.9rem); border-bottom: 1px solid rgba(255,255,255,.08); }
+      .anatomy-title h3 { color: #fff; font-size: clamp(.9rem,1.14vw,1.24rem); }
+      .anatomy-title span { color: var(--orange); font-family: var(--font-mono); font-size: clamp(.56rem,.66vw,.71rem); }
+      .stack { display: grid; flex: 1; min-height: 0; grid-auto-rows: minmax(0,1fr); align-content: stretch; gap: clamp(.32rem,.65vw,.65rem); padding-block: clamp(.35rem,.8vw,.8rem); list-style: none; }
+      .stack-row { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: clamp(.45rem,.8vw,.8rem); padding: clamp(.4rem,.7vw,.7rem); border: 1px solid rgba(255,255,255,.07); border-radius: clamp(.45rem,.75vw,.75rem); background: rgba(255,255,255,.025); }
+      .stack-icon { display: grid; width: clamp(1.35rem,1.9vw,1.9rem); aspect-ratio: 1; place-items: center; border-radius: clamp(.35rem,.58vw,.58rem); color: var(--orange); background: var(--orange-soft); font-family: var(--font-mono); font-size: clamp(.5rem,.64vw,.67rem); }
+      .stack-row strong { display: block; color: rgba(255,255,255,.92); font-family: var(--font-mono); font-size: clamp(.72rem,.88vw,.95rem); font-weight: 500; }
+      .stack-row small { display: block; margin-top: clamp(.12rem,.22vw,.22rem); color: rgba(255,255,255,.62); font-size: clamp(.64rem,.74vw,.8rem); line-height: 1.38; }
+      .bridge { position: relative; display: grid; min-height: 0; place-items: center; }
+      .bridge svg { width: 100%; height: 74%; overflow: visible; }
+      .bridge-line { fill: none; stroke: rgba(255,255,255,.18); stroke-width: 1.5; stroke-dasharray: 5 7; }
+      .bridge-particle { fill: var(--sky); filter: drop-shadow(0 0 5px rgba(115,195,235,.88)); }
+      .bridge-label { position: absolute; left: 50%; padding: clamp(.25rem,.5vw,.5rem) clamp(.4rem,.75vw,.75rem); border: 1px solid rgba(115,195,235,.35); border-radius: 999px; color: var(--sky); background: var(--terminal); font-family: var(--font-mono); font-size: clamp(.44rem,.51vw,.54rem); transform: translateX(-50%); white-space: nowrap; }
+      .integrity-strip { display: grid; grid-template-columns: repeat(3,1fr); gap: clamp(.3rem,.6vw,.6rem); margin-top: clamp(.4rem,.75vw,.75rem); }
+      .integrity-strip span { padding: clamp(.38rem,.65vw,.65rem); border: 1px solid rgba(255,255,255,.08); border-radius: clamp(.45rem,.7vw,.7rem); color: rgba(255,255,255,.64); background: rgba(255,255,255,.025); font-family: var(--font-mono); font-size: clamp(.54rem,.63vw,.68rem); line-height: 1.3; text-align: center; }
+      .integrity-strip b { color: var(--green); font-weight: 500; }
+
+      /* === SLIDE 4: INTERACTIVE DEMO === */
+      .demo-shell { display: grid; flex: 1; min-height: 0; overflow: hidden; grid-template-rows: auto minmax(0,1fr); border: 1px solid rgba(255,255,255,.12); border-radius: clamp(.9rem,1.8vw,1.8rem); background: #10100e; box-shadow: 0 clamp(1rem,3vw,3rem) clamp(2rem,6vw,6rem) rgba(0,0,0,.3); transform: perspective(90rem) rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg)); transform-style: preserve-3d; transition: transform 240ms ease-out; }
+      .demo-toolbar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: clamp(.55rem,1vw,1rem); padding: clamp(.5rem,.78vw,.78rem) clamp(.65rem,1.05vw,1.05rem); border-bottom: 1px solid rgba(255,255,255,.08); background: #191916; }
+      .window-dots { display: flex; gap: clamp(.25rem,.4vw,.4rem); }
+      .window-dot { width: clamp(.46rem,.62vw,.62rem); aspect-ratio: 1; border-radius: 50%; }
+      .window-dot:nth-child(1) { background: #ff5f56; } .window-dot:nth-child(2) { background: #ffbd2e; } .window-dot:nth-child(3) { background: #27c93f; }
+      .demo-tabs { display: grid; width: min(100%,40rem); grid-template-columns: repeat(4,1fr); justify-self: center; gap: clamp(.18rem,.35vw,.35rem); }
+      .demo-tab { display: flex; align-items: center; justify-content: center; gap: clamp(.22rem,.4vw,.4rem); padding: clamp(.3rem,.55vw,.55rem); border: 1px solid transparent; border-radius: clamp(.4rem,.65vw,.65rem); color: rgba(255,255,255,.52); background: transparent; font-family: var(--font-mono); font-size: clamp(.55rem,.64vw,.7rem); cursor: pointer; }
+      .step-index { display: grid; width: clamp(.95rem,1.2vw,1.2rem); aspect-ratio: 1; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-size: clamp(.41rem,.48vw,.51rem); }
+      .demo-tab.active { color: #fff; border-color: rgba(115,195,235,.34); background: rgba(0,117,190,.2); }
+      .demo-tab.active .step-index { color: #171714; border-color: var(--orange); background: var(--orange); }
+      .demo-status { display: flex; align-items: center; gap: clamp(.28rem,.45vw,.45rem); color: var(--orange); font-family: var(--font-mono); font-size: clamp(.54rem,.62vw,.67rem); white-space: nowrap; }
+      .pulse { width: clamp(.34rem,.46vw,.46rem); aspect-ratio: 1; border-radius: 50%; background: var(--orange); animation: pulse 1.8s ease-out infinite; }
+      @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0,117,190,.48); } 70%,100% { box-shadow: 0 0 0 clamp(.32rem,.65vw,.65rem) rgba(0,117,190,0); } }
+      .demo-body { display: grid; min-height: 0; grid-template-columns: minmax(0,1.35fr) minmax(14rem,.65fr); }
+      .terminal-pane { display: grid; min-height: 0; overflow: hidden; align-content: center; padding: clamp(.65rem,1.45vw,1.45rem); border-right: 1px solid rgba(255,255,255,.08); background: linear-gradient(rgba(255,255,255,.017) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.017) 1px,transparent 1px),#11110f; background-size: clamp(1.3rem,2vw,2rem) clamp(1.3rem,2vw,2rem); font-family: var(--font-mono); }
+      .terminal-content { display: grid; max-height: 100%; gap: clamp(.23rem,.47vw,.47rem); }
+      .terminal-line { display: grid; grid-template-columns: clamp(1.1rem,1.65vw,1.65rem) minmax(0,1fr); gap: clamp(.3rem,.6vw,.6rem); opacity: 0; color: rgba(255,255,255,.74); font-size: clamp(.68rem,.82vw,.9rem); line-height: 1.38; transform: translateY(clamp(.35rem,.7vw,.7rem)); transition: opacity 420ms var(--ease), transform 420ms var(--ease); }
+      .terminal-line.is-visible { opacity: 1; transform: none; }
+      .terminal-prompt { color: var(--orange); text-align: right; user-select: none; }
+      .terminal-line.command { color: #f7f3ea; font-weight: 500; } .terminal-line.success { color: var(--green); } .terminal-line.info { color: var(--sky); } .terminal-line.warning { color: var(--amber); }
+      .demo-side { display: grid; min-height: 0; grid-template-rows: auto minmax(0,1fr) auto; gap: clamp(.5rem,.9vw,.9rem); padding: clamp(.65rem,1.15vw,1.15rem); background: #00283f; }
+      .demo-side-label { color: rgba(255,255,255,.5); font-family: var(--font-mono); font-size: clamp(.54rem,.62vw,.67rem); letter-spacing: .08em; text-transform: uppercase; }
+      .demo-panel { display: none; min-height: 0; align-content: center; gap: clamp(.45rem,.85vw,.85rem); }
+      .demo-panel.active { display: grid; animation: side-in 520ms var(--ease) both; }
+      @keyframes side-in { from { opacity: 0; transform: translateX(clamp(.55rem,1vw,1rem)); } to { opacity: 1; transform: none; } }
+      .demo-panel h3 { color: #fff; font-size: clamp(.98rem,1.28vw,1.38rem); line-height: 1.08; }
+      .demo-panel p { color: rgba(255,255,255,.6); font-size: clamp(.65rem,.76vw,.82rem); line-height: 1.48; }
+      .demo-fact { padding: clamp(.48rem,.82vw,.82rem); border: 1px solid rgba(115,195,235,.3); border-radius: clamp(.5rem,.82vw,.82rem); color: var(--sky); background: rgba(0,117,190,.16); font-family: var(--font-mono); font-size: clamp(.57rem,.66vw,.71rem); line-height: 1.42; }
+      .verdict-row { display: grid; grid-template-columns: repeat(3,1fr); gap: clamp(.28rem,.5vw,.5rem); }
+      .verdict { padding: clamp(.35rem,.6vw,.6rem); border: 1px solid rgba(255,255,255,.08); border-radius: clamp(.4rem,.65vw,.65rem); background: rgba(255,255,255,.025); font-family: var(--font-mono); font-size: clamp(.52rem,.59vw,.64rem); text-align: center; }
+      .pass { color: var(--green); } .fail { color: var(--red); } .human { color: var(--amber); }
+      .demo-next { display: flex; align-items: center; justify-content: space-between; gap: clamp(.3rem,.55vw,.55rem); padding-top: clamp(.4rem,.7vw,.7rem); border-top: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.34); font-family: var(--font-mono); font-size: clamp(.43rem,.51vw,.54rem); }
+      .demo-next b { color: var(--orange); font-weight: 500; }
+
+      /* === SLIDE 5 === */
+      .proof-layout { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(0,1.28fr) minmax(15rem,.72fr); gap: var(--content-gap); }
+      .proof-matrix { display: grid; min-height: 0; grid-template-columns: repeat(3,1fr); gap: clamp(.4rem,.78vw,.78rem); }
+      .proof-card { display: flex; min-height: 0; flex-direction: column; justify-content: space-between; gap: clamp(.35rem,.65vw,.65rem); padding: clamp(.55rem,1vw,1rem); border: 1px solid var(--line); border-radius: clamp(.65rem,1.08vw,1.08rem); background: rgba(254,254,254,.94); box-shadow: 0 clamp(.25rem,.55vw,.55rem) clamp(.7rem,1.4vw,1.4rem) rgba(0,25,40,.065); }
+      .proof-index { color: var(--orange); font-family: var(--font-mono); font-size: clamp(.62rem,.7vw,.76rem); }
+      .proof-card h3 { font-size: clamp(.98rem,1.18vw,1.28rem); line-height: 1.08; }
+      .proof-card p { color: var(--muted); font-size: clamp(.76rem,.9vw,.96rem); line-height: 1.44; }
+      .proof-state { display: flex; align-items: center; gap: clamp(.25rem,.48vw,.48rem); color: #0b8224; font-family: var(--font-mono); font-size: clamp(.6rem,.68vw,.74rem); }
+      .proof-state::before { display: grid; width: clamp(.82rem,1.05vw,1.05rem); aspect-ratio: 1; place-items: center; border-radius: 50%; color: #fff; background: #0b8224; content: "✓"; font-size: clamp(.4rem,.48vw,.5rem); }
+      .takeaways { display: grid; min-height: 0; align-content: center; gap: clamp(.5rem,1vw,1rem); padding: clamp(.65rem,1.3vw,1.3rem); border-radius: clamp(.85rem,1.55vw,1.55rem); color: #fff; background: radial-gradient(circle at 100% 0%,rgba(115,195,235,.34),transparent 44%),linear-gradient(145deg,#0075be,#005587); box-shadow: 0 clamp(.8rem,1.8vw,1.8rem) clamp(1.5rem,3.5vw,3.5rem) rgba(0,25,40,.2); }
+      .takeaways h3 { font-size: clamp(.9rem,1.15vw,1.24rem); }
+      .takeaway-list { display: grid; gap: clamp(.38rem,.72vw,.72rem); list-style: none; counter-reset: takeaway; }
+      .takeaway-list li { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: clamp(.42rem,.8vw,.8rem); color: rgba(255,255,255,.8); font-size: clamp(.74rem,.86vw,.94rem); line-height: 1.43; counter-increment: takeaway; }
+      .takeaway-list li::before { display: grid; width: clamp(1.15rem,1.55vw,1.55rem); aspect-ratio: 1; place-items: center; border: 1px solid rgba(255,255,255,.42); border-radius: 50%; color: #fff; content: counter(takeaway,decimal-leading-zero); font-family: var(--font-mono); font-size: clamp(.41rem,.48vw,.51rem); }
+      .host-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: clamp(.24rem,.44vw,.44rem); }
+      .host-chip { padding: clamp(.27rem,.47vw,.47rem); border: 1px solid rgba(255,255,255,.14); border-radius: clamp(.35rem,.56vw,.56rem); color: rgba(255,255,255,.72); background: rgba(255,255,255,.045); font-family: var(--font-mono); font-size: clamp(.56rem,.64vw,.69rem); text-align: center; }
+      .closing-line { padding-top: clamp(.42rem,.75vw,.75rem); border-top: 1px solid rgba(255,255,255,.18); color: #fff; font-family: var(--font-mono); font-size: clamp(.58rem,.67vw,.72rem); line-height: 1.42; }
+
+      /* === NOTES === */
+      .speaker-notes { display: none; }
+      .notes-drawer { position: fixed; top: clamp(.65rem,1.3vw,1.3rem); right: clamp(.65rem,1.3vw,1.3rem); bottom: clamp(.65rem,1.3vw,1.3rem); z-index: 12000; display: grid; width: min(92vw,32rem); grid-template-rows: auto auto minmax(0,1fr); overflow: hidden; border: 1px solid rgba(115,195,235,.22); border-radius: clamp(.85rem,1.4vw,1.4rem); opacity: 0; color: #fff; background: rgba(0,25,40,.97); box-shadow: 0 clamp(1rem,2.5vw,2.5rem) clamp(2rem,5vw,5rem) rgba(0,0,0,.4); pointer-events: none; transform: translateX(calc(100% + clamp(1rem,2vw,2rem))); transition: opacity 320ms var(--ease),transform 520ms var(--ease); backdrop-filter: blur(clamp(.7rem,1.4vw,1.4rem)); }
+      .notes-drawer.open { opacity: 1; pointer-events: auto; transform: none; }
+      .notes-header, .notes-timer { display: flex; align-items: center; justify-content: space-between; gap: var(--element-gap); padding: clamp(.6rem,.9vw,.9rem); border-bottom: 1px solid rgba(255,255,255,.09); }
+      .notes-header strong { font-size: clamp(.76rem,.88vw,.94rem); }
+      .notes-close, .notes-timer button { border: 1px solid rgba(255,255,255,.13); border-radius: clamp(.35rem,.6vw,.6rem); color: rgba(255,255,255,.68); background: rgba(255,255,255,.05); cursor: pointer; }
+      .notes-close { width: clamp(1.55rem,1.95vw,1.95rem); aspect-ratio: 1; }
+      .notes-timer { color: rgba(255,255,255,.62); font-family: var(--font-mono); font-size: clamp(.58rem,.66vw,.72rem); }
+      .notes-timer button { padding: clamp(.26rem,.45vw,.45rem) clamp(.45rem,.72vw,.72rem); font-size: clamp(.46rem,.54vw,.57rem); }
+      .notes-content { overflow-y: auto; padding: clamp(.8rem,1.25vw,1.25rem); color: rgba(255,255,255,.76); font-size: clamp(.72rem,.82vw,.88rem); line-height: 1.58; }
+      .notes-content p + p { margin-top: clamp(.55rem,.9vw,.9rem); }
+      .notes-content strong { color: #fff; font-weight: 500; }
+      .notes-content code { color: var(--orange); font-family: var(--font-mono); }
+
+      /* === INLINE EDITING === */
+      .edit-hotzone { position: fixed; top: 0; left: 0; z-index: 10000; width: clamp(3.3rem,5.5vw,4.7rem); height: clamp(3.3rem,5.5vw,4.7rem); cursor: pointer; }
+      .edit-toggle { position: fixed; top: clamp(.55rem,1.05vw,1.05rem); left: clamp(.55rem,1.05vw,1.05rem); z-index: 10001; display: grid; width: clamp(1.85rem,2.55vw,2.55rem); aspect-ratio: 1; place-items: center; border: 1px solid var(--line); border-radius: 50%; opacity: 0; color: var(--ink); background: rgba(255,253,248,.95); box-shadow: 0 clamp(.45rem,.9vw,.9rem) clamp(.9rem,1.8vw,1.8rem) rgba(41,35,28,.12); cursor: pointer; pointer-events: none; transition: 300ms; }
+      .edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+      .edit-toggle.active { color: #fff; background: var(--orange); transform: rotate(-8deg) scale(1.06); }
+      .edit-banner { position: fixed; top: clamp(.65rem,1.1vw,1.1rem); left: 50%; z-index: 10002; padding: clamp(.3rem,.52vw,.52rem) clamp(.55rem,.9vw,.9rem); border: 1px solid rgba(0,117,190,.38); border-radius: 999px; opacity: 0; color: var(--ink); background: rgba(254,254,254,.97); font-family: var(--font-mono); font-size: clamp(.46rem,.56vw,.59rem); pointer-events: none; transform: translate(-50%,calc(-1 * clamp(.7rem,1.3vw,1.3rem))); transition: 300ms var(--ease); }
+      .edit-banner.active { opacity: 1; transform: translate(-50%,0); }
+      body.edit-active [data-editable] { border-radius: clamp(.18rem,.3vw,.3rem); outline: 1px dashed rgba(0,117,190,.72); outline-offset: clamp(.15rem,.28vw,.28rem); cursor: text; }
+      :focus-visible { outline: 2px solid var(--orange); outline-offset: clamp(.1rem,.22vw,.22rem); }
+
+      /* === RESPONSIVE COMPRESSION === */
+      @media (max-width: 900px) {
+        .mechanism-grid { grid-template-columns: repeat(3,1fr); }
+        .anatomy-stage { grid-template-columns: 1fr 1fr; gap: clamp(.4rem,.8vw,.8rem); }
+        .bridge { display: none; }
+        .demo-body { grid-template-columns: minmax(0,1.2fr) minmax(12rem,.8fr); }
+        .proof-layout { grid-template-columns: minmax(0,1.15fr) minmax(12rem,.85fr); }
+      }
+      @media (max-width: 680px) {
+        .keyboard-hint { display: none; }
+        .slide-header { align-items: flex-start; }
+        .mechanism-grid { grid-template-columns: repeat(2,1fr); }
+        .mechanism-card:nth-child(5) { grid-column: 1 / -1; }
+        .mechanism-card .mechanism-copy p, .loop-step span { display: none; }
+        .development-loop { grid-template-columns: repeat(4,1fr); }
+        .loop-label { display: none; }
+        .anatomy-stage { grid-template: 1fr 1fr / 1fr; }
+        .stack-row small, .integrity-strip { display: none; }
+        .demo-toolbar { grid-template-columns: auto 1fr; }
+        .demo-status { display: none; }
+        .demo-body { grid-template-columns: 1fr; }
+        .demo-side { grid-template: auto / 1fr auto; }
+        .demo-side-label, .demo-next, .demo-panel p, .demo-fact { display: none; }
+        .proof-layout { grid-template: minmax(0,1.1fr) minmax(0,.9fr) / 1fr; }
+        .proof-card p { display: none; }
+        .takeaways { grid-template-columns: .7fr 1.3fr; align-items: center; }
+        .host-strip, .closing-line { display: none; }
+      }
+      @media (max-height: 700px) {
+        .slide-content, .title-copy { gap: clamp(.4rem,.9vw,.9rem); }
+        .artifact-node span, .mechanism-card .mechanism-copy p, .loop-step span, .stack-row small, .proof-card p { display: none; }
+        .mechanism-card, .anatomy-card, .takeaways { padding: clamp(.45rem,.82vw,.82rem); }
+        .terminal-line { font-size: clamp(.57rem,.7vw,.72rem); }
+        .demo-panel p { font-size: clamp(.57rem,.67vw,.69rem); }
+      }
+      @media (max-height: 600px) {
+        .title-subtitle { font-size: clamp(.62rem,.92vw,.88rem); }
+        .title-topline .compact-hide, .mechanism-trigger, .integrity-strip, .demo-fact, .demo-next, .closing-line { display: none; }
+        .terminal-pane, .demo-side { padding: clamp(.4rem,.72vw,.72rem); }
+      }
+      @media (max-height: 500px) {
+        .eyebrow, .slide-number, .title-subtitle, .demo-side-label, .proof-state, .host-strip { display: none; }
+        .demo-body { grid-template-columns: 1.4fr .6fr; }
+        .terminal-line { font-size: clamp(.43rem,.57vw,.59rem); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .reveal, .reveal-left, .reveal-scale, .terminal-line { opacity: 1; filter: none; transform: none; }
+        .ambient-light { opacity: .2; animation: none; transform: none; }
+        .pulse { animation: none; }
+        .demo-shell { transform: none !important; }
+        .bridge-particle { display: none; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- === GLOBAL CONTROLS === -->
+    <div class="progress-track" aria-hidden="true"><div class="progress-bar" id="progressBar" role="progressbar" aria-label="Presentation progress" aria-valuemin="1" aria-valuemax="5" aria-valuenow="1"></div></div>
+    <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
+    <div class="keyboard-hint" aria-hidden="true"><span class="key">←</span><span class="key">→</span><span>navigate · N notes · E edit</span></div>
+    <div class="edit-hotzone" id="editHotzone" title="Toggle edit mode"></div>
+    <button class="edit-toggle" id="editToggle" type="button" title="Edit mode (E)" aria-label="Toggle edit mode">✎</button>
+    <div class="edit-banner" role="status" aria-live="polite">Editing · autosave on · Ctrl/Cmd+S exports HTML</div>
+
+    <main id="presentation">
+      <!-- === SLIDE 1 · 3 MINUTES === -->
+      <section class="slide" id="slide-1" data-title="From Prompt to Product" data-minutes="3" aria-labelledby="title-1">
+        <div class="ambient-light-field" aria-hidden="true"><span class="ambient-light ambient-light-a"></span><span class="ambient-light ambient-light-b"></span><span class="ambient-light ambient-light-c"></span></div>
+        <div class="slide-content title-content">
+          <div class="title-topline reveal" style="--delay:80ms"><span data-editable id="s1-kicker">BMO · Applied AI · AI Powered SDLC</span></div>
+          <div class="title-copy">
+            <p class="eyebrow reveal" style="--delay:140ms" data-editable id="s1-eyebrow">A practical introduction to skill &amp; plugin development</p>
+            <h1 class="reveal" id="title-1" style="--delay:220ms" data-editable id="s1-title"><span>From prompt</span><span class="outline-word">to product.</span></h1>
+            <p class="title-subtitle reveal" style="--delay:300ms" data-editable id="s1-subtitle">Skills turn repeatable engineering judgment into a workflow. Plugins make that workflow installable, versioned, and supportable across teams.</p>
+          </div>
+          <div class="artifact-flow reveal-scale" style="--delay:380ms" aria-label="Skill to plugin release flow">
+            <div class="artifact-node"><strong>SKILL.md</strong><span>when + what + boundaries</span></div><span class="flow-arrow" aria-hidden="true"></span>
+            <div class="artifact-node"><strong>deterministic core</strong><span>scripts, tools, services</span></div><span class="flow-arrow" aria-hidden="true"></span>
+            <div class="artifact-node"><strong>plugin / archive</strong><span>install, upgrade, rollback</span></div>
+          </div>
+        </div>
+        <aside class="speaker-notes" data-duration="03:00">
+          <p><strong>0:00–0:30 · Open with the problem.</strong> Ask: “How many useful prompts or review checklists are currently trapped in one person’s chat history?” Pause for hands. That is the gap this session addresses.</p>
+          <p><strong>0:30–1:20 · Establish the vocabulary.</strong> A prompt is a one-off instruction. A skill is a reusable workflow contract the assistant can discover and follow. A plugin is the installable distribution boundary around one or more skills and related capabilities.</p>
+          <p><strong>1:20–2:15 · Explain the pipeline.</strong> <code>SKILL.md</code> says when to run and how to work. Deterministic code handles facts or policy that must be reproducible. Packaging adds installation, upgrades, compatibility, and rollback.</p>
+          <p><strong>2:15–3:00 · State the thesis.</strong> This is not “more prompt engineering.” We are turning team judgment into an artifact we can test, version, qualify, and support. Release Gate 0.3.0 is the real example for the rest of the talk.</p>
+          <p><strong>Transition:</strong> “Before we build anything, we need to choose the smallest extension that actually fits the job.”</p>
+          <p>Source: <code>docs/plugin-development-guideline.md</code>, sections 1–2.</p>
+        </aside>
+      </section>
+
+      <!-- === SLIDE 2 · 5 MINUTES === -->
+      <section class="slide" id="slide-2" data-title="Choose and Develop" data-minutes="5" aria-labelledby="title-2">
+        <div class="slide-content">
+          <header class="slide-header"><div class="slide-header-copy"><p class="eyebrow reveal" style="--delay:60ms" data-editable id="s2-eyebrow">New-team mental model</p><h2 class="reveal" id="title-2" style="--delay:130ms" data-editable id="s2-title">Choose the smallest extension—then develop it as a product.</h2></div><span class="slide-number reveal" style="--delay:180ms">02 / 05 · 05 MIN</span></header>
+          <div class="extension-layout">
+            <div class="mechanism-grid">
+              <article class="mechanism-card reveal" style="--delay:180ms"><span class="mechanism-index">01</span><span class="mechanism-glyph" aria-hidden="true">§</span><p class="mechanism-question">Should this apply by default?</p><div class="mechanism-copy"><h3 data-editable id="s2-card1-title">Instructions</h3><p>Always-on repository conventions, guardrails, and working agreements.</p></div><span class="mechanism-example">AGENTS.md</span><span class="mechanism-trigger">Apply everywhere</span></article>
+              <article class="mechanism-card skill reveal" style="--delay:230ms"><span class="mechanism-index">02</span><span class="mechanism-glyph" aria-hidden="true">↻</span><p class="mechanism-question">Is this a repeatable workflow?</p><div class="mechanism-copy"><h3 data-editable id="s2-card2-title">Skill</h3><p>An on-demand procedure with triggers, steps, outputs, and safe stops.</p></div><span class="mechanism-example">SKILL.md</span><span class="mechanism-trigger">Start here for reuse</span></article>
+              <article class="mechanism-card reveal" style="--delay:280ms"><span class="mechanism-index">03</span><span class="mechanism-glyph" aria-hidden="true">@</span><p class="mechanism-question">Does it need specialist context?</p><div class="mechanism-copy"><h3 data-editable id="s2-card3-title">Agent</h3><p>A focused role with its own context, permissions, and constrained toolset.</p></div><span class="mechanism-example">*.agent.md</span><span class="mechanism-trigger">Delegate expertise</span></article>
+              <article class="mechanism-card reveal" style="--delay:330ms"><span class="mechanism-index">04</span><span class="mechanism-glyph" aria-hidden="true">⇄</span><p class="mechanism-question">Must it connect or enforce?</p><div class="mechanism-copy"><h3 data-editable id="s2-card4-title">MCP / hook</h3><p>Live systems, external tools, or deterministic lifecycle enforcement.</p></div><span class="mechanism-example">.mcp.json · hooks</span><span class="mechanism-trigger">Integrate at runtime</span></article>
+              <article class="mechanism-card reveal" style="--delay:380ms"><span class="mechanism-index">05</span><span class="mechanism-glyph" aria-hidden="true">pkg</span><p class="mechanism-question">Is it ready to distribute?</p><div class="mechanism-copy"><h3 data-editable id="s2-card5-title">Plugin</h3><p>A versioned bundle of skills and related capabilities for installation.</p></div><span class="mechanism-example">plugin.json</span><span class="mechanism-trigger">Install · update · rollback</span></article>
+            </div>
+            <div class="development-loop reveal" style="--delay:460ms" aria-label="Skill and plugin development loop">
+              <span class="loop-label">Development loop</span>
+              <div class="loop-step"><b>1 · Define</b><span>In-scope, adjacent, and negative user requests.</span></div>
+              <div class="loop-step"><b>2 · Author</b><span>Portable skill boundary, workflow, outputs, and safe stops.</span></div>
+              <div class="loop-step"><b>3 · Adapt</b><span>Host manifests, discovery paths, and invocation syntax.</span></div>
+              <div class="loop-step"><b>4 · Qualify</b><span>Discovery, routing, behavior, security, packaged artifact.</span></div>
+            </div>
+          </div>
+        </div>
+        <aside class="speaker-notes" data-duration="05:00">
+          <p><strong>0:00–1:15 · Walk the decision questions left to right.</strong> Instructions apply by default. A skill runs a repeatable procedure on demand. An agent brings specialist context and a constrained toolset. MCP or hooks connect live systems or enforce lifecycle rules. A plugin distributes a versioned bundle.</p>
+          <p><strong>1:15–2:15 · Define a skill concretely.</strong> Its entry point is <code>SKILL.md</code>. The description is routing metadata; the body specifies inputs, ordered steps, decisions, outputs, verification, and safe stops. Put detailed policy in <code>references/</code>, repeatable mechanics in <code>scripts/</code>, and reusable files in <code>assets/</code>.</p>
+          <p><strong>2:15–3:00 · Define a plugin concretely.</strong> It is a host-specific installable bundle that can include skills, agents, hooks, MCP configuration, and assets. Manifests and lifecycle commands vary by host; the core workflow should not.</p>
+          <p><strong>3:00–3:45 · Give the selection rule.</strong> Start with one standalone skill while the workflow is changing. Add a plugin only when distribution, versioning, multiple related components, or external integration is a real requirement—not a prediction.</p>
+          <p><strong>3:45–4:35 · Explain the development loop.</strong> Define positive, adjacent, and negative requests. Author the portable boundary. Add thin host adapters. Qualify discovery, routing, behavior, security, and the packaged artifact.</p>
+          <p><strong>4:35–5:00 · Audience check.</strong> Ask for one current team workflow. Quickly classify it using the five questions. Reinforce: “portable core, host-specific shell.”</p>
+          <p><strong>Transition:</strong> “Release Gate shows what this separation looks like in production code.”</p>
+          <p>Source: <code>docs/plugin-development-guideline.md</code>, sections 2–4.</p>
+        </aside>
+      </section>
+
+      <!-- === SLIDE 3 · 6 MINUTES === -->
+      <section class="slide slide-dark" id="slide-3" data-title="Release Gate Anatomy" data-minutes="6" aria-labelledby="title-3">
+        <div class="slide-content">
+          <header class="slide-header"><div class="slide-header-copy"><p class="eyebrow reveal" style="--delay:60ms" data-editable id="s3-eyebrow">Real case study · release-gate 0.3.0</p><h2 class="reveal" id="title-3" style="--delay:130ms" data-editable id="s3-title">The skill guides. The CLI decides.</h2></div><span class="slide-number reveal" style="--delay:180ms">03 / 05 · 06 MIN</span></header>
+          <div class="anatomy-stage">
+            <article class="anatomy-card reveal-left" style="--delay:200ms">
+              <div class="anatomy-title"><h3>Portable skill contract</h3><span>skills/release-gate/</span></div>
+              <ul class="stack">
+                <li class="stack-row"><span class="stack-icon">md</span><span><strong>SKILL.md</strong><small>Trigger, inputs, ordered workflow, outputs, stop rules.</small></span></li>
+                <li class="stack-row"><span class="stack-icon">{ }</span><span><strong>references/*.json</strong><small>Exact compatibility and configuration contracts.</small></span></li>
+                <li class="stack-row"><span class="stack-icon">ref</span><span><strong>initialization.md</strong><small>Detailed policy guidance read only when needed.</small></span></li>
+                <li class="stack-row"><span class="stack-icon">ui</span><span><strong>agents/openai.yaml</strong><small>Codex UI adapter; implicit invocation stays disabled.</small></span></li>
+              </ul>
+            </article>
+            <div class="bridge reveal-scale" style="--delay:300ms" aria-hidden="true">
+              <svg viewBox="0 0 120 440" preserveAspectRatio="none"><path class="bridge-line" d="M5 70 C65 70 45 150 115 150"/><path class="bridge-line" d="M5 180 C65 180 45 220 115 220"/><path class="bridge-line" d="M5 290 C65 290 45 290 115 290"/><path class="bridge-line" d="M5 380 C65 380 45 360 115 360"/><circle class="bridge-particle" r="4"><animateMotion dur="2.8s" repeatCount="indefinite" path="M5 70 C65 70 45 150 115 150"/></circle><circle class="bridge-particle" r="4"><animateMotion begin=".8s" dur="2.8s" repeatCount="indefinite" path="M5 180 C65 180 45 220 115 220"/></circle></svg>
+              <span class="bridge-label">exact CLI calls</span>
+            </div>
+            <article class="anatomy-card reveal" style="--delay:360ms">
+              <div class="anatomy-title"><h3>Deterministic release core</h3><span>src/release_gate/</span></div>
+              <div class="stack">
+                <div class="stack-row"><span class="stack-icon">01</span><span><strong>Compatibility preflight</strong><small>Require exact output: release-gate 0.3.0.</small></span></div>
+                <div class="stack-row"><span class="stack-icon">02</span><span><strong>Trusted workspace + controls</strong><small>Reconstruct base/candidate; execute bounded argv without a shell.</small></span></div>
+                <div class="stack-row"><span class="stack-icon">03</span><span><strong>Three-way policy verdict</strong><small>Preserve PASS, FAIL, or NEEDS_HUMAN.</small></span></div>
+                <div class="stack-row"><span class="stack-icon">04</span><span><strong>Evidence + observability</strong><small>Atomic, tamper-evident output; reporting stays non-gating.</small></span></div>
+              </div>
+              <div class="integrity-strip"><span><b>explicit</b> invocation</span><span><b>safe</b> stop</span><span><b>no</b> retry / merge / deploy</span></div>
+            </article>
+          </div>
+        </div>
+        <aside class="speaker-notes" data-duration="06:00">
+          <p><strong>0:00–1:15 · Read the left side as a contract.</strong> The portable skill is intentionally small: two-field frontmatter, an explicit trigger, required inputs, ordered calls, exact output semantics, and stop rules. The description says “use only when explicitly invoked,” so discovery is not authorization.</p>
+          <p><strong>1:15–2:00 · Explain progressive disclosure.</strong> <code>SKILL.md</code> stays readable. Exact compatibility lives in JSON, longer policy guidance lives in <code>initialization.md</code>, and the Codex UI metadata lives in <code>agents/openai.yaml</code>. Load details only when the workflow reaches them.</p>
+          <p><strong>2:00–2:40 · Point to the bridge.</strong> The skill does not reproduce the release algorithm in prose. It makes exact CLI calls. That keeps the model responsible for orchestration and the executable responsible for enforcement.</p>
+          <p><strong>2:40–4:35 · Walk the deterministic core.</strong> First, require the exact compatibility string <code>release-gate 0.3.0</code>. Then reconstruct trusted base and candidate workspaces and run bounded argument vectors without a shell. Preserve the engine’s PASS, FAIL, or NEEDS_HUMAN verdict. Finally, write atomic, tamper-evident evidence.</p>
+          <p><strong>4:35–5:25 · Clarify the safety boundary.</strong> The skill calls the gate once. It never reinterprets, retries, merges, deploys, or upgrades NEEDS_HUMAN into PASS. Reporting may follow, but it remains non-gating.</p>
+          <p><strong>5:25–6:00 · Name the common mistake.</strong> Do not ask the model to “inspect the diff and decide if release is safe” when the decision must be reproducible. Let the model guide; let code decide. Evidence is <em>tamper-evident, not immutable</em>, and PASS covers only configured policy.</p>
+          <p><strong>Transition:</strong> “Now let’s build and invoke this exact skill, one development state at a time.”</p>
+          <p>Sources: <code>release-gate/skills/release-gate/SKILL.md</code>, <code>agents/openai.yaml</code>, and <code>src/release_gate/</code>.</p>
+        </aside>
+      </section>
+
+      <!-- === SLIDE 4 · 10 MINUTES === -->
+      <section class="slide slide-dark" id="slide-4" data-title="Development Demo" data-minutes="10" aria-labelledby="title-4">
+        <div class="slide-content">
+          <header class="slide-header"><div class="slide-header-copy"><p class="eyebrow reveal" style="--delay:60ms" data-editable id="s4-eyebrow">In-slide development demo</p><h2 class="reveal" id="title-4" style="--delay:130ms" data-editable id="s4-title">Author → validate → package → invoke.</h2></div><span class="slide-number reveal" style="--delay:180ms">04 / 05 · 10 MIN</span></header>
+          <div class="demo-shell reveal-scale" id="demoShell" style="--delay:220ms" aria-label="Interactive Release Gate development demo">
+            <div class="demo-toolbar">
+              <div class="window-dots" aria-hidden="true"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span></div>
+              <div class="demo-tabs" role="tablist" aria-label="Development demo steps">
+                <button class="demo-tab active" type="button" role="tab" aria-selected="true" data-demo-target="0"><span class="step-index">1</span>Author</button>
+                <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-target="1"><span class="step-index">2</span>Validate</button>
+                <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-target="2"><span class="step-index">3</span>Package</button>
+                <button class="demo-tab" type="button" role="tab" aria-selected="false" data-demo-target="3"><span class="step-index">4</span>Invoke</button>
+              </div>
+              <span class="demo-status"><span class="pulse"></span><span id="demoStatus">authoring contract</span></span>
+            </div>
+            <div class="demo-body">
+              <div class="terminal-pane" aria-live="polite"><div class="terminal-content">
+                <div class="terminal-line command" data-demo-step="0"><span class="terminal-prompt">›</span><span>skills/release-gate/SKILL.md</span></div>
+                <div class="terminal-line info" data-demo-step="0"><span class="terminal-prompt">1</span><span>name: release-gate</span></div>
+                <div class="terminal-line" data-demo-step="0"><span class="terminal-prompt">2</span><span>description: Use only when explicitly invoked…</span></div>
+                <div class="terminal-line warning" data-demo-step="0"><span class="terminal-prompt">3</span><span>Do not invoke implicitly. Never infer a subcommand.</span></div>
+                <div class="terminal-line command" data-demo-step="1"><span class="terminal-prompt">$</span><span>python tests/validate_skill.py</span></div>
+                <div class="terminal-line success" data-demo-step="1"><span class="terminal-prompt">✓</span><span>VALID: skills/release-gate/SKILL.md</span></div>
+                <div class="terminal-line success" data-demo-step="1"><span class="terminal-prompt">✓</span><span>frontmatter · references · schemas · version sync</span></div>
+                <div class="terminal-line command" data-demo-step="2"><span class="terminal-prompt">$</span><span>python scripts/build_skill_archives.py --output-dir dist</span></div>
+                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-copilot-0.3.0.tar.gz</span></div>
+                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-codex-0.3.0.tar.gz</span></div>
+                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-claude-code-0.3.0.tar.gz</span></div>
+                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-antigravity-0.3.0.tar.gz</span></div>
+                <div class="terminal-line command" data-demo-step="3"><span class="terminal-prompt">$</span><span>release-gate --version</span></div>
+                <div class="terminal-line success" data-demo-step="3"><span class="terminal-prompt">✓</span><span>release-gate 0.3.0</span></div>
+                <div class="terminal-line command" data-demo-step="3"><span class="terminal-prompt">$</span><span>release-gate validate --repo .</span></div>
+                <div class="terminal-line command" data-demo-step="3"><span class="terminal-prompt">$</span><span>release-gate run --repo . --base &lt;ref&gt;</span></div>
+                <div class="terminal-line success" data-demo-step="3"><span class="terminal-prompt">✓</span><span>RESULT: .release-gate/runs/&lt;id&gt;/result.json</span></div>
+              </div></div>
+              <aside class="demo-side">
+                <span class="demo-side-label">What this development step proves</span>
+                <div class="demo-panel active" data-demo-panel="0"><h3>Write the boundary before the prose.</h3><p>Declare inputs, ordered steps, exact calls, output semantics, and safe stop conditions.</p><div class="demo-fact">Portable frontmatter stays at <strong>name + description</strong>. Host controls live in adapters.</div></div>
+                <div class="demo-panel" data-demo-panel="1"><h3>Test contracts, not preferred wording.</h3><p>Static validation checks discovery metadata, reachable references, exact schemas, commands, and safety invariants.</p><div class="demo-fact">Routing matrix: <strong>positive · paraphrase · negative · boundary</strong>.</div></div>
+                <div class="demo-panel" data-demo-panel="2"><h3>Build every advertised artifact once.</h3><p>One canonical skill source produces normalized, deterministic host archives.</p><div class="demo-fact">Sorted members · fixed timestamps · normalized line endings · SHA-256.</div></div>
+                <div class="demo-panel" data-demo-panel="3"><h3>Preserve the engine’s exact verdict.</h3><p>The skill preflights compatibility, calls the gate once, and reports result.json before non-gating advice.</p><div class="verdict-row"><span class="verdict pass">PASS</span><span class="verdict fail">FAIL</span><span class="verdict human">NEEDS_HUMAN</span></div></div>
+                <div class="demo-next"><span>Advance builds before next slide</span><b>SPACE / →</b></div>
+              </aside>
+            </div>
+          </div>
+        </div>
+        <aside class="speaker-notes" data-duration="10:00">
+          <p><strong>Presenter control.</strong> Right Arrow or Space advances Author → Validate → Package → Invoke before leaving the slide. Left Arrow walks backward; the four tabs are clickable. Allow the terminal animation to settle before explaining each state.</p>
+          <p><strong>0:00–2:00 · Author.</strong> Point to the two-field frontmatter: <code>name</code> and <code>description</code>. Say: “The description is a router, so it must include the positive trigger and the negative boundary.” Then show the body rule: never infer a subcommand and never treat skill discovery as authorization.</p>
+          <p><strong>2:00–4:00 · Validate.</strong> Advance once. <code>python tests/validate_skill.py</code> checks frontmatter, reachable references, schemas, exact commands, safety invariants, and version synchronization. Explain that routing tests need positive, paraphrase, negative, and adjacent prompts in fresh sessions; avoid prose snapshot tests that fail on harmless wording.</p>
+          <p><strong>4:00–6:00 · Package.</strong> Advance again. <code>python scripts/build_skill_archives.py --output-dir dist</code> creates four archives from one canonical source: Copilot, Codex, Claude Code, and Antigravity. Sorted members, fixed timestamps, normalized line endings, and SHA-256 make the deliverables reproducible.</p>
+          <p><strong>6:00–8:45 · Invoke.</strong> Advance to the last state. First call <code>release-gate --version</code> and require exactly <code>release-gate 0.3.0</code>. Then validate configuration and run once with <code>release-gate run --repo . --base &lt;ref&gt;</code>. Read <code>.release-gate/runs/&lt;id&gt;/result.json</code> before giving advice.</p>
+          <p><strong>8:45–9:30 · Explain the three outcomes.</strong> PASS means configured policy passed; it is not merge authorization. FAIL means a deterministic policy check failed. NEEDS_HUMAN is a first-class result for unresolved judgment—not an error to retry away.</p>
+          <p><strong>9:30–10:00 · Land the lesson.</strong> The skill never softens, reinterprets, retries, merges, or deploys. Ask: “Which part of your current assistant workflow should become deterministic code?”</p>
+          <p><strong>Transition:</strong> “A working source tree is not a release. The installed artifact still has to prove itself.”</p>
+          <p>Sources: <code>tests/validate_skill.py</code>, <code>scripts/build_skill_archives.py</code>, <code>tests/test_skill_archives.py</code>, and <code>demo/python-slugify/</code>.</p>
+        </aside>
+      </section>
+
+      <!-- === SLIDE 5 · 6 MINUTES === -->
+      <section class="slide" id="slide-5" data-title="Ship with Proof" data-minutes="6" aria-labelledby="title-5">
+        <div class="slide-content">
+          <header class="slide-header"><div class="slide-header-copy"><p class="eyebrow reveal" style="--delay:60ms" data-editable id="s5-eyebrow">Release is a test surface</p><h2 class="reveal" id="title-5" style="--delay:130ms" data-editable id="s5-title">Ship with proof—not confidence.</h2></div><span class="slide-number reveal" style="--delay:180ms">05 / 05 · 06 MIN</span></header>
+          <div class="proof-layout">
+            <div class="proof-matrix">
+              <article class="proof-card reveal" style="--delay:180ms"><span class="proof-index">01 · DISCOVERY</span><h3 data-editable id="s5-p1">Host sees the component</h3><p>Install the exact candidate and list the skill from the expected source.</p><span class="proof-state">listed</span></article>
+              <article class="proof-card reveal" style="--delay:230ms"><span class="proof-index">02 · ROUTING</span><h3 data-editable id="s5-p2">Trigger boundaries hold</h3><p>Run positive, paraphrase, negative, and adjacent prompts in fresh sessions.</p><span class="proof-state">bounded</span></article>
+              <article class="proof-card reveal" style="--delay:280ms"><span class="proof-index">03 · BEHAVIOR</span><h3 data-editable id="s5-p3">Outcomes are observable</h3><p>Assert structure, tools, permissions, failures, and side effects.</p><span class="proof-state">verified</span></article>
+              <article class="proof-card reveal" style="--delay:330ms"><span class="proof-index">04 · ADVERSARIAL</span><h3 data-editable id="s5-p4">Untrusted text stays data</h3><p>Repository content cannot override trusted instructions or safety policy.</p><span class="proof-state">contained</span></article>
+              <article class="proof-card reveal" style="--delay:380ms"><span class="proof-index">05 · ARTIFACT</span><h3 data-editable id="s5-p5">Archives reproduce exactly</h3><p>Verify paths, types, versions, schemas, checksums, and bytes.</p><span class="proof-state">reproducible</span></article>
+              <article class="proof-card reveal" style="--delay:430ms"><span class="proof-index">06 · FRESH INSTALL</span><h3 data-editable id="s5-p6">The packaged copy works</h3><p>Qualify the archive or marketplace entry—not only the source checkout.</p><span class="proof-state">qualified</span></article>
+            </div>
+            <aside class="takeaways reveal-scale" style="--delay:500ms">
+              <h3 data-editable id="s5-takeaway-title">Three rules to keep</h3>
+              <ol class="takeaway-list"><li data-editable id="s5-t1"><span><strong>Start with a skill.</strong><br/>Package only when distribution demands it.</span></li><li data-editable id="s5-t2"><span><strong>Keep enforcement deterministic.</strong><br/>Instructions orchestrate; code validates and decides.</span></li><li data-editable id="s5-t3"><span><strong>Release tested artifacts.</strong><br/>Fresh install, exact versions, evidence, and rollback.</span></li></ol>
+              <div class="host-strip"><span class="host-chip">copilot</span><span class="host-chip">codex</span><span class="host-chip">claude-code</span><span class="host-chip">antigravity</span></div>
+              <p class="closing-line" data-editable id="s5-closing">Portable workflow. Deterministic core. Host-qualified delivery.</p>
+            </aside>
+          </div>
+        </div>
+        <aside class="speaker-notes" data-duration="06:00">
+          <p><strong>0:00–1:30 · Read the first row.</strong> Discovery proves the host lists the installed component from the expected source. Routing proves the description accepts positive and paraphrased requests while rejecting negative and adjacent ones. Behavior proves required structure, tools, permissions, failures, and side effects.</p>
+          <p><strong>1:30–2:40 · Read the second row.</strong> Adversarial tests keep repository text as untrusted data. Artifact tests inspect paths, file types, exact versions, schemas, checksums, and byte-for-byte reproducibility. Fresh-install qualification runs against the archive or marketplace candidate—not the convenient source checkout.</p>
+          <p><strong>2:40–3:45 · Make it a supply-chain story.</strong> Pin dependencies, generate checksums, install the exact candidate, run smoke tests in a clean environment, record the supported host matrix, and retain a rollback path. A green source test is necessary but insufficient.</p>
+          <p><strong>3:45–5:15 · Deliver the three takeaways.</strong> First, start with a skill and package only when distribution demands it. Second, keep enforcement deterministic: instructions orchestrate, code validates and decides. Third, release only the exact artifacts you tested.</p>
+          <p><strong>5:15–6:00 · Close with action.</strong> Ask each team to nominate one repeated workflow, define its positive and negative requests, and prototype it as a standalone skill before the next engineering review. Final line: “Portable workflow. Deterministic core. Host-qualified delivery.”</p>
+          <p>Sources: <code>docs/plugin-development-guideline.md</code>, sections 5, 11, and 12; <code>release-gate/docs/qualification.md</code>.</p>
+        </aside>
+      </section>
+    </main>
+
+    <!-- === PRESENTER NOTES DRAWER === -->
+    <aside class="notes-drawer" id="notesDrawer" aria-hidden="true" aria-label="Speaker notes">
+      <div class="notes-header"><strong id="notesTitle">Speaker notes</strong><button class="notes-close" id="notesClose" type="button" aria-label="Close speaker notes">×</button></div>
+      <div class="notes-timer"><span><span id="slideTarget">03:00 target</span> · <span id="sessionTimer">00:00 / 30:00</span></span><button id="timerToggle" type="button">Start timer</button></div>
+      <div class="notes-content" id="notesContent"></div>
+    </aside>
+
+    <script>
+      /* === SLIDE PRESENTATION CONTROLLER === */
+      class SlidePresentation {
+        constructor() {
+          this.slides = Array.from(document.querySelectorAll(".slide"));
+          this.currentSlide = 0; this.demoStep = 0; this.maxDemoStep = 3; this.wheelLocked = false; this.touchStartY = null; this.notes = null;
+          this.reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+          this.progressBar = document.getElementById("progressBar"); this.navDots = document.getElementById("navDots"); this.demoStatus = document.getElementById("demoStatus");
+          this.setupDots(); this.setupObserver(); this.setupKeyboard(); this.setupWheel(); this.setupTouch(); this.setupDemo(); this.setupTilt(); this.restoreHash(); this.updateDemo(0); this.updateChrome();
+        }
+        connectNotes(notes) { this.notes = notes; notes.render(this.currentSlide); }
+        blocked(event) { const t = event?.target; return document.body.classList.contains("edit-active") || this.notes?.isOpen || t?.isContentEditable || ["INPUT","TEXTAREA","SELECT"].includes(t?.tagName); }
+        setupDots() { this.navDots.innerHTML = ""; this.slides.forEach((slide,index) => { const dot = document.createElement("button"); dot.type = "button"; dot.className = "nav-dot"; dot.setAttribute("aria-label",`Go to slide ${index+1}: ${slide.dataset.title}`); dot.addEventListener("click",() => this.goTo(index)); this.navDots.appendChild(dot); }); }
+        setupObserver() { const observer = new IntersectionObserver(entries => entries.forEach(entry => { if (!entry.isIntersecting) return; entry.target.classList.add("visible"); const index = this.slides.indexOf(entry.target); if (entry.intersectionRatio >= .58) { this.currentSlide = index; this.updateChrome(); this.notes?.render(index); } }),{threshold:[.2,.58,.9]}); this.slides.forEach(slide => observer.observe(slide)); }
+        setupKeyboard() { document.addEventListener("keydown",event => { if (this.blocked(event)) return; if (["ArrowRight","ArrowDown","PageDown"," "].includes(event.key)) { event.preventDefault(); this.next(); } else if (["ArrowLeft","ArrowUp","PageUp"].includes(event.key)) { event.preventDefault(); this.previous(); } else if (event.key === "Home") { event.preventDefault(); this.goTo(0); } else if (event.key === "End") { event.preventDefault(); this.goTo(this.slides.length-1); } }); }
+        setupWheel() { window.addEventListener("wheel",event => { if (this.blocked(event) || Math.abs(event.deltaY) < 24 || this.wheelLocked) return; event.preventDefault(); this.wheelLocked = true; event.deltaY > 0 ? this.next() : this.previous(); setTimeout(() => { this.wheelLocked = false; },620); },{passive:false}); }
+        setupTouch() { window.addEventListener("touchstart",event => { if (!this.blocked(event)) this.touchStartY = event.changedTouches[0]?.clientY ?? null; },{passive:true}); window.addEventListener("touchend",event => { if (this.blocked(event) || this.touchStartY === null) return; const delta = this.touchStartY - (event.changedTouches[0]?.clientY ?? this.touchStartY); this.touchStartY = null; if (Math.abs(delta) >= 48) delta > 0 ? this.next() : this.previous(); },{passive:true}); }
+        setupDemo() { document.querySelectorAll("[data-demo-target]").forEach(button => button.addEventListener("click",() => this.updateDemo(Number(button.dataset.demoTarget)))); }
+        setupTilt() { const shell = document.getElementById("demoShell"); shell.addEventListener("pointermove",event => { if (this.reduced.matches || event.pointerType === "touch") return; const r = shell.getBoundingClientRect(); const x = (event.clientX-r.left)/r.width-.5; const y = (event.clientY-r.top)/r.height-.5; shell.style.setProperty("--tilt-x",`${(-y*3.2).toFixed(2)}deg`); shell.style.setProperty("--tilt-y",`${(x*4.2).toFixed(2)}deg`); }); shell.addEventListener("pointerleave",() => { shell.style.setProperty("--tilt-x","0deg"); shell.style.setProperty("--tilt-y","0deg"); }); }
+        restoreHash() { const match = location.hash.match(/^#slide-(\d+)$/); const index = Math.max(0,Math.min(this.slides.length-1,(match ? Number(match[1]) : 1)-1)); this.currentSlide = index; requestAnimationFrame(() => this.goTo(index,false)); }
+        next() { if (this.currentSlide === 3 && this.demoStep < this.maxDemoStep) return this.updateDemo(this.demoStep+1); this.goTo(Math.min(this.slides.length-1,this.currentSlide+1)); }
+        previous() { if (this.currentSlide === 3 && this.demoStep > 0) return this.updateDemo(this.demoStep-1); this.goTo(Math.max(0,this.currentSlide-1)); }
+        goTo(index,updateHash=true) { this.currentSlide = Math.max(0,Math.min(this.slides.length-1,index)); const slide = this.slides[this.currentSlide]; slide.scrollIntoView({behavior:this.reduced.matches ? "auto" : "smooth",block:"start"}); slide.classList.add("visible"); if (updateHash) history.replaceState(null,"",`#slide-${this.currentSlide+1}`); this.updateChrome(); this.notes?.render(this.currentSlide); }
+        updateDemo(step) { this.demoStep = Math.max(0,Math.min(this.maxDemoStep,step)); const statuses = ["authoring contract","validating skill","building archives","invoking gate"]; this.demoStatus.textContent = statuses[this.demoStep]; document.querySelectorAll("[data-demo-target]").forEach(button => { const active = Number(button.dataset.demoTarget) === this.demoStep; button.classList.toggle("active",active); button.setAttribute("aria-selected",String(active)); }); document.querySelectorAll("[data-demo-panel]").forEach(panel => panel.classList.toggle("active",Number(panel.dataset.demoPanel) === this.demoStep)); document.querySelectorAll("[data-demo-step]").forEach(line => { const visible = Number(line.dataset.demoStep) <= this.demoStep; line.classList.toggle("is-visible",visible); line.setAttribute("aria-hidden",String(!visible)); }); this.updateChrome(); }
+        updateChrome() { const fraction = this.currentSlide === 3 ? this.demoStep/(this.maxDemoStep+1) : 0; const overall = (this.currentSlide+fraction+1)/this.slides.length; this.progressBar.style.transform = `scaleX(${Math.min(1,overall)})`; this.progressBar.setAttribute("aria-valuenow",String(this.currentSlide+1)); Array.from(this.navDots.children).forEach((dot,index) => { const active = index === this.currentSlide; dot.classList.toggle("active",active); dot.setAttribute("aria-current",active ? "step" : "false"); }); }
+      }
+
+      /* === PRESENTER NOTES + TIMER === */
+      class PresenterNotes {
+        constructor(presentation) { this.presentation = presentation; this.drawer = document.getElementById("notesDrawer"); this.title = document.getElementById("notesTitle"); this.content = document.getElementById("notesContent"); this.target = document.getElementById("slideTarget"); this.timerLabel = document.getElementById("sessionTimer"); this.timerButton = document.getElementById("timerToggle"); this.isOpen = false; this.running = false; this.startedAt = null; this.elapsed = 0; this.interval = null; document.getElementById("notesClose").addEventListener("click",() => this.toggle(false)); this.timerButton.addEventListener("click",() => this.toggleTimer()); document.addEventListener("keydown",event => { if ((event.key === "n" || event.key === "N") && !event.target.isContentEditable) { event.preventDefault(); this.toggle(); } if (event.key === "Escape" && this.isOpen) this.toggle(false); }); }
+        toggle(force) { this.isOpen = typeof force === "boolean" ? force : !this.isOpen; this.drawer.classList.toggle("open",this.isOpen); this.drawer.setAttribute("aria-hidden",String(!this.isOpen)); if (this.isOpen) this.render(this.presentation.currentSlide); }
+        render(index) { const slide = this.presentation.slides[index]; const notes = slide?.querySelector(".speaker-notes"); if (!notes) return; this.title.textContent = `${index+1}. ${slide.dataset.title}`; this.target.textContent = `${notes.dataset.duration} target`; this.content.innerHTML = notes.innerHTML; }
+        milliseconds() { return this.elapsed + (this.running && this.startedAt ? Date.now()-this.startedAt : 0); }
+        toggleTimer() { if (this.running) { this.elapsed = this.milliseconds(); this.running = false; this.startedAt = null; clearInterval(this.interval); this.interval = null; this.timerButton.textContent = "Resume timer"; } else { this.running = true; this.startedAt = Date.now(); this.interval = setInterval(() => this.renderTimer(),500); this.timerButton.textContent = "Pause timer"; } this.renderTimer(); }
+        renderTimer() { const total = Math.floor(this.milliseconds()/1000); this.timerLabel.textContent = `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")} / 30:00`; }
+      }
+
+      /* === INLINE EDITOR === */
+      class InlineEditor {
+        constructor() { this.storageKey = "code-assistant-skill-plugin-deck:v1"; this.isActive = false; this.editables = Array.from(document.querySelectorAll("[data-editable]")); this.toggleButton = document.getElementById("editToggle"); this.banner = document.querySelector(".edit-banner"); this.hotzone = document.getElementById("editHotzone"); this.hideTimeout = null; this.load(); this.bind(); }
+        bind() { this.toggleButton.addEventListener("click",() => this.toggleEditMode()); this.hotzone.addEventListener("click",() => this.toggleEditMode()); this.hotzone.addEventListener("mouseenter",() => { clearTimeout(this.hideTimeout); this.toggleButton.classList.add("show"); }); this.hotzone.addEventListener("mouseleave",() => this.scheduleHide()); this.toggleButton.addEventListener("mouseenter",() => clearTimeout(this.hideTimeout)); this.toggleButton.addEventListener("mouseleave",() => this.scheduleHide()); this.editables.forEach(element => element.addEventListener("input",() => this.save())); document.addEventListener("keydown",event => { if ((event.key === "e" || event.key === "E") && !event.target.isContentEditable) { event.preventDefault(); this.toggleEditMode(); } if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); this.exportFile(); } if (event.key === "Escape" && this.isActive) this.toggleEditMode(false); }); }
+        scheduleHide() { this.hideTimeout = setTimeout(() => { if (!this.isActive) this.toggleButton.classList.remove("show"); },400); }
+        toggleEditMode(force) { this.isActive = typeof force === "boolean" ? force : !this.isActive; document.body.classList.toggle("edit-active",this.isActive); this.toggleButton.classList.toggle("active",this.isActive); this.toggleButton.classList.toggle("show",this.isActive); this.banner.classList.toggle("active",this.isActive); this.editables.forEach(element => this.isActive ? element.setAttribute("contenteditable","true") : element.removeAttribute("contenteditable")); this.toggleButton.textContent = this.isActive ? "✓" : "✎"; }
+        save() { const content = {}; this.editables.forEach(element => { content[element.id] = element.innerHTML; }); localStorage.setItem(this.storageKey,JSON.stringify(content)); }
+        load() { try { const content = JSON.parse(localStorage.getItem(this.storageKey) || "{}"); this.editables.forEach(element => { if (typeof content[element.id] === "string") element.innerHTML = content[element.id]; }); } catch (error) { console.warn("Could not restore edits",error); } }
+        exportFile() { const wasActive = this.isActive; const editableElements = Array.from(document.querySelectorAll("[contenteditable]")); editableElements.forEach(element => element.removeAttribute("contenteditable")); document.body.classList.remove("edit-active"); this.toggleButton.classList.remove("active","show"); this.banner.classList.remove("active","show"); const html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML; if (wasActive) { document.body.classList.add("edit-active"); editableElements.forEach(element => element.setAttribute("contenteditable","true")); this.toggleButton.classList.add("active","show"); this.banner.classList.add("active"); } const blob = new Blob([html],{type:"text/html"}); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "code-assistant-skill-plugin-development-edited.html"; link.click(); URL.revokeObjectURL(link.href); }
+      }
+
+      const presentation = new SlidePresentation();
+      const notes = new PresenterNotes(presentation);
+      presentation.connectNotes(notes);
+      const editor = new InlineEditor();
+    </script>
+  </body>
+</html>
