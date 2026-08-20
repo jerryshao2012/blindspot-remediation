@@ -694,7 +694,9 @@ def _directory_names(directory_fd: int) -> list[str] | None:
         return None
 
 
-def _windows_directory_names_native(directory_fd: int) -> list[str] | None:
+def _windows_directory_names_native(  # pragma: no cover - Windows CI
+    directory_fd: int,
+) -> list[str] | None:
     import ctypes
     from ctypes import wintypes
 
@@ -848,7 +850,7 @@ def _unlock(descriptor: int) -> None:
         )
 
 
-def _try_lock_windows(descriptor: int) -> bool:
+def _try_lock_windows(descriptor: int) -> bool:  # pragma: no cover - Windows CI
     try:
         _windows_file_lock(descriptor, lock=True)
     except OSError:
@@ -856,11 +858,13 @@ def _try_lock_windows(descriptor: int) -> bool:
     return True
 
 
-def _unlock_windows(descriptor: int) -> None:
+def _unlock_windows(descriptor: int) -> None:  # pragma: no cover - Windows CI
     _windows_file_lock(descriptor, lock=False)
 
 
-def _windows_file_lock(descriptor: int, *, lock: bool) -> None:
+def _windows_file_lock(  # pragma: no cover - Windows CI
+    descriptor: int, *, lock: bool
+) -> None:
     import ctypes
     from ctypes import wintypes
 
@@ -1287,7 +1291,9 @@ def _exact_path_component(parent: Path, component: str) -> bool:
     return matches == [component]
 
 
-def _open_windows_directory_native(path: Path) -> int | None:
+def _open_windows_directory_native(  # pragma: no cover - Windows CI
+    path: Path,
+) -> int | None:
     import ctypes
     import msvcrt
     from ctypes import wintypes
@@ -1448,7 +1454,7 @@ def _uses_native_windows_paths() -> bool:
     return os.name == "nt"
 
 
-def _open_windows_relative_native(
+def _open_windows_relative_native(  # pragma: no cover - Windows CI
     directory_fd: int,
     name: str,
     flags: int,
@@ -1477,7 +1483,7 @@ def _open_windows_relative_native(
     return _windows_fd_from_handle(handle, flags)
 
 
-def _stat_windows_relative_native(
+def _stat_windows_relative_native(  # pragma: no cover - Windows CI
     directory_fd: int, name: str
 ) -> os.stat_result:
     handle = _nt_create_relative_handle(
@@ -1494,7 +1500,7 @@ def _stat_windows_relative_native(
         _close_quietly(descriptor)
 
 
-def _replace_windows_relative_native(
+def _replace_windows_relative_native(  # pragma: no cover - Windows CI
     directory_fd: int, staged: _StagedPath, target: str
 ) -> None:
     import ctypes
@@ -1541,7 +1547,7 @@ def _replace_windows_relative_native(
         raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
 
 
-def _discard_windows_staged_handle(
+def _discard_windows_staged_handle(  # pragma: no cover - Windows CI
     descriptor: int, expected_identity: tuple[int, int]
 ) -> None:
     import ctypes
@@ -1579,7 +1585,7 @@ def _discard_windows_staged_handle(
         return
 
 
-def _nt_create_relative_handle(
+def _nt_create_relative_handle(  # pragma: no cover - Windows CI
     directory_fd: int,
     name: str,
     *,
@@ -1667,7 +1673,9 @@ def _nt_create_relative_handle(
     return int(result_handle.value)
 
 
-def _windows_handle_from_fd(descriptor: int) -> int:
+def _windows_handle_from_fd(  # pragma: no cover - Windows CI
+    descriptor: int,
+) -> int:
     import msvcrt
 
     get_osfhandle: Callable[[int], int]
@@ -1675,7 +1683,9 @@ def _windows_handle_from_fd(descriptor: int) -> int:
     return int(get_osfhandle(descriptor))
 
 
-def _windows_fd_from_handle(handle: int, flags: int) -> int:
+def _windows_fd_from_handle(  # pragma: no cover - Windows CI
+    handle: int, flags: int
+) -> int:
     import msvcrt
 
     if flags & os.O_RDWR:
@@ -1694,7 +1704,9 @@ def _windows_fd_from_handle(handle: int, flags: int) -> int:
         raise
 
 
-def _raise_windows_status(status: int, name: str) -> None:
+def _raise_windows_status(  # pragma: no cover - Windows CI
+    status: int, name: str
+) -> None:
     import ctypes
     from ctypes import wintypes
 
@@ -1710,7 +1722,9 @@ def _raise_windows_status(status: int, name: str) -> None:
     raise OSError(error, "Windows relative file operation failed", name)
 
 
-def _close_windows_handle(handle: int) -> None:
+def _close_windows_handle(  # pragma: no cover - Windows CI
+    handle: int,
+) -> None:
     import ctypes
     from ctypes import wintypes
 
