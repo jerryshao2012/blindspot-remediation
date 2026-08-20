@@ -127,14 +127,15 @@ After preflight:
 5. Report refresh warnings without retrying the CLI or report publication; do
    not change the verdict, exit meaning, or evidence. Do not retry a missing
    report, because observability is strictly non-gating.
-6. Graphify advisory last: after the exact result and observability summary,
-   eligible Graphify may issue at most one bounded query derived only from
-   `result.json` `scope.changed_paths`. Append its output as a clearly separate,
-   non-gating Graphify advisory; never mix it into the result or report.
-7. For exit 3 or 4, do not query Graphify or read observability. Report the input/configuration or
+6. For exit 3 or 4, do not query Graphify or read observability. Report the input/configuration or
    internal-engine error and no verdict. Never fabricate a result.
-8. Link the evidence directory and state that evidence is tamper-evident, not
+7. Link the evidence directory and state that evidence is tamper-evident, not
    immutable. A `PASS` covers only the configured policy and does not merge or deploy.
+8. Graphify advisory last: after the exact result, observability summary, and
+   evidence caveats, eligible Graphify may issue at most one bounded query
+   derived only from `result.json` `scope.changed_paths`. Append its output as
+   a clearly separate, non-gating Graphify advisory; never mix it into the
+   result or report.
 
 ## Integrity rules
 

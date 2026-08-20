@@ -124,6 +124,8 @@ def test_run_contract_reports_non_gating_observability_before_graphify() -> None
     assert run.index("references/gate-decisions-v1.schema.json") < run.index(
         "Graphify advisory last"
     )
+    assert run.index("For exit 3 or 4") < run.index("Graphify advisory last")
+    assert run.index("tamper-evident") < run.index("Graphify advisory last")
 
 
 def test_graphify_is_portable_optional_read_only_and_non_gating() -> None:
