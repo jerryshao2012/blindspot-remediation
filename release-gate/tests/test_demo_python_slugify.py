@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -10,12 +11,157 @@ from types import ModuleType
 import pytest
 
 from release_gate.config import load_config
+from release_gate.evidence import FINALIZATION_RESERVE, EvidenceRun
 from release_gate.models import PlatformName
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = ROOT / "demo" / "python-slugify"
 DRIVER = DEMO / "demo.py"
 POLICY = DEMO / "assets" / ".release-gate.yaml"
+
+
+def _sha(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _git(repository: Path, *arguments: str, input_bytes: bytes | None = None) -> str:
+    result = subprocess.run(
+        ["git", *arguments],
+        cwd=repository,
+        input=input_bytes,
+        check=True,
+        capture_output=True,
+    )
+    return result.stdout.decode().strip()
+
+
+def _evidence_fixture(tmp_path: Path) -> tuple[Path, Path, str]:
+    workbench = tmp_path / "workbench"
+    repository = workbench / "python-slugify"
+    repository.mkdir(parents=True)
+    _git(repository, "init", "-q")
+    _git(repository, "config", "user.name", "Demo Test")
+    _git(repository, "config", "user.email", "demo-test@example.invalid")
+    source = repository / "candidate.txt"
+    source.write_text("base\n", encoding="utf-8")
+    _git(repository, "add", "candidate.txt")
+    _git(repository, "commit", "-qm", "base")
+    base_commit = _git(repository, "rev-parse", "HEAD")
+    base_tree = _git(repository, "rev-parse", "HEAD^{tree}")
+    source.write_text("recorded candidate\n", encoding="utf-8")
+    _git(repository, "add", "candidate.txt")
+    candidate_tree = _git(repository, "write-tree")
+    patch = subprocess.run(
+        [
+            "git",
+            "diff-tree",
+            "--no-commit-id",
+            "--binary",
+            "--full-index",
+            "--no-color",
+            "--no-ext-diff",
+            "--find-renames",
+            "-r",
+            "-p",
+            base_tree,
+            candidate_tree,
+        ],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    ).stdout
+    _git(repository, "reset", "--hard", base_commit)
+    source.write_text("mutable drift\n", encoding="utf-8")
+
+    config = b"{}\n"
+    started = "2026-08-20T12:00:00Z"
+    finished = "2026-08-20T12:00:01Z"
+    run = EvidenceRun.create(
+        tmp_path / "evidence",
+        "recorded-run",
+        total_bytes=FINALIZATION_RESERVE + len(patch) + len(config),
+        patch=patch,
+        effective_config=config,
+    )
+    result = {
+        "version": 1,
+        "run_id": "recorded-run",
+        "verdict": "PASS",
+        "exit_code": 0,
+        "reason_codes": [],
+        "started_at": started,
+        "finished_at": finished,
+        "duration_ms": 1000,
+        "base_commit": base_commit,
+        "candidate_tree": candidate_tree,
+        "patch_sha256": _sha(patch),
+        "config_sha256": _sha(config),
+        "scope": {
+            "status": "PASS",
+            "reason_codes": [],
+            "changed_paths": ["candidate.txt"],
+            "outside_allowed_paths": [],
+            "forbidden_paths": [],
+            "review_required_paths": [],
+        },
+        "checks": [
+            {
+                "id": "check",
+                "mode": "candidate",
+                "severity": "blocking",
+                "status": "PASS",
+                "reason_codes": [],
+                "assertions": [],
+            }
+        ],
+        "manifest_path": "manifest.json",
+    }
+    execution = {
+        "control_id": "check",
+        "phase": "check",
+        "side": "candidate",
+        "argv": ["true"],
+        "cwd": ".",
+        "environment_keys": ["PATH"],
+        "started_at": started,
+        "finished_at": finished,
+        "duration_ms": 1000,
+        "classification": "pass",
+        "exit_code": 0,
+        "timed_out": False,
+        "reason_codes": [],
+        "metrics": {},
+    }
+    manifest = {
+        "version": 1,
+        "run_id": "recorded-run",
+        "hash_algorithm": "sha256",
+        "created_at": finished,
+        "started_at": started,
+        "finished_at": finished,
+        "duration_ms": 1000,
+        "base_commit": base_commit,
+        "candidate_tree": candidate_tree,
+        "patch_sha256": _sha(patch),
+        "config_sha256": _sha(config),
+        "engine_version": "0.3.0",
+        "platform": {
+            "family": "macos",
+            "system": "Darwin",
+            "release": "test",
+            "machine": "arm64",
+        },
+        "runtime": {
+            "implementation": "CPython",
+            "version": "3.13.0",
+            "executable": "python",
+            "executable_sha256": "a" * 64,
+        },
+        "reason_codes": [],
+        "executions": [execution],
+    }
+    completed = run.finalize(result, manifest, b"[]\n")
+    return workbench, completed / "result.json", candidate_tree
 
 
 def load_driver() -> ModuleType:
@@ -205,6 +351,111 @@ def test_result_summary_rejects_missing_or_invalid_identity(tmp_path: Path) -> N
         result.write_text(json.dumps(candidate), encoding="utf-8")
         with pytest.raises(driver.DemoError, match=key):
             driver.read_result_summary(result)
+
+
+def test_reconstructs_exact_recorded_candidate_not_mutable_workbench(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench, result_path, candidate_tree = _evidence_fixture(tmp_path)
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", workbench / "python-slugify")
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    _, _, summary = driver.load_result(result_path)
+
+    with driver.reconstruct_oracle_candidate(result_path, summary) as candidate:
+        assert (candidate / "candidate.txt").read_text() == "recorded candidate\n"
+        assert _git(candidate, "write-tree") == candidate_tree
+
+    assert not list(workbench.glob("oracle-candidate-*"))
+
+
+def test_reconstruction_verifies_inventory_before_reading_patch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench, result_path, _ = _evidence_fixture(tmp_path)
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", workbench / "python-slugify")
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    _, _, summary = driver.load_result(result_path)
+    (result_path.parent / "trace.json").write_bytes(b"tampered")
+
+    with pytest.raises(driver.DemoError, match="evidence verification failed"):
+        with driver.reconstruct_oracle_candidate(result_path, summary):
+            pytest.fail("tampered evidence must not yield a candidate")
+
+
+@pytest.mark.parametrize("damage", ["missing-manifest", "incomplete", "patch"])
+def test_reconstruction_rejects_incomplete_or_changed_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
+) -> None:
+    driver = load_driver()
+    workbench, result_path, _ = _evidence_fixture(tmp_path)
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", workbench / "python-slugify")
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    _, _, summary = driver.load_result(result_path)
+    if damage == "missing-manifest":
+        (result_path.parent / "manifest.json").unlink()
+    elif damage == "incomplete":
+        (result_path.parent / ".incomplete").write_bytes(b"")
+    else:
+        (result_path.parent / "candidate.patch").write_bytes(b"changed")
+
+    with pytest.raises(driver.DemoError, match="evidence verification failed"):
+        with driver.reconstruct_oracle_candidate(result_path, summary):
+            pytest.fail("invalid evidence must not yield a candidate")
+
+
+def test_load_result_refuses_symlink_redirect(tmp_path: Path) -> None:
+    driver = load_driver()
+    _, result_path, _ = _evidence_fixture(tmp_path)
+    redirected = tmp_path / "redirected-result.json"
+    redirected.symlink_to(result_path)
+
+    with pytest.raises(driver.DemoError, match=r"symlink|reparse"):
+        driver.load_result(redirected)
+
+
+def test_reconstruction_rejects_unavailable_base_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench, result_path, _ = _evidence_fixture(tmp_path)
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", workbench / "python-slugify")
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    _, _, summary = driver.load_result(result_path)
+
+    def unavailable(*args: object, **kwargs: object) -> str:
+        raise driver.DemoError("missing object")
+
+    monkeypatch.setattr(driver, "_git", unavailable)
+
+    with pytest.raises(driver.DemoError, match=r"clone|base commit"):
+        with driver.reconstruct_oracle_candidate(result_path, summary):
+            pytest.fail("missing base must not yield a candidate")
+
+
+def test_oracle_source_digest_covers_relative_paths_and_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    oracle = tmp_path / "oracle"
+    oracle.mkdir()
+    (oracle / "a.py").write_text("first", encoding="utf-8")
+    (oracle / "b.py").write_text("second", encoding="utf-8")
+    monkeypatch.setattr(driver, "ORACLE", oracle)
+
+    first = driver.oracle_source_sha256()
+    (oracle / "b.py").write_text("changed", encoding="utf-8")
+    assert driver.oracle_source_sha256() != first
+    (oracle / "b.py").unlink()
+    (oracle / "b.py").symlink_to(oracle / "a.py")
+
+    with pytest.raises(driver.DemoError, match="oracle source"):
+        driver.oracle_source_sha256()
 
 
 def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:

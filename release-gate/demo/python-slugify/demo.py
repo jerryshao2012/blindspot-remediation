@@ -4,18 +4,24 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from release_gate.evidence import EvidenceError, verify_run
 
 DEMO_ROOT = Path(__file__).resolve().parent
 ASSETS = DEMO_ROOT / "assets"
@@ -82,6 +88,12 @@ class CampaignMetadata:
         _optional_metadata_text(self.human_step, "human_step", 256)
 
 
+@dataclass(frozen=True, slots=True)
+class OracleAssessment:
+    truth: bool | None
+    error: bool
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the cross-platform python-slugify Release Gate demo."
@@ -146,7 +158,10 @@ def load_result(path: Path) -> tuple[Path, bytes, ResultSummary]:
     """Load a result once, preserving the exact bytes used for its identity."""
 
     try:
-        resolved = path.expanduser().resolve(strict=True)
+        expanded = path.expanduser()
+        _refuse_redirect(expanded)
+        _refuse_redirect(expanded.absolute().parent)
+        resolved = expanded.resolve(strict=True)
         result_bytes = resolved.read_bytes()
         value: object = json.loads(result_bytes)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -277,6 +292,28 @@ def _run(
         raise DemoError(f"required executable is unavailable: {command[0]}") from error
     except subprocess.CalledProcessError as error:
         detail = error.stderr.strip() if error.stderr else f"exit {error.returncode}"
+        raise DemoError(f"command failed: {' '.join(command)} ({detail})") from error
+
+
+def _run_bytes(
+    argv: Sequence[str | os.PathLike[str]],
+    *,
+    cwd: Path,
+    input_bytes: bytes,
+) -> bytes:
+    command = [os.fspath(argument) for argument in argv]
+    try:
+        return subprocess.run(
+            command,
+            cwd=cwd,
+            input=input_bytes,
+            check=True,
+            capture_output=True,
+        ).stdout
+    except FileNotFoundError as error:
+        raise DemoError(f"required executable is unavailable: {command[0]}") from error
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.decode("utf-8", errors="replace").strip()
         raise DemoError(f"command failed: {' '.join(command)} ({detail})") from error
 
 
@@ -413,6 +450,12 @@ def inspect_result(path: Path) -> ResultSummary:
     manifest = resolved.parent / summary.manifest_path
     if not manifest.is_file() or (resolved.parent / ".incomplete").exists():
         raise DemoError("evidence package is incomplete or missing manifest.json")
+    _print_result_summary(resolved, summary)
+    return summary
+
+
+def _print_result_summary(resolved: Path, summary: ResultSummary) -> None:
+    manifest = resolved.parent / summary.manifest_path
     print(f"run: {summary.run_id}")
     print(f"verdict: {summary.verdict}")
     print(f"reason codes: {', '.join(summary.reason_codes) or 'none'}")
@@ -427,14 +470,17 @@ def inspect_result(path: Path) -> ResultSummary:
         detail = f" ({', '.join(reasons)})" if reasons else ""
         print(f"check {check_id}: {status}{detail}")
     print(f"manifest: {manifest}")
-    return summary
 
 
 def grade(path: Path, *, metadata: CampaignMetadata | None = None) -> str:
     metadata = metadata or CampaignMetadata()
-    _verify_repository()
-    summary = inspect_result(path)
-    correct = _oracle_truth()
+    resolved, _, summary = load_result(path)
+    _print_result_summary(resolved, summary)
+    with reconstruct_oracle_candidate(resolved, summary) as candidate:
+        assessment = _oracle_assessment(candidate, ORACLE_VENV)
+    if assessment.error or assessment.truth is None:
+        raise DemoError("oracle could not run cleanly")
+    correct = assessment.truth
     box = classify_oracle(summary.verdict, correct)
     print(f"truth: {'correct' if correct else 'wrong'}")
     print(f"classification: {box}")
@@ -552,40 +598,153 @@ def _verify_upstream_tests() -> None:
         raise DemoError("expected the pinned upstream baseline to report 82 passed")
 
 
-def _oracle_truth() -> bool:
-    _remove_owned_directory(ORACLE_VENV)
-    _run((*host_python_argv(), "-m", "venv", ORACLE_VENV))
-    _run(
-        (
-            *_task_pip(ORACLE_VENV),
-            "install",
-            "--disable-pip-version-check",
-            "-q",
-            "-e",
-            REPOSITORY,
-            *TEST_TOOLS,
+@contextmanager
+def reconstruct_oracle_candidate(
+    result_path: Path, summary: ResultSummary
+) -> Iterator[Path]:
+    """Yield the exact candidate tree recorded by verified gate evidence."""
+
+    _verify_repository()
+    evidence_root = result_path.parent
+    _refuse_evidence_redirects(evidence_root)
+    try:
+        verify_run(evidence_root)
+    except (EvidenceError, OSError) as error:
+        raise DemoError(f"evidence verification failed: {error}") from error
+    verified_summary = read_result_summary(result_path)
+    if verified_summary != summary:
+        raise DemoError("verified result identity changed during grading")
+    patch_path = evidence_root / "candidate.patch"
+    try:
+        patch = patch_path.read_bytes()
+    except OSError as error:
+        raise DemoError("verified candidate patch is unreadable") from error
+    if hashlib.sha256(patch).hexdigest() != summary.patch_sha256:
+        raise DemoError("candidate patch digest does not match result identity")
+
+    WORKBENCH.mkdir(mode=0o700, exist_ok=True)
+    temporary = Path(
+        tempfile.mkdtemp(prefix="oracle-candidate-", dir=WORKBENCH)
+    ).absolute()
+    os.chmod(temporary, 0o700)
+    candidate = temporary / "repository"
+    try:
+        try:
+            _git("cat-file", "-e", f"{summary.base_commit}^{{commit}}")
+        except DemoError as error:
+            raise DemoError("recorded base commit is unavailable") from error
+        try:
+            _run(
+                (
+                    "git",
+                    "-c",
+                    "protocol.file.allow=always",
+                    "clone",
+                    "--no-hardlinks",
+                    "--no-checkout",
+                    "--quiet",
+                    REPOSITORY,
+                    candidate,
+                )
+            )
+            _git("checkout", "--detach", "--force", summary.base_commit, cwd=candidate)
+            _run_bytes(
+                (
+                    "git",
+                    "apply",
+                    "--binary",
+                    "--index",
+                    "--whitespace=nowarn",
+                    "-",
+                ),
+                cwd=candidate,
+                input_bytes=patch,
+            )
+            actual_tree = _git("write-tree", cwd=candidate, capture=True)
+        except DemoError as error:
+            raise DemoError(
+                "recorded candidate could not be cloned or patch applied"
+            ) from error
+        if actual_tree != summary.candidate_tree:
+            raise DemoError(
+                "reconstructed candidate tree mismatch: "
+                f"expected {summary.candidate_tree}, got {actual_tree}"
+            )
+        yield candidate
+    finally:
+        _remove_owned_directory(temporary)
+
+
+def oracle_source_sha256() -> str:
+    """Hash the complete hidden-oracle source set with path boundaries."""
+
+    try:
+        _refuse_redirect(ORACLE)
+        if not ORACLE.is_dir():
+            raise DemoError("oracle source directory is missing")
+        files: list[Path] = []
+        for path in ORACLE.rglob("*"):
+            _refuse_redirect(path)
+            if path.is_dir():
+                continue
+            if not path.is_file():
+                raise DemoError(f"oracle source is not an ordinary file: {path}")
+            files.append(path)
+        files.sort(key=lambda item: item.relative_to(ORACLE).as_posix())
+        if not files:
+            raise DemoError("oracle source set is empty")
+        digest = hashlib.sha256()
+        for path in files:
+            relative = path.relative_to(ORACLE).as_posix().encode("utf-8")
+            content = path.read_bytes()
+            digest.update(len(relative).to_bytes(8, "big"))
+            digest.update(relative)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+        return digest.hexdigest()
+    except DemoError as error:
+        raise DemoError(f"oracle source set is invalid: {error}") from error
+    except (OSError, UnicodeError) as error:
+        raise DemoError(f"oracle source set is unreadable: {error}") from error
+
+
+def _oracle_assessment(repository: Path, environment: Path) -> OracleAssessment:
+    try:
+        _remove_owned_directory(environment)
+        _run((*host_python_argv(), "-m", "venv", environment))
+        _run(
+            (
+                *_task_pip(environment),
+                "install",
+                "--disable-pip-version-check",
+                "-q",
+                "-e",
+                repository,
+                *TEST_TOOLS,
+            )
         )
-    )
-    result = _run(
-        (
-            _task_python(ORACLE_VENV),
-            "-m",
-            "pytest",
-            ORACLE,
-            "-q",
-            "-p",
-            "no:cacheprovider",
-        ),
-        cwd=REPOSITORY,
-        check=False,
-        capture=True,
-    )
+        result = _run(
+            (
+                _task_python(environment),
+                "-m",
+                "pytest",
+                ORACLE,
+                "-q",
+                "-p",
+                "no:cacheprovider",
+            ),
+            cwd=repository,
+            check=False,
+            capture=True,
+        )
+    except (DemoError, OSError):
+        return OracleAssessment(truth=None, error=True)
     print(result.stdout.rstrip())
     if result.returncode == 0:
-        return True
+        return OracleAssessment(truth=True, error=False)
     if result.returncode == 1:
-        return False
-    raise DemoError(f"oracle could not run cleanly (exit {result.returncode})")
+        return OracleAssessment(truth=False, error=False)
+    return OracleAssessment(truth=None, error=True)
 
 
 def _remove_owned_directory(path: Path) -> None:
@@ -594,6 +753,29 @@ def _remove_owned_directory(path: Path) -> None:
     if path.is_symlink() or path.resolve().parent != WORKBENCH.resolve():
         raise DemoError(f"refusing to remove unsafe demo path: {path}")
     shutil.rmtree(path)
+
+
+def _refuse_redirect(path: Path) -> None:
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise DemoError(f"path is missing or unreadable: {path}") from error
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    if stat.S_ISLNK(metadata.st_mode) or (reparse and attributes & reparse):
+        raise DemoError(f"refusing symlink or reparse-point path: {path}")
+
+
+def _refuse_evidence_redirects(root: Path) -> None:
+    _refuse_redirect(root)
+    if not root.is_dir():
+        raise DemoError(f"evidence root is not a directory: {root}")
+    try:
+        paths = list(root.rglob("*"))
+    except OSError as error:
+        raise DemoError(f"evidence root is unreadable: {root}") from error
+    for path in paths:
+        _refuse_redirect(path)
 
 
 def _result_path(stdout: str) -> Path:
