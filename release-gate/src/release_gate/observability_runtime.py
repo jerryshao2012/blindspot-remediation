@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, cast
 
 from release_gate.evidence import EvidenceBudgetExhausted, EvidenceRun
 from release_gate.observability import (
@@ -79,6 +79,12 @@ class _StagedFile:
     file: _FileSnapshot
 
 
+@dataclass(frozen=True, slots=True)
+class _StagedPath:
+    path: Path
+    file: _FileSnapshot
+
+
 @dataclass(slots=True)
 class RefreshSession:
     """A cooperative lock held over a run's snapshot, finalization and refresh."""
@@ -87,6 +93,7 @@ class RefreshSession:
     pending_result: Mapping[str, Any]
     namespace: Path | None = None
     _root_fd: int | None = None
+    _root_identity: tuple[int, int] | None = None
     _namespace_identity: tuple[int, int] | None = None
     _namespace_fd: int | None = None
     _local_lock: threading.Lock | None = None
@@ -117,6 +124,11 @@ class RefreshSession:
         wait: Callable[[float], None] = time.sleep,
     ) -> Self:
         session = cls(root=root, pending_result=pending_result)
+        if _uses_windows_backend():
+            return cast(
+                Self,
+                _acquire_windows(session, timeout_seconds, clock, wait),
+            )
         descriptor: int | None = None
         try:
             session._root_fd = _open_directory(root)
@@ -245,6 +257,8 @@ class RefreshSession:
         if not self.locked or not self._safe_namespace():
             return self._warn(ObservabilityWarning.PATH_UNSAFE).result
         assert self.namespace is not None
+        if _uses_windows_backend():
+            return _publish_windows(self)
         assert self._namespace_fd is not None
         try:
             report = self._report(include_pending=False)
@@ -315,10 +329,16 @@ class RefreshSession:
         )
 
     def _safe_namespace(self) -> bool:
-        return (
+        namespace_is_safe = (
             self.namespace is not None
             and self._namespace_identity is not None
             and _directory_identity(self.namespace) == self._namespace_identity
+        )
+        if not namespace_is_safe:
+            return False
+        return self._root_identity is None or (
+            _directory_identity(self.root) == self._root_identity
+            and self.namespace == self.root / _NAMESPACE
         )
 
     def _warn(self, warning: ObservabilityWarning) -> Self:
@@ -331,24 +351,39 @@ class RefreshSession:
         self._warn(warning)
 
 
-def _safe_namespace(root: Path) -> Path | None:
-    metadata = _lstat(root)
-    if not _safe_directory(metadata):
+def _prepare_namespace_path(
+    root: Path,
+) -> tuple[Path, tuple[int, int], tuple[int, int]] | None:
+    """Create and pin the Windows namespace using path-safe revalidation."""
+
+    root_identity = _directory_identity(root)
+    if root_identity is None:
         return None
     try:
         entries = list(root.iterdir())
-    except OSError:
+    except Exception:
+        return None
+    if _directory_identity(root) != root_identity:
         return None
     matches = [entry for entry in entries if entry.name.casefold() == _NAMESPACE]
     if len(matches) > 1 or (matches and matches[0].name != _NAMESPACE):
         return None
     namespace = root / _NAMESPACE
     if not matches:
+        if _directory_identity(root) != root_identity:
+            return None
         try:
             namespace.mkdir(mode=0o700)
         except (FileExistsError, OSError):
             return None
-    return namespace if _safe_directory(_lstat(namespace)) else None
+    namespace_identity = _directory_identity(namespace)
+    if (
+        namespace_identity is None
+        or _directory_identity(root) != root_identity
+        or namespace.parent != root
+    ):
+        return None
+    return namespace, root_identity, namespace_identity
 
 
 def _open_namespace_at(root_fd: int, root: Path) -> tuple[Path, int] | None:
@@ -578,3 +613,326 @@ def _release_local(identity: tuple[int, int] | None) -> None:
             _LOCAL_LOCKS.pop(identity, None)
         else:
             _LOCAL_LOCKS[identity] = (lock, references - 1)
+
+
+def _uses_windows_backend() -> bool:
+    return os.name == "nt"
+
+
+def _acquire_windows(
+    session: RefreshSession,
+    timeout_seconds: float,
+    clock: Callable[[], float],
+    wait: Callable[[float], None],
+) -> RefreshSession:
+    """Path backend for Windows hosts, where Python lacks ``dir_fd`` support."""
+
+    prepared = _prepare_namespace_path(session.root)
+    if prepared is None:
+        return session._warn(ObservabilityWarning.PATH_UNSAFE)
+    namespace, root_identity, namespace_identity = prepared
+    session.namespace = namespace
+    session._root_identity = root_identity
+    session._namespace_identity = namespace_identity
+    descriptor = _open_lock_path(namespace / _LOCK_NAME, session._safe_namespace)
+    if descriptor is None:
+        return session._warn(ObservabilityWarning.PATH_UNSAFE)
+    local_acquired = False
+    try:
+        session._local_identity = namespace_identity
+        session._local_lock = _local_lock(namespace_identity)
+        deadline = clock() + max(0.0, timeout_seconds)
+        assert session._local_lock is not None
+        while not session._local_lock.acquire(blocking=False):
+            if clock() >= deadline:
+                return _failed_windows_acquire(
+                    session, descriptor, False, ObservabilityWarning.LOCK_BUSY
+                )
+            wait(min(0.05, max(0.0, deadline - clock())))
+        local_acquired = True
+        while not _try_lock(descriptor):
+            if clock() >= deadline:
+                return _failed_windows_acquire(
+                    session, descriptor, True, ObservabilityWarning.LOCK_BUSY
+                )
+            wait(min(0.05, max(0.0, deadline - clock())))
+        if not session._safe_namespace() or not _same_open_file_path(
+            descriptor, namespace / _LOCK_NAME
+        ):
+            return _failed_windows_acquire(
+                session, descriptor, True, ObservabilityWarning.PATH_UNSAFE
+            )
+        session._lock_fd = descriptor
+        return session
+    except Exception:
+        return _failed_windows_acquire(
+            session,
+            descriptor,
+            local_acquired,
+            ObservabilityWarning.PATH_UNSAFE,
+        )
+
+
+def _failed_windows_acquire(
+    session: RefreshSession,
+    descriptor: int,
+    local_acquired: bool,
+    warning: ObservabilityWarning,
+) -> RefreshSession:
+    if not _close_quietly(descriptor):
+        session._warn(ObservabilityWarning.PUBLISH_FAILED)
+    if local_acquired and session._local_lock is not None:
+        try:
+            session._local_lock.release()
+        except Exception:
+            session._warn(ObservabilityWarning.PUBLISH_FAILED)
+    _release_local(session._local_identity)
+    session._local_lock = None
+    session._local_identity = None
+    return session._warn(warning)
+
+
+def _open_lock_path(path: Path, parent_is_safe: Callable[[], bool]) -> int | None:
+    descriptor: int | None = None
+    try:
+        try:
+            before = path.lstat()
+        except FileNotFoundError:
+            before = None
+        except OSError:
+            return None
+        if before is not None and (
+            not _safe_file(before) or not _single_link(before)
+        ):
+            return None
+        if not parent_is_safe():
+            return None
+        flags = os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+        if before is None:
+            flags |= os.O_CREAT | os.O_EXCL
+        descriptor = os.open(path, flags, 0o600)
+        opened = os.fstat(descriptor)
+        at_path = path.lstat()
+        if (
+            not _safe_file(opened)
+            or not _single_link(opened)
+            or not _safe_file(at_path)
+            or not _single_link(at_path)
+            or _file_snapshot(opened).identity != _file_snapshot(at_path).identity
+            or (
+                before is not None
+                and _file_snapshot(before).identity
+                != _file_snapshot(opened).identity
+            )
+            or not parent_is_safe()
+        ):
+            return None
+        os.ftruncate(descriptor, 1)
+        if not parent_is_safe() or not _same_open_file_path(descriptor, path):
+            return None
+        result = descriptor
+        descriptor = None
+        return result
+    except Exception:
+        return None
+    finally:
+        if descriptor is not None:
+            _close_quietly(descriptor)
+
+
+def _same_open_file_path(descriptor: int, path: Path) -> bool:
+    try:
+        opened = os.fstat(descriptor)
+        at_path = path.lstat()
+    except OSError:
+        return False
+    return (
+        _safe_file(opened)
+        and _single_link(opened)
+        and _safe_file(at_path)
+        and _single_link(at_path)
+        and _file_snapshot(opened).identity == _file_snapshot(at_path).identity
+    )
+
+
+def _single_link(metadata: os.stat_result) -> bool:
+    links = getattr(metadata, "st_nlink", None)
+    return links is None or links == 1
+
+
+def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
+    """Create a pinned staged file and validate it before writing any bytes."""
+
+    if session.namespace is None or not session._safe_namespace():
+        return None
+    path = session.namespace / f".release-gate-{secrets.token_hex(12)}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
+    opened_identity: tuple[int, int] | None = None
+    completed = False
+    try:
+        if not session._safe_namespace():
+            return None
+        descriptor = os.open(path, flags, 0o600)
+        opened = os.fstat(descriptor)
+        at_path = path.lstat()
+        if (
+            not _safe_file(opened)
+            or not _single_link(opened)
+            or not _safe_file(at_path)
+            or not _single_link(at_path)
+            or _file_snapshot(opened).identity != _file_snapshot(at_path).identity
+            or not session._safe_namespace()
+        ):
+            return None
+        opened_identity = _file_snapshot(opened).identity
+        stream = os.fdopen(descriptor, "wb")
+        descriptor = None
+        with stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        after = path.lstat()
+        if (
+            not _safe_file(after)
+            or not _single_link(after)
+            or _file_snapshot(after).identity != opened_identity
+            or after.st_size != len(payload)
+            or not session._safe_namespace()
+        ):
+            return None
+        completed = True
+        return _StagedPath(path, _file_snapshot(after))
+    except OSError:
+        return None
+    finally:
+        if descriptor is not None:
+            _close_quietly(descriptor)
+        if (
+            not completed
+            and opened_identity is not None
+            and session._safe_namespace()
+            and _path_has_identity(path, opened_identity)
+        ):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
+def _path_has_identity(path: Path, identity: tuple[int, int]) -> bool:
+    try:
+        metadata = path.lstat()
+    except OSError:
+        return False
+    return (
+        _safe_file(metadata)
+        and _single_link(metadata)
+        and _file_snapshot(metadata).identity == identity
+    )
+
+
+def _same_staged_path(session: RefreshSession, staged: _StagedPath) -> bool:
+    return session._safe_namespace() and _path_has_identity(
+        staged.path, staged.file.identity
+    )
+
+
+def _remove_staged_path(session: RefreshSession, staged: _StagedPath) -> None:
+    if not _same_staged_path(session, staged):
+        return
+    try:
+        staged.path.unlink()
+    except OSError:
+        pass
+
+
+def _fsync_directory_path(session: RefreshSession) -> None:
+    if session.namespace is None or not session._safe_namespace():
+        return
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            session.namespace,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        )
+        opened = os.fstat(descriptor)
+        if (
+            _safe_directory(opened)
+            and session._safe_namespace()
+            and _directory_identity(session.namespace)
+            == session._namespace_identity
+        ):
+            os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        if descriptor is not None:
+            _close_quietly(descriptor)
+
+
+def _publish_windows(session: RefreshSession) -> ObservabilityResult:
+    assert session.namespace is not None
+    try:
+        report = session._report(include_pending=False)
+        if WarningCategory.CACHE_INVALID.value in report["diagnostics"]["warnings"]:
+            session._warn(ObservabilityWarning.HISTORY_INVALID)
+        paths: dict[str, Path] = {}
+        payloads = (
+            (_DATA_NAME, render_json(report)),
+            (_DASHBOARD_NAME, render_html(report)),
+        )
+        for name, payload in payloads:
+            target = session.namespace / name
+            before = _safe_target_snapshot_path(target)
+            if before is None or not session._safe_namespace():
+                session._warn(ObservabilityWarning.PATH_UNSAFE)
+                continue
+            staged = _stage_path(session, payload)
+            if staged is None:
+                session._warn(ObservabilityWarning.PATH_UNSAFE)
+                continue
+            try:
+                if (
+                    not _same_staged_path(session, staged)
+                    or _safe_target_snapshot_path(target) != before
+                ):
+                    session._warn(ObservabilityWarning.PATH_UNSAFE)
+                    continue
+                os.replace(staged.path, target)
+                after = _safe_target_snapshot_path(target)
+                if (
+                    after is None
+                    or not after.exists
+                    or after.file != staged.file
+                    or not session._safe_namespace()
+                ):
+                    session._warn(ObservabilityWarning.PUBLISH_FAILED)
+                    continue
+                _fsync_directory_path(session)
+                paths[name] = target
+            except OSError:
+                session._warn(ObservabilityWarning.PUBLISH_FAILED)
+            finally:
+                _remove_staged_path(session, staged)
+        session._result = ObservabilityResult(
+            session.result.snapshot_path,
+            paths.get(_DASHBOARD_NAME),
+            paths.get(_DATA_NAME),
+            session.result.warnings,
+        )
+    except Exception:
+        session._warn(ObservabilityWarning.PUBLISH_FAILED)
+    return session.result
+
+
+def _safe_target_snapshot_path(path: Path) -> _TargetSnapshot | None:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return _TargetSnapshot(False, None)
+    except OSError:
+        return None
+    if not _safe_file(metadata) or not _single_link(metadata):
+        return None
+    return _TargetSnapshot(True, _file_snapshot(metadata))

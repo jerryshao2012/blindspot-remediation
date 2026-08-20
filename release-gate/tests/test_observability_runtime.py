@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -377,3 +378,384 @@ def test_pending_incomplete_run_is_excluded_from_snapshot_diagnostics(
         report = session._report(include_pending=True)
     assert report["diagnostics"]["skipped_runs"] == 0
     assert "INCOMPLETE_RUN" not in report["diagnostics"]["warnings"]
+
+
+def test_windows_backend_dispatch_avoids_descriptor_operations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.evidence import EvidenceRun
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True, raising=False)
+    monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+
+    def descriptor_operation(*_: object, **__: object) -> Any:
+        raise AssertionError("the Windows backend must not use dir_fd operations")
+
+    monkeypatch.setattr(runtime, "_open_directory", descriptor_operation)
+    monkeypatch.setattr(runtime, "_open_namespace_at", descriptor_operation)
+    monkeypatch.setattr(runtime, "_open_lock_at", descriptor_operation)
+    monkeypatch.setattr(runtime, "_stage_at", descriptor_operation)
+
+    evidence = EvidenceRun.create(
+        root,
+        "windows-run",
+        total_bytes=8 * 1024 * 1024,
+        patch=b"",
+        effective_config=b"{}",
+    )
+    with RefreshSession.acquire(root, _summary("windows-run")) as session:
+        assert session.locked
+        snapshot = session.write_snapshot(evidence)
+        result = session.publish()
+
+    assert snapshot.snapshot_path == (
+        root / "windows-run/observability/gate-decisions.html"
+    )
+    assert b"windows-run" in snapshot.snapshot_path.read_bytes()
+    assert result.data_path is not None
+    assert result.dashboard_path is not None
+    data = json.loads(result.data_path.read_bytes())
+    assert data["source_runs"] == []
+    assert data["generation_id"].encode() in result.dashboard_path.read_bytes()
+
+
+def test_windows_lock_wait_reuses_acquired_local_mutex(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    attempts = iter((False, True))
+    lock_attempts = 0
+
+    def try_lock(_: int) -> bool:
+        nonlocal lock_attempts
+        lock_attempts += 1
+        return next(attempts)
+
+    elapsed = 0.0
+
+    def clock() -> float:
+        return elapsed
+
+    def wait(_: float) -> None:
+        nonlocal elapsed
+        elapsed += 0.1
+
+    monkeypatch.setattr(runtime, "_try_lock", try_lock)
+    monkeypatch.setattr(runtime, "_unlock", lambda _: None)
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        1.0,
+        clock,
+        wait,
+    )
+    try:
+        assert session.locked
+        assert lock_attempts == 2
+    finally:
+        session.close()
+
+
+def test_windows_lock_open_closes_descriptor_when_validation_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    closed: list[int] = []
+    monkeypatch.setattr(runtime.os, "open", lambda *_args, **_kwargs: 73)
+    monkeypatch.setattr(
+        runtime.os,
+        "fstat",
+        lambda _: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+    monkeypatch.setattr(
+        runtime, "_close_quietly", lambda descriptor: not closed.append(descriptor)
+    )
+
+    assert runtime._open_lock_path(tmp_path / ".refresh.lock", lambda: True) is None
+    assert closed == [73]
+
+
+def test_windows_lock_open_contains_parent_validation_failure(
+    tmp_path: Path,
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    lock = tmp_path / ".refresh.lock"
+    checks = 0
+
+    def parent_is_safe() -> bool:
+        nonlocal checks
+        checks += 1
+        if checks == 2:
+            raise RuntimeError("identity check failed")
+        return True
+
+    assert runtime._open_lock_path(lock, parent_is_safe) is None
+    descriptor = os.open(lock, os.O_RDWR)
+    try:
+        assert runtime._try_lock(descriptor)
+        runtime._unlock(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def test_windows_root_swap_before_lock_open_does_not_touch_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    saved = tmp_path / "saved-evidence"
+    replacement_lock = root / "_observability/.refresh.lock"
+    original = runtime._open_lock_path
+    swapped = False
+
+    def swap_then_open(path: Path, parent_is_safe: object) -> int | None:
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            root.rename(saved)
+            replacement_lock.parent.mkdir(parents=True)
+            replacement_lock.write_bytes(b"outside-owned")
+        assert callable(parent_is_safe)
+        return original(path, parent_is_safe)
+
+    monkeypatch.setattr(runtime, "_open_lock_path", swap_then_open)
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+
+    assert not session.locked
+    assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+    assert replacement_lock.read_bytes() == b"outside-owned"
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows open handles already deny staged-file renames"
+)
+def test_windows_stage_validates_open_descriptor_before_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+    assert session.namespace is not None
+    staged = session.namespace / ".release-gate-fixed"
+    displaced = session.namespace / ".release-gate-displaced"
+    original_open = runtime.os.open
+
+    def substitute_after_open(
+        path: object, flags: int, mode: int = 0o777, **kwargs: object
+    ) -> int:
+        descriptor = original_open(path, flags, mode, **kwargs)
+        if Path(path) == staged:
+            staged.rename(displaced)
+            staged.write_bytes(b"attacker")
+        return descriptor
+
+    monkeypatch.setattr(runtime.secrets, "token_hex", lambda _: "fixed")
+    monkeypatch.setattr(runtime.os, "open", substitute_after_open)
+    try:
+        assert runtime._stage_path(session, b"trusted") is None
+        assert staged.read_bytes() == b"attacker"
+        assert displaced.read_bytes() == b""
+    finally:
+        session.close()
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows open lock handles already deny namespace renames"
+)
+def test_windows_namespace_swap_before_stage_does_not_touch_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+    assert session.namespace is not None
+    saved = root / "saved-observability"
+    replacement_target = session.namespace / "gate-decisions-v1.json"
+    original = runtime._stage_path
+    swapped = False
+
+    def swap_then_stage(
+        current: RefreshSession, payload: bytes
+    ) -> runtime._StagedPath | None:
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            assert current.namespace is not None
+            current.namespace.rename(saved)
+            current.namespace.mkdir()
+            replacement_target.write_bytes(b"outside-owned")
+        return original(current, payload)
+
+    monkeypatch.setattr(runtime, "_stage_path", swap_then_stage)
+    result = runtime._publish_windows(session)
+    session.close()
+
+    assert ObservabilityWarning.PATH_UNSAFE in result.warnings
+    assert replacement_target.read_bytes() == b"outside-owned"
+
+
+def test_windows_target_substitution_is_not_replaced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    outside = tmp_path / "outside-owned"
+    outside.write_bytes(b"outside-owned")
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+    assert session.namespace is not None
+    target = session.namespace / "gate-decisions-v1.json"
+    original = runtime._safe_target_snapshot_path
+    inspected = False
+
+    def substitute_after_snapshot(path: Path) -> runtime._TargetSnapshot | None:
+        nonlocal inspected
+        snapshot = original(path)
+        if path == target and not inspected:
+            inspected = True
+            os.link(outside, target)
+        return snapshot
+
+    monkeypatch.setattr(
+        runtime, "_safe_target_snapshot_path", substitute_after_snapshot
+    )
+    result = runtime._publish_windows(session)
+    session.close()
+
+    assert ObservabilityWarning.PATH_UNSAFE in result.warnings
+    assert outside.read_bytes() == b"outside-owned"
+    assert target.read_bytes() == b"outside-owned"
+
+
+def test_windows_lock_failure_releases_local_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    monkeypatch.setattr(runtime, "_try_lock", lambda _: False)
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        0.0,
+        lambda: 0.0,
+        lambda _: None,
+    )
+
+    assert session.warnings == (ObservabilityWarning.LOCK_BUSY,)
+    assert session._local_lock is None
+    assert session._local_identity is None
+    identity = runtime._directory_identity(root / "_observability")
+    assert identity not in runtime._LOCAL_LOCKS
+
+
+def test_windows_deadline_setup_failure_closes_lock_and_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+
+    session = runtime._acquire_windows(
+        RefreshSession(root, _summary("windows-run")),
+        1.0,
+        lambda: (_ for _ in ()).throw(RuntimeError("clock failed")),
+        lambda _: None,
+    )
+
+    assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+    assert session._local_lock is None
+    assert session._local_identity is None
+    identity = runtime._directory_identity(root / "_observability")
+    assert identity not in runtime._LOCAL_LOCKS
+    lock = root / "_observability/.refresh.lock"
+    descriptor = os.open(lock, os.O_RDWR)
+    try:
+        assert runtime._try_lock(descriptor)
+        runtime._unlock(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def test_real_local_contention_has_exact_lock_busy_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+    first = RefreshSession.acquire(root, _summary("first"))
+    try:
+        assert first.locked
+        second = RefreshSession.acquire(root, _summary("second"), timeout_seconds=0)
+        assert not second.locked
+        assert second.warnings == (ObservabilityWarning.LOCK_BUSY,)
+    finally:
+        first.close()
+
+    with RefreshSession.acquire(root, _summary("third")) as third:
+        assert third.locked
