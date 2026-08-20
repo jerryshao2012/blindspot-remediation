@@ -484,13 +484,9 @@ def _collect_path_fallback(
             warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
             return _collected(candidates, skipped, warnings, scan_truncated)
         directory = evidence_root / candidate.name
-        descriptor = _open_directory(directory, expected=candidate.identity)
-        if descriptor is None:
-            skipped += 1
-            warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
-            continue
-        os.close(descriptor)
-        parsed, reason = _read_completed_run_path(directory, candidate, budget)
+        parsed, reason = _read_completed_run_path(
+            directory, candidate, budget, evidence_root, root_identity
+        )
         if parsed is None:
             skipped += 1
             warnings.add(reason)
@@ -504,7 +500,11 @@ def _collect_path_fallback(
 
 
 def _read_completed_run_path(
-    directory: Path, candidate: _ScanCandidate, budget: _ReadBudget
+    directory: Path,
+    candidate: _ScanCandidate,
+    budget: _ReadBudget,
+    evidence_root: Path,
+    root_identity: tuple[int, int, int],
 ) -> tuple[DecisionSummary | None, WarningCategory]:
     try:
         if _identity(_path_lstat(directory)) != candidate.identity:
@@ -521,6 +521,10 @@ def _read_completed_run_path(
     )
     if result_bytes is None:
         return None, result_reason
+    if not _path_is_safe_identity(
+        directory, candidate.identity
+    ) or not _path_is_safe_identity(evidence_root, root_identity):
+        return None, WarningCategory.RUN_DIRECTORY_UNSAFE
     manifest_bytes, manifest_reason = _read_pinned_file(
         directory / "manifest.json", budget, MANIFEST_READ_LIMIT
     )
@@ -530,7 +534,9 @@ def _read_completed_run_path(
         current = _path_lstat(directory)
     except OSError:
         return None, WarningCategory.RUN_DIRECTORY_UNSAFE
-    if _identity(current) != candidate.identity:
+    if _identity(current) != candidate.identity or not _path_is_safe_identity(
+        evidence_root, root_identity
+    ):
         return None, WarningCategory.RUN_DIRECTORY_UNSAFE
     return _decode_completed_run(result_bytes, manifest_bytes, candidate.name)
 
@@ -636,8 +642,8 @@ def _normalize(values: Iterable[DecisionSummary | Mapping[str, Any]]) -> _Normal
     warnings: set[WarningCategory] = set()
     for value in values:
         try:
-            summary = (
-                value if isinstance(value, DecisionSummary) else _coerce_summary(value)
+            summary = _coerce_summary(
+                value.as_dict() if isinstance(value, DecisionSummary) else value
             )
         except (TypeError, ValueError):
             skipped += 1

@@ -461,6 +461,42 @@ def test_history_path_fallback_collects_a_valid_run(
     assert [item.run_id for item in collected.source_runs] == ["valid"]
 
 
+def test_path_fallback_does_not_open_a_directory_descriptor(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import release_gate.observability as observability
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    write_valid_run(root, "valid")
+    monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)  # type: ignore[union-attr]
+
+    def directory_open_is_unsupported(*args: object, **kwargs: object) -> int:
+        raise AssertionError("path fallback opened a directory")
+
+    monkeypatch.setattr(observability, "_open_directory", directory_open_is_unsupported)  # type: ignore[union-attr]
+    collected = observability.collect_history(root)
+
+    assert [item.run_id for item in collected.source_runs] == ["valid"]
+
+
+def test_invalid_decision_summary_instances_are_skipped() -> None:
+    from release_gate.observability import DecisionSummary, build_report_from_summaries
+
+    report = build_report_from_summaries(
+        [
+            DecisionSummary("bad/id", "2026-01-01T00:00:00Z", "PASS", "a" * 64),
+            DecisionSummary("bad-time", "2026-01-01t00:00:00z", "PASS", "a" * 64),
+            DecisionSummary("bad-verdict", "2026-01-01T00:00:00Z", "MAYBE", "a" * 64),
+            DecisionSummary("bad-hash", "2026-01-01T00:00:00Z", "PASS", "not-a-hash"),
+        ]
+    )
+
+    assert report["source_runs"] == []
+    assert report["diagnostics"]["skipped_runs"] == 4
+    assert report["diagnostics"]["warnings"] == ["INVALID_SUMMARY"]
+
+
 def test_history_path_fallback_rejects_a_symlink_evidence_root(
     tmp_path: Path, monkeypatch: object
 ) -> None:
