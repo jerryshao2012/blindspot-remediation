@@ -34,6 +34,7 @@ from release_gate.models import (
     ResolvedCommand,
     Scalar,
 )
+from release_gate.observability_runtime import ObservabilityWarning, RefreshSession
 from release_gate.policy import (
     CheckOutcome,
     CheckStatus,
@@ -68,6 +69,10 @@ class RunOutcome:
     verdict: Verdict
     exit_code: int
     result_path: Path
+    snapshot_path: Path | None = None
+    dashboard_path: Path | None = None
+    observability_data_path: Path | None = None
+    observability_warnings: tuple[ObservabilityWarning, ...] = ()
 
 
 @dataclass(slots=True)
@@ -204,17 +209,33 @@ def run_gate(
         duration_ms,
     )
     trace.add("verdict_decided", verdict=decision.verdict.value)
-    completed = evidence.finalize(
-        result,
-        manifest,
-        trace.finish(reason_codes=decision.reason_codes),
-    )
+    session = RefreshSession.acquire(root, result)
+    with session:
+        # The per-run artifact deliberately contains the exact pending decision.
+        # Publication remains best-effort and cannot affect the gate decision.
+        session.write_snapshot(evidence)
+        completed = evidence.finalize(
+            result,
+            manifest,
+            trace.finish(reason_codes=decision.reason_codes),
+        )
+        if session.locked:
+            session.publish()
     exit_code = {
         Verdict.PASS: 0,
         Verdict.FAIL: 1,
         Verdict.NEEDS_HUMAN: 2,
     }[decision.verdict]
-    return RunOutcome(decision.verdict, exit_code, completed / "result.json")
+    observability = session.result
+    return RunOutcome(
+        decision.verdict,
+        exit_code,
+        completed / "result.json",
+        observability.snapshot_path,
+        observability.dashboard_path,
+        observability.data_path,
+        observability.warnings,
+    )
 
 
 def _run_preparation(

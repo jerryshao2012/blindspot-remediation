@@ -103,6 +103,33 @@ def test_run_produces_three_way_verdict_and_verified_evidence(
     verify_run(run)
 
 
+def test_run_publishes_verified_snapshot_and_stable_dashboard(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
+    output = tmp_path / "custom-evidence"
+
+    assert main(
+        [
+            "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
+            "--run-id", "observed",
+        ]
+    ) == 0
+    captured = capsys.readouterr()
+    snapshot = output / "observed/observability/gate-decisions.html"
+    dashboard = output / "_observability/index.html"
+    data = output / "_observability/gate-decisions-v1.json"
+    assert snapshot.exists() and dashboard.exists() and data.exists()
+    assert b'"run_id":"observed"' in snapshot.read_bytes()
+    assert f"SNAPSHOT: {snapshot.absolute()}\n" in captured.err
+    assert f"DASHBOARD: {dashboard.absolute()}\n" in captured.err
+    assert f"OBSERVABILITY_DATA: {data.absolute()}\n" in captured.err
+    assert captured.out == (
+        f"VERDICT: PASS\nRESULT: {output / 'observed' / 'result.json'}\n"
+    )
+    verify_run(output / "observed")
+
+
 def test_policy_change_stops_commands_and_needs_human(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

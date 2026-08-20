@@ -114,6 +114,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output=Path(arguments.output) if arguments.output else None,
                 run_id=arguments.run_id,
             )
+            for label, path in (
+                ("SNAPSHOT", outcome.snapshot_path),
+                ("DASHBOARD", outcome.dashboard_path),
+                ("OBSERVABILITY_DATA", outcome.observability_data_path),
+            ):
+                if path is not None and path.exists():
+                    print(f"{label}: {path.absolute()}", file=sys.stderr)
+            for warning in outcome.observability_warnings:
+                print(f"WARNING: {warning.value}", file=sys.stderr)
             print(f"VERDICT: {outcome.verdict.value}")
             print(f"RESULT: {outcome.result_path}")
             return outcome.exit_code
