@@ -5,6 +5,8 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -267,6 +269,66 @@ def test_concurrent_cli_finalizers_publish_both_completed_runs(tmp_path: Path) -
     assert identities == sorted(identities)
     html = (output / "_observability/index.html").read_bytes()
     assert data["generation_id"].encode() in html
+    assert not list((output / "_observability").glob(".release-gate-*"))
+
+
+def test_same_process_threaded_finalizers_serialize_refresh_and_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "shared-evidence"
+    command = [sys.executable, "-c", "import time; time.sleep(0.25); print('ok')"]
+    roots = (tmp_path / "first", tmp_path / "second")
+    for root in roots:
+        root.mkdir()
+    repositories = tuple(repository(root, command) for root in roots)
+    active = 0
+    maximum_active = 0
+    guard = threading.Lock()
+    original_publish = RefreshSession.publish
+
+    def observed_publish(session: RefreshSession) -> object:
+        nonlocal active, maximum_active
+        with guard:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        try:
+            time.sleep(0.1)
+            return original_publish(session)
+        finally:
+            with guard:
+                active -= 1
+
+    monkeypatch.setattr(RefreshSession, "publish", observed_publish)
+    results: list[int | None] = [None, None]
+
+    def run(index: int) -> None:
+        results[index] = main(
+            [
+                "run", "--repo", str(repositories[index]), "--base", "HEAD",
+                "--output", str(output), "--run-id", f"threaded-{index}",
+            ]
+        )
+
+    threads = [threading.Thread(target=run, args=(index,)) for index in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+        assert not thread.is_alive()
+    assert results == [0, 0]
+    assert maximum_active == 1
+    for run_id in ("threaded-0", "threaded-1"):
+        verify_run(output / run_id)
+    data = json.loads((output / "_observability/gate-decisions-v1.json").read_bytes())
+    assert {item["run_id"] for item in data["source_runs"]} == {
+        "threaded-0", "threaded-1"
+    }
+    assert data["source_runs"] == sorted(
+        data["source_runs"], key=lambda item: (item["finished_at"], item["run_id"])
+    )
+    assert data["generation_id"].encode() in (
+        output / "_observability/index.html"
+    ).read_bytes()
     assert not list((output / "_observability").glob(".release-gate-*"))
 
 
