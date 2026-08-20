@@ -5,8 +5,9 @@ import importlib.util
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -456,6 +457,172 @@ def test_oracle_source_digest_covers_relative_paths_and_bytes(
 
     with pytest.raises(driver.DemoError, match="oracle source"):
         driver.oracle_source_sha256()
+
+
+def test_grade_records_false_release_and_is_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench, result_path, _ = _evidence_fixture(tmp_path)
+    campaign = tmp_path / "private-campaign"
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", workbench / "python-slugify")
+    monkeypatch.setattr(driver, "ORACLE_VENV", workbench / "oracle-venv")
+    monkeypatch.setattr(driver, "PRIVATE_CAMPAIGN", campaign)
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    monkeypatch.setattr(
+        driver,
+        "_oracle_assessment",
+        lambda repository, environment: driver.OracleAssessment(False, False),
+    )
+    metadata = driver.CampaignMetadata(model="model-x", usage_value=2, usage_unit="AIC")
+
+    assert driver.grade(result_path, metadata=metadata) == "FALSE_RELEASE"
+    first = (campaign / "records" / "recorded-run.json").read_bytes()
+    assert driver.grade(result_path, metadata=metadata) == "FALSE_RELEASE"
+
+    data = json.loads((campaign / "campaign-v1.json").read_text())
+    assert data["record_count"] == 1
+    metric = data["primary"]["metrics"]["false_release_per_total"]
+    assert (metric["numerator"], metric["denominator"]) == (1, 1)
+    assert (campaign / "records" / "recorded-run.json").read_bytes() == first
+
+
+def test_grade_conflicting_metadata_preserves_existing_campaign(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench, result_path, _ = _evidence_fixture(tmp_path)
+    campaign = tmp_path / "private-campaign"
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", workbench / "python-slugify")
+    monkeypatch.setattr(driver, "PRIVATE_CAMPAIGN", campaign)
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    monkeypatch.setattr(
+        driver,
+        "_oracle_assessment",
+        lambda repository, environment: driver.OracleAssessment(True, False),
+    )
+    driver.grade(result_path, metadata=driver.CampaignMetadata(model="first"))
+    before = {
+        path: path.read_bytes()
+        for path in (
+            campaign / "records" / "recorded-run.json",
+            campaign / "campaign-v1.json",
+            campaign / "index.html",
+        )
+    }
+
+    with pytest.raises(driver.DemoError, match="already exists"):
+        driver.grade(result_path, metadata=driver.CampaignMetadata(model="changed"))
+
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_oracle_error_is_recorded_and_main_returns_nonzero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    driver = load_driver()
+    workbench, result_path, _ = _evidence_fixture(tmp_path)
+    campaign = tmp_path / "private-campaign"
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", workbench / "python-slugify")
+    monkeypatch.setattr(driver, "PRIVATE_CAMPAIGN", campaign)
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    monkeypatch.setattr(
+        driver,
+        "_oracle_assessment",
+        lambda repository, environment: driver.OracleAssessment(None, True),
+    )
+
+    assert driver.main(["grade", "--result", str(result_path)]) == 1
+
+    output = capsys.readouterr().out
+    assert output.index("classification: oracle_error") < output.index(
+        "CAMPAIGN_RECORD:"
+    )
+    for label in ("CAMPAIGN_RECORD", "CAMPAIGN_REPORT", "CAMPAIGN_DATA"):
+        assert f"{label}:" in output
+    stored = json.loads(
+        (campaign / "records" / "recorded-run.json").read_text()
+    )
+    assert stored["oracle"]["classification"] == "oracle_error"
+    assert stored["oracle"]["truth"] is None
+
+
+def test_campaign_report_rebuilds_outputs_without_oracle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench, result_path, _ = _evidence_fixture(tmp_path)
+    campaign = tmp_path / "private-campaign"
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", workbench / "python-slugify")
+    monkeypatch.setattr(driver, "PRIVATE_CAMPAIGN", campaign)
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    monkeypatch.setattr(
+        driver,
+        "_oracle_assessment",
+        lambda repository, environment: driver.OracleAssessment(True, False),
+    )
+    driver.grade(result_path, metadata=driver.CampaignMetadata())
+    (campaign / "campaign-v1.json").unlink()
+    (campaign / "index.html").unlink()
+
+    def oracle_must_not_run(*args: object) -> object:
+        pytest.fail("campaign-report must not run the oracle")
+
+    monkeypatch.setattr(driver, "_oracle_assessment", oracle_must_not_run)
+    assert driver.main(["campaign-report"]) == 0
+    assert (campaign / "campaign-v1.json").is_file()
+    assert (campaign / "index.html").is_file()
+
+
+def test_verify_grades_controls_without_recording(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench, result_path, _ = _evidence_fixture(tmp_path)
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "CONTROL_EVIDENCE", tmp_path / "control-evidence")
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    monkeypatch.setattr(driver, "control", lambda scenario: None)
+    monkeypatch.setattr(driver, "reset", lambda: None)
+    expected = [
+        (0, "PASS", "good_pass"),
+        (1, "FAIL", "good_catch"),
+        (2, "NEEDS_HUMAN", "escalated"),
+    ]
+    calls = iter(expected)
+    current: list[tuple[str, str]] = []
+
+    def run(*args: object, **kwargs: object) -> SimpleNamespace:
+        exit_code, verdict, box = next(calls)
+        current.append((verdict, box))
+        return SimpleNamespace(
+            returncode=exit_code,
+            stdout=f"RESULT: {result_path}\n",
+            stderr="",
+        )
+
+    _, _, base_summary = driver.load_result(result_path)
+    monkeypatch.setattr(driver, "_run", run)
+    monkeypatch.setattr(
+        driver,
+        "inspect_result",
+        lambda path: replace(base_summary, verdict=current[-1][0]),
+    )
+    grade_calls: list[tuple[bool, str]] = []
+
+    def grade(path: Path, *, metadata: object, record: bool) -> str:
+        grade_calls.append((record, metadata.run_kind))
+        return current[-1][1]
+
+    monkeypatch.setattr(driver, "grade", grade)
+
+    driver.verify()
+
+    assert grade_calls == [(False, "control")] * 3
 
 
 def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:

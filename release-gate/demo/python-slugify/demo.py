@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -18,6 +19,7 @@ import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -44,8 +46,30 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
 
 
+def _load_campaign_module() -> Any:
+    name = "python_slugify_private_campaign"
+    existing = sys.modules.get(name)
+    if existing is not None:
+        return existing
+    path = DEMO_ROOT / "campaign_report.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load private campaign module: {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+campaign_report = _load_campaign_module()
+
+
 class DemoError(RuntimeError):
     """An expected, actionable demo error."""
+
+
+class OracleGradeError(DemoError):
+    """The oracle failed after its unknown result was durably recorded."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,18 +496,61 @@ def _print_result_summary(resolved: Path, summary: ResultSummary) -> None:
     print(f"manifest: {manifest}")
 
 
-def grade(path: Path, *, metadata: CampaignMetadata | None = None) -> str:
-    metadata = metadata or CampaignMetadata()
-    resolved, _, summary = load_result(path)
+def grade(
+    path: Path, *, metadata: CampaignMetadata, record: bool = True
+) -> str:
+    resolved, result_bytes, summary = load_result(path)
     _print_result_summary(resolved, summary)
+    oracle_digest = oracle_source_sha256()
     with reconstruct_oracle_candidate(resolved, summary) as candidate:
         assessment = _oracle_assessment(candidate, ORACLE_VENV)
     if assessment.error or assessment.truth is None:
-        raise DemoError("oracle could not run cleanly")
-    correct = assessment.truth
-    box = classify_oracle(summary.verdict, correct)
-    print(f"truth: {'correct' if correct else 'wrong'}")
+        box = "oracle_error"
+        print("truth: unknown (oracle error)")
+    else:
+        box = classify_oracle(summary.verdict, assessment.truth)
+        print(f"truth: {'correct' if assessment.truth else 'wrong'}")
     print(f"classification: {box}")
+    if record:
+        campaign_record = {
+            "version": 1,
+            "run_id": summary.run_id,
+            "run_kind": metadata.run_kind,
+            "gate": {
+                "verdict": summary.verdict,
+                "finished_at": summary.finished_at,
+                "duration_ms": summary.duration_ms,
+                "base_commit": summary.base_commit,
+                "candidate_tree": summary.candidate_tree,
+                "patch_sha256": summary.patch_sha256,
+                "config_sha256": summary.config_sha256,
+                "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
+            },
+            "oracle": {
+                "truth": assessment.truth,
+                "classification": box,
+                "source_sha256": oracle_digest,
+                "graded_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            },
+            "ai": {
+                "wall_seconds": metadata.wall_seconds,
+                "usage_value": metadata.usage_value,
+                "usage_unit": metadata.usage_unit,
+                "model": metadata.model,
+                "human_step": metadata.human_step,
+            },
+        }
+        try:
+            paths = campaign_report.record_and_refresh(
+                PRIVATE_CAMPAIGN, campaign_record
+            )
+        except campaign_report.CampaignError as error:
+            raise DemoError(str(error)) from error
+        print(f"CAMPAIGN_RECORD: {paths.record}")
+        print(f"CAMPAIGN_REPORT: {paths.report}")
+        print(f"CAMPAIGN_DATA: {paths.data}")
+    if assessment.error or assessment.truth is None:
+        raise OracleGradeError("oracle error was recorded in the private campaign")
     return box
 
 
@@ -528,7 +595,13 @@ def verify() -> None:
             raise DemoError(
                 f"{scenario}: expected verdict {verdict}, got {summary.verdict}"
             )
-        actual_box = grade(result_path)
+        actual_box = grade(
+            result_path,
+            metadata=CampaignMetadata(
+                run_kind="control", human_step="deterministic control"
+            ),
+            record=False,
+        )
         if actual_box != box:
             raise DemoError(f"{scenario}: expected {box}, got {actual_box}")
     reset()
@@ -813,7 +886,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             grade(arguments.result, metadata=metadata)
         elif arguments.command == "campaign-report":
-            raise DemoError("campaign reporting is not yet available")
+            try:
+                paths = campaign_report.refresh(PRIVATE_CAMPAIGN)
+            except campaign_report.CampaignError as error:
+                raise DemoError(str(error)) from error
+            print(f"CAMPAIGN_REPORT: {paths.report}")
+            print(f"CAMPAIGN_DATA: {paths.data}")
         elif arguments.command == "verify":
             verify()
         else:
