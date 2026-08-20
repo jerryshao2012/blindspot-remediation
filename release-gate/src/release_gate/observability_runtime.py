@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -26,6 +27,8 @@ _DATA_NAME = "gate-decisions-v1.json"
 _DASHBOARD_NAME = "index.html"
 _SNAPSHOT_NAME = "observability/gate-decisions.html"
 _MAX_SNAPSHOT_BYTES = 512 * 1024
+_LOCAL_LOCKS: dict[tuple[int, int], threading.Lock] = {}
+_LOCAL_LOCKS_GUARD = threading.Lock()
 
 
 class ObservabilityWarning(StrEnum):
@@ -84,6 +87,8 @@ class RefreshSession:
     pending_result: Mapping[str, Any]
     namespace: Path | None = None
     _namespace_identity: tuple[int, int] | None = None
+    _namespace_fd: int | None = None
+    _local_lock: threading.Lock | None = None
     _lock_fd: int | None = None
     _result: ObservabilityResult = field(default_factory=ObservabilityResult)
 
@@ -119,15 +124,29 @@ class RefreshSession:
             session._namespace_identity = _directory_identity(namespace)
             if session._namespace_identity is None:
                 return session._warn(ObservabilityWarning.PATH_UNSAFE)
-            descriptor = _open_lock(namespace / _LOCK_NAME)
+            session._namespace_fd = _open_directory(namespace)
+            if session._namespace_fd is None:
+                return session._warn(ObservabilityWarning.PATH_UNSAFE)
+            descriptor = _open_lock_at(session._namespace_fd)
             if descriptor is None:
                 return session._warn(ObservabilityWarning.PATH_UNSAFE)
             deadline = clock() + max(0.0, timeout_seconds)
+            session._local_lock = _local_lock(session._namespace_identity)
+            while not session._local_lock.acquire(blocking=False):
+                if clock() >= deadline:
+                    _close_quietly(descriptor)
+                    descriptor = None
+                    session._local_lock = None
+                    return session._warn(ObservabilityWarning.LOCK_BUSY)
+                wait(min(0.05, max(0.0, deadline - clock())))
             while not _try_lock(descriptor):
                 if clock() >= deadline:
                     if not _close_quietly(descriptor):
                         session._warn(ObservabilityWarning.PUBLISH_FAILED)
                     descriptor = None
+                    if session._local_lock is not None:
+                        session._local_lock.release()
+                        session._local_lock = None
                     return session._warn(ObservabilityWarning.LOCK_BUSY)
                 wait(min(0.05, max(0.0, deadline - clock())))
             session._lock_fd = descriptor
@@ -136,6 +155,12 @@ class RefreshSession:
         except Exception:
             if descriptor is not None and not _close_quietly(descriptor):
                 session._warn(ObservabilityWarning.PUBLISH_FAILED)
+            if session._namespace_fd is not None:
+                _close_quietly(session._namespace_fd)
+                session._namespace_fd = None
+            if session._local_lock is not None:
+                session._local_lock.release()
+                session._local_lock = None
             return session._warn(ObservabilityWarning.PATH_UNSAFE)
 
     def __enter__(self) -> Self:
@@ -154,11 +179,23 @@ class RefreshSession:
                 if not _close_quietly(self._lock_fd):
                     self._warn(ObservabilityWarning.PUBLISH_FAILED)
                 self._lock_fd = None
+        if self._namespace_fd is not None:
+            if not _close_quietly(self._namespace_fd):
+                self._warn(ObservabilityWarning.PUBLISH_FAILED)
+            self._namespace_fd = None
+        if self._local_lock is not None:
+            try:
+                self._local_lock.release()
+            except Exception:
+                self._warn(ObservabilityWarning.PUBLISH_FAILED)
+            self._local_lock = None
 
     def write_snapshot(self, evidence: EvidenceRun) -> ObservabilityResult:
         """Add a bounded, verified per-run HTML artifact while the lock is held."""
 
-        if not self.locked or not self._safe_namespace():
+        if not self.locked:
+            return self._result
+        if not self._safe_namespace():
             return self._warn(ObservabilityWarning.PATH_UNSAFE).result
         try:
             report = self._report(include_pending=True)
@@ -248,6 +285,9 @@ class RefreshSession:
             self.root,
             self.pending_result if include_pending else None,
             cache=cache if cache.exists() else None,
+            exclude_run_id=str(self.pending_result.get("run_id"))
+            if include_pending
+            else None,
         )
 
     def _safe_namespace(self) -> bool:
@@ -323,24 +363,42 @@ def _directory_identity(path: Path) -> tuple[int, int] | None:
     return (metadata.st_dev, metadata.st_ino)
 
 
-def _open_lock(path: Path) -> int | None:
+def _open_directory(path: Path) -> int | None:
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+    except OSError:
+        return None
+    if not _safe_directory(os.fstat(descriptor)):
+        _close_quietly(descriptor)
+        return None
+    return descriptor
+
+
+def _open_lock_at(directory_fd: int) -> int | None:
     flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = os.open(_LOCK_NAME, flags, 0o600, dir_fd=directory_fd)
     except OSError:
         return None
     try:
-        os.ftruncate(descriptor, 1)
         opened = os.fstat(descriptor)
-        at_path = _lstat(path)
+        at_path = os.stat(_LOCK_NAME, dir_fd=directory_fd, follow_symlinks=False)
     except OSError:
         os.close(descriptor)
         return None
-    if not _safe_file(opened) or not _safe_file(at_path):
+    if not _safe_file(opened) or opened.st_nlink != 1 or not _safe_file(at_path):
         os.close(descriptor)
         return None
     assert at_path is not None
     if (opened.st_dev, opened.st_ino) != (at_path.st_dev, at_path.st_ino):
+        os.close(descriptor)
+        return None
+    try:
+        os.ftruncate(descriptor, 1)
+    except OSError:
         os.close(descriptor)
         return None
     return descriptor
@@ -441,3 +499,8 @@ def _close_quietly(descriptor: int) -> bool:
     except Exception:
         return False
     return True
+
+
+def _local_lock(identity: tuple[int, int]) -> threading.Lock:
+    with _LOCAL_LOCKS_GUARD:
+        return _LOCAL_LOCKS.setdefault(identity, threading.Lock())

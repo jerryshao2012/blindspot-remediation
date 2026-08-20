@@ -95,10 +95,13 @@ def build_report(
     pending_result: Mapping[str, Any] | None = None,
     *,
     cache: Mapping[str, Any] | Path | None = None,
+    exclude_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Build a report from an evidence root and an optional not-yet-persisted result."""
 
-    collected = collect_history(evidence_root, cache=cache)
+    collected = collect_history(
+        evidence_root, cache=cache, exclude_run_id=exclude_run_id
+    )
     inputs: list[DecisionSummary | Mapping[str, Any]] = list(collected.source_runs)
     if pending_result is not None:
         inputs.append(pending_result)
@@ -144,6 +147,7 @@ def collect_history(
     evidence_root: Path,
     *,
     cache: Mapping[str, Any] | Path | None = None,
+    exclude_run_id: str | None = None,
 ) -> HistoryCollection:
     """Read cache and evidence directories without following unsafe filesystem links."""
 
@@ -159,7 +163,7 @@ def collect_history(
 
     if not _uses_dir_fd():
         return _collect_path_fallback(
-            evidence_root, candidates, skipped, warnings, budget
+            evidence_root, candidates, skipped, warnings, budget, exclude_run_id
         )
 
     root_fd = _open_directory(evidence_root)
@@ -175,7 +179,7 @@ def collect_history(
     try:
         with os.scandir(root_fd) as entries:
             for entry in entries:
-                if entry.name == "_observability":
+                if entry.name == "_observability" or entry.name == exclude_run_id:
                     continue
                 try:
                     metadata = _path_lstat(entry.name, dir_fd=root_fd)
@@ -425,6 +429,7 @@ def _collect_path_fallback(
     skipped: int,
     warnings: set[WarningCategory],
     budget: _ReadBudget,
+    exclude_run_id: str | None,
 ) -> HistoryCollection:
     """Windows-safe path traversal without ``dir_fd`` or descriptor scandir."""
 
@@ -451,7 +456,7 @@ def _collect_path_fallback(
     try:
         with os.scandir(evidence_root) as entries:
             for entry in entries:
-                if entry.name == "_observability":
+                if entry.name == "_observability" or entry.name == exclude_run_id:
                     continue
                 path = evidence_root / entry.name
                 try:

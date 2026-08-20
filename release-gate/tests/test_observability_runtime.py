@@ -268,3 +268,37 @@ def test_cleanup_exception_is_converted_to_a_publication_warning(
     )
     session.close()
     assert "OBSERVABILITY_PUBLISH_FAILED" in session.result.warning_codes
+
+
+@pytest.mark.skipif(os.name == "nt", reason="hard-link setup is POSIX-specific")
+def test_hard_linked_lock_is_not_truncated_or_locked(tmp_path: Path) -> None:
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    outside = tmp_path / "outside-lock"
+    outside.write_bytes(b"do-not-truncate")
+    os.link(outside, namespace / ".refresh.lock")
+    session = RefreshSession.acquire(root, _summary("run-one"))
+    assert not session.locked
+    assert outside.read_bytes() == b"do-not-truncate"
+    assert ObservabilityWarning.PATH_UNSAFE in session.warnings
+
+
+def test_lock_busy_does_not_add_path_unsafe_warning(tmp_path: Path) -> None:
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    session = RefreshSession(root, _summary("run-one"))
+    assert session.write_snapshot(object()) == session.result  # type: ignore[arg-type]
+    session._result = session.result.with_warning(ObservabilityWarning.LOCK_BUSY)
+    snapshot = session.write_snapshot(object())  # type: ignore[arg-type]
+    assert snapshot.warnings == (ObservabilityWarning.LOCK_BUSY,)
