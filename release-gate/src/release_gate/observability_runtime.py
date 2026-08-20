@@ -130,21 +130,33 @@ class RefreshSession:
                 _acquire_windows(session, timeout_seconds, clock, wait),
             )
         descriptor: int | None = None
+        local_acquired = False
         try:
             session._root_fd = _open_directory(root)
             if session._root_fd is None:
                 return session._warn(ObservabilityWarning.PATH_UNSAFE)
+            opened_root = os.fstat(session._root_fd)
+            session._root_identity = (opened_root.st_dev, opened_root.st_ino)
+            if _directory_identity(root) != session._root_identity:
+                raise OSError("observability root identity changed during acquisition")
             opened_namespace = _open_namespace_at(session._root_fd, root)
             if opened_namespace is None:
                 session.close()
                 return session._warn(ObservabilityWarning.PATH_UNSAFE)
             namespace, session._namespace_fd = opened_namespace
             session.namespace = namespace
-            session._namespace_identity = _directory_identity(namespace)
-            if session._namespace_identity is None:
-                return session._warn(ObservabilityWarning.PATH_UNSAFE)
+            opened_namespace_metadata = os.fstat(session._namespace_fd)
+            session._namespace_identity = (
+                opened_namespace_metadata.st_dev,
+                opened_namespace_metadata.st_ino,
+            )
+            if _directory_identity(namespace) != session._namespace_identity:
+                raise OSError(
+                    "observability namespace identity changed during acquisition"
+                )
             descriptor = _open_lock_at(session._namespace_fd)
             if descriptor is None:
+                session.close()
                 return session._warn(ObservabilityWarning.PATH_UNSAFE)
             deadline = clock() + max(0.0, timeout_seconds)
             session._local_lock = _local_lock(session._namespace_identity)
@@ -153,10 +165,13 @@ class RefreshSession:
                 if clock() >= deadline:
                     _close_quietly(descriptor)
                     descriptor = None
+                    _release_local(session._local_identity)
                     session._local_lock = None
                     session._local_identity = None
+                    session.close()
                     return session._warn(ObservabilityWarning.LOCK_BUSY)
                 wait(min(0.05, max(0.0, deadline - clock())))
+            local_acquired = True
             while not _try_lock(descriptor):
                 if clock() >= deadline:
                     if not _close_quietly(descriptor):
@@ -164,9 +179,11 @@ class RefreshSession:
                     descriptor = None
                     if session._local_lock is not None:
                         session._local_lock.release()
+                        local_acquired = False
                         _release_local(session._local_identity)
                         session._local_lock = None
                         session._local_identity = None
+                    session.close()
                     return session._warn(ObservabilityWarning.LOCK_BUSY)
                 wait(min(0.05, max(0.0, deadline - clock())))
             session._lock_fd = descriptor
@@ -181,8 +198,12 @@ class RefreshSession:
             if session._root_fd is not None:
                 _close_quietly(session._root_fd)
                 session._root_fd = None
+            if local_acquired and session._local_lock is not None:
+                try:
+                    session._local_lock.release()
+                except Exception:
+                    session._warn(ObservabilityWarning.PUBLISH_FAILED)
             if session._local_lock is not None:
-                session._local_lock.release()
                 _release_local(session._local_identity)
                 session._local_lock = None
                 session._local_identity = None
@@ -331,14 +352,22 @@ class RefreshSession:
     def _safe_namespace(self) -> bool:
         namespace_is_safe = (
             self.namespace is not None
+            and self._namespace_fd is not None
             and self._namespace_identity is not None
+            and _directory_fd_identity(self._namespace_fd)
+            == self._namespace_identity
             and _directory_identity(self.namespace) == self._namespace_identity
         )
         if not namespace_is_safe:
             return False
-        return self._root_identity is None or (
-            _directory_identity(self.root) == self._root_identity
-            and self.namespace == self.root / _NAMESPACE
+        return (
+            self._root_fd is not None
+            and self._root_identity is not None
+            and _directory_fd_identity(self._root_fd) == self._root_identity
+            and (
+                _directory_identity(self.root) == self._root_identity
+                and self.namespace == self.root / _NAMESPACE
+            )
         )
 
     def _warn(self, warning: ObservabilityWarning) -> Self:
@@ -457,18 +486,47 @@ def _directory_identity(path: Path) -> tuple[int, int] | None:
     return (metadata.st_dev, metadata.st_ino)
 
 
+def _directory_fd_identity(descriptor: int) -> tuple[int, int] | None:
+    try:
+        metadata = os.fstat(descriptor)
+    except OSError:
+        return None
+    if not _safe_directory(metadata):
+        return None
+    return (metadata.st_dev, metadata.st_ino)
+
+
 def _open_directory(path: Path) -> int | None:
+    inspected = _lstat(path)
+    if not _safe_directory(inspected):
+        return None
+    descriptor: int | None = None
     try:
         descriptor = os.open(
             path,
             os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
         )
+        opened = os.fstat(descriptor)
+        current = _lstat(path)
+        if (
+            not _safe_directory(opened)
+            or not _safe_directory(current)
+            or inspected is None
+            or current is None
+            or (inspected.st_dev, inspected.st_ino)
+            != (opened.st_dev, opened.st_ino)
+            or (opened.st_dev, opened.st_ino)
+            != (current.st_dev, current.st_ino)
+        ):
+            return None
+        result = descriptor
+        descriptor = None
+        return result
     except OSError:
         return None
-    if not _safe_directory(os.fstat(descriptor)):
-        _close_quietly(descriptor)
-        return None
-    return descriptor
+    finally:
+        if descriptor is not None:
+            _close_quietly(descriptor)
 
 
 def _open_lock_at(directory_fd: int) -> int | None:
@@ -627,15 +685,41 @@ def _acquire_windows(
 ) -> RefreshSession:
     """Path backend for Windows hosts, where Python lacks ``dir_fd`` support."""
 
+    session._root_fd = _open_windows_directory(session.root)
+    if session._root_fd is None:
+        return session._warn(ObservabilityWarning.PATH_UNSAFE)
+    session._root_identity = _directory_fd_identity(session._root_fd)
+    if (
+        session._root_identity is None
+        or _directory_identity(session.root) != session._root_identity
+    ):
+        session.close()
+        return session._warn(ObservabilityWarning.PATH_UNSAFE)
     prepared = _prepare_namespace_path(session.root)
     if prepared is None:
+        session.close()
         return session._warn(ObservabilityWarning.PATH_UNSAFE)
     namespace, root_identity, namespace_identity = prepared
+    if root_identity != session._root_identity:
+        session.close()
+        return session._warn(ObservabilityWarning.PATH_UNSAFE)
     session.namespace = namespace
-    session._root_identity = root_identity
     session._namespace_identity = namespace_identity
-    descriptor = _open_lock_path(namespace / _LOCK_NAME, session._safe_namespace)
+    session._namespace_fd = _open_windows_directory(namespace)
+    if (
+        session._namespace_fd is None
+        or _directory_fd_identity(session._namespace_fd) != namespace_identity
+        or not session._safe_namespace()
+    ):
+        session.close()
+        return session._warn(ObservabilityWarning.PATH_UNSAFE)
+    descriptor = _open_lock_path(
+        namespace / _LOCK_NAME,
+        session._safe_namespace,
+        session._namespace_fd,
+    )
     if descriptor is None:
+        session.close()
         return session._warn(ObservabilityWarning.PATH_UNSAFE)
     local_acquired = False
     try:
@@ -689,14 +773,102 @@ def _failed_windows_acquire(
     _release_local(session._local_identity)
     session._local_lock = None
     session._local_identity = None
+    session.close()
     return session._warn(warning)
 
 
-def _open_lock_path(path: Path, parent_is_safe: Callable[[], bool]) -> int | None:
+def _open_windows_directory(path: Path) -> int | None:
+    """Open a directory handle which prevents Windows path substitution."""
+
+    inspected = _lstat(path)
+    if not _safe_directory(inspected):
+        return None
+    descriptor: int | None = None
+    try:
+        if os.name == "nt":
+            descriptor = _open_windows_directory_native(path)
+        else:
+            descriptor = os.open(
+                path,
+                os.O_RDONLY
+                | getattr(os, "O_DIRECTORY", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+            )
+        if descriptor is None:
+            return None
+        opened = os.fstat(descriptor)
+        current = _lstat(path)
+        if (
+            not _safe_directory(opened)
+            or not _safe_directory(current)
+            or inspected is None
+            or current is None
+            or (inspected.st_dev, inspected.st_ino)
+            != (opened.st_dev, opened.st_ino)
+            or (opened.st_dev, opened.st_ino)
+            != (current.st_dev, current.st_ino)
+        ):
+            return None
+        result = descriptor
+        descriptor = None
+        return result
+    except OSError:
+        return None
+    finally:
+        if descriptor is not None:
+            _close_quietly(descriptor)
+
+
+def _open_windows_directory_native(path: Path) -> int | None:
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create_file.restype = wintypes.HANDLE
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = (wintypes.HANDLE,)
+    close_handle.restype = wintypes.BOOL
+    handle = create_file(
+        str(path),
+        0x0080,  # FILE_READ_ATTRIBUTES
+        0x0001 | 0x0002,  # FILE_SHARE_READ | FILE_SHARE_WRITE; deny delete/rename
+        None,
+        3,  # OPEN_EXISTING
+        0x02000000 | 0x00200000,  # BACKUP_SEMANTICS | OPEN_REPARSE_POINT
+        None,
+    )
+    invalid = ctypes.c_void_p(-1).value
+    if handle == invalid:
+        return None
+    try:
+        open_osfhandle: Callable[[int, int], int]
+        open_osfhandle = msvcrt.open_osfhandle  # type: ignore[attr-defined]
+        return int(open_osfhandle(int(handle), os.O_RDONLY))
+    except OSError:
+        close_handle(handle)
+        return None
+
+
+def _open_lock_path(
+    path: Path,
+    parent_is_safe: Callable[[], bool],
+    directory_fd: int | None = None,
+) -> int | None:
     descriptor: int | None = None
     try:
         try:
-            before = path.lstat()
+            before = _windows_child_lstat(directory_fd, path)
         except FileNotFoundError:
             before = None
         except OSError:
@@ -710,9 +882,9 @@ def _open_lock_path(path: Path, parent_is_safe: Callable[[], bool]) -> int | Non
         flags = os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
         if before is None:
             flags |= os.O_CREAT | os.O_EXCL
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = _open_windows_child(directory_fd, path, flags, 0o600)
         opened = os.fstat(descriptor)
-        at_path = path.lstat()
+        at_path = _windows_child_lstat(directory_fd, path)
         if (
             not _safe_file(opened)
             or not _single_link(opened)
@@ -728,7 +900,9 @@ def _open_lock_path(path: Path, parent_is_safe: Callable[[], bool]) -> int | Non
         ):
             return None
         os.ftruncate(descriptor, 1)
-        if not parent_is_safe() or not _same_open_file_path(descriptor, path):
+        if not parent_is_safe() or not _same_open_file_path(
+            descriptor, path, directory_fd
+        ):
             return None
         result = descriptor
         descriptor = None
@@ -740,10 +914,12 @@ def _open_lock_path(path: Path, parent_is_safe: Callable[[], bool]) -> int | Non
             _close_quietly(descriptor)
 
 
-def _same_open_file_path(descriptor: int, path: Path) -> bool:
+def _same_open_file_path(
+    descriptor: int, path: Path, directory_fd: int | None = None
+) -> bool:
     try:
         opened = os.fstat(descriptor)
-        at_path = path.lstat()
+        at_path = _windows_child_lstat(directory_fd, path)
     except OSError:
         return False
     return (
@@ -755,6 +931,25 @@ def _same_open_file_path(descriptor: int, path: Path) -> bool:
     )
 
 
+def _open_windows_child(
+    directory_fd: int | None,
+    path: Path,
+    flags: int,
+    mode: int,
+) -> int:
+    if os.name == "nt" or directory_fd is None:
+        return os.open(path, flags, mode)
+    return os.open(path.name, flags, mode, dir_fd=directory_fd)
+
+
+def _windows_child_lstat(
+    directory_fd: int | None, path: Path
+) -> os.stat_result:
+    if os.name == "nt" or directory_fd is None:
+        return path.lstat()
+    return os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+
+
 def _single_link(metadata: os.stat_result) -> bool:
     links = getattr(metadata, "st_nlink", None)
     return links is None or links == 1
@@ -763,7 +958,11 @@ def _single_link(metadata: os.stat_result) -> bool:
 def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
     """Create a pinned staged file and validate it before writing any bytes."""
 
-    if session.namespace is None or not session._safe_namespace():
+    if (
+        session.namespace is None
+        or session._namespace_fd is None
+        or not session._safe_namespace()
+    ):
         return None
     path = session.namespace / f".release-gate-{secrets.token_hex(12)}"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
@@ -773,9 +972,11 @@ def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
     try:
         if not session._safe_namespace():
             return None
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = _open_windows_child(
+            session._namespace_fd, path, flags, 0o600
+        )
         opened = os.fstat(descriptor)
-        at_path = path.lstat()
+        at_path = _windows_child_lstat(session._namespace_fd, path)
         if (
             not _safe_file(opened)
             or not _single_link(opened)
@@ -792,7 +993,7 @@ def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-        after = path.lstat()
+        after = _windows_child_lstat(session._namespace_fd, path)
         if (
             not _safe_file(after)
             or not _single_link(after)
