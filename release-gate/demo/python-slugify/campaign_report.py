@@ -1,8 +1,11 @@
 """Private, demo-only campaign records and aggregate reporting."""
 
+# ruff: noqa: E501 - readable embedded HTML is intentionally kept on whole lines.
+
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 from collections import Counter, defaultdict
@@ -240,6 +243,180 @@ def build_campaign_data(records: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "records": validated,
     }
+
+
+def render_campaign_html(data: dict[str, Any]) -> str:
+    """Render a self-contained, escaped view of campaign aggregate data."""
+
+    primary = data["primary"]
+    metric_labels = {
+        "automation_coverage": "Automation coverage",
+        "false_release_per_total": "False releases per oracle-valid trial",
+        "false_release_given_pass": "False releases given PASS",
+        "false_block_per_total": "False blocks per oracle-valid trial",
+        "escalation_rate": "Escalations per oracle-valid trial",
+    }
+    run_kind_rows = "".join(
+        _row(kind, value) for kind, value in data["run_kind_counts"].items()
+    )
+    classification_rows = "".join(
+        _row(
+            name,
+            f"{count} / {primary['oracle_valid']}",
+            alert=name == "FALSE_RELEASE",
+        )
+        for name, count in primary["classification_counts"].items()
+    )
+    metric_rows = "".join(
+        _metric_row(metric_labels[name], metric)
+        for name, metric in primary["metrics"].items()
+    )
+    record_rows = "".join(_record_row(item) for item in data["records"])
+    usage_rows = "".join(
+        _summary_row(unit, summary)
+        for unit, summary in primary["usage_by_unit"].items()
+    ) or '<tr><td colspan="6">No known usage values</td></tr>'
+    model_rows = _categorical_rows(primary["model_counts"])
+    human_rows = _categorical_rows(primary["human_step_counts"])
+    generation = _escape(data["generation_id"])
+    generated_at = _escape(data["generated_at"] or "no records")
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Private Release Gate campaign report</title>
+<style>
+:root {{ color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }}
+body {{ margin: 0 auto; max-width: 1100px; padding: 2rem; line-height: 1.45; }}
+h1, h2 {{ line-height: 1.15; }}
+.private {{ border-left: .4rem solid #8b5cf6; padding: .8rem 1rem; background: #8b5cf615; }}
+.grid {{ display: grid; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); gap: 1rem; }}
+.card {{ border: 1px solid #8886; border-radius: .4rem; padding: 1rem; overflow-x: auto; }}
+table {{ border-collapse: collapse; width: 100%; }}
+th, td {{ border-bottom: 1px solid #8885; padding: .5rem; text-align: left; vertical-align: top; }}
+th {{ font-weight: 700; }}
+.alert {{ color: #b91c1c; font-weight: 800; }}
+code {{ overflow-wrap: anywhere; }}
+.muted {{ opacity: .75; }}
+</style>
+</head>
+<body>
+<header>
+<h1>Private Release Gate campaign report</h1>
+<p class="private"><strong>Private demo evaluation.</strong> This local report combines gate decisions with hidden-oracle truth. It is not part of gate evidence or the public decision dashboard.</p>
+<p class="muted">Generation <code>{generation}</code><br>Latest grade: {generated_at}</p>
+</header>
+<main>
+<section class="grid" aria-label="Campaign summary">
+<div class="card"><h2>Stored records</h2><p>{data['record_count']}</p><table><tbody>{run_kind_rows}</tbody></table></div>
+<div class="card"><h2>Primary trials</h2><table><tbody>
+{_row('Attempts', primary['attempts'])}
+{_row('Oracle-valid', primary['oracle_valid'])}
+{_row('Oracle errors', primary['oracle_errors'])}
+</tbody></table></div>
+</section>
+<section class="card"><h2>Classifications</h2><table><thead><tr><th>Classification</th><th>Count / oracle-valid primary trials</th></tr></thead><tbody>{classification_rows}</tbody></table></section>
+<section class="card"><h2>Rates and uncertainty</h2><table><thead><tr><th>Metric</th><th>Events / trials</th><th>Estimate</th><th>95% Wilson interval</th></tr></thead><tbody>{metric_rows}</tbody></table></section>
+<section class="card"><h2>AI wall time</h2><table><tbody>{_summary_row('seconds', primary['wall_time'])}</tbody></table></section>
+<section class="card"><h2>AI usage by unit</h2><table><thead><tr><th>Unit</th><th>Known</th><th>Unknown</th><th>Total</th><th>Mean</th><th>Range</th></tr></thead><tbody>{usage_rows}</tbody></table></section>
+<section class="grid">
+<div class="card"><h2>Models</h2><table><tbody>{model_rows}</tbody></table></div>
+<div class="card"><h2>Human steps</h2><table><tbody>{human_rows}</tbody></table></div>
+</section>
+<section class="card"><h2>Run records</h2><table><thead><tr><th>Run</th><th>Kind</th><th>Gate</th><th>Oracle</th><th>Classification</th><th>Model</th><th>Human step</th></tr></thead><tbody>{record_rows}</tbody></table></section>
+<section class="card"><h2>Interpretation limits</h2><ul>
+<li>A gate PASS is not proof of correctness.</li>
+<li>The private oracle supplies the truth label.</li>
+<li>Small samples have wide uncertainty.</li>
+<li>Repeated X1 trials measure X1 repeatability, not general Release Gate safety.</li>
+<li>Correlated trials and benchmark or oracle quality limit interpretation.</li>
+</ul></section>
+</main>
+</body>
+</html>
+"""
+
+
+def _row(label: object, value: object, *, alert: bool = False) -> str:
+    css = ' class="alert"' if alert else ""
+    return f"<tr{css}><th>{_escape(label)}</th><td>{_escape(value)}</td></tr>"
+
+
+def _metric_row(label: str, metric: dict[str, Any]) -> str:
+    estimate = _percent(metric["estimate"])
+    interval = (
+        "unknown"
+        if metric["lower_bound"] is None
+        else f"{_percent(metric['lower_bound'])} - {_percent(metric['upper_bound'])}"
+    )
+    return (
+        "<tr><th>"
+        + _escape(label)
+        + "</th><td>"
+        + _escape(f"{metric['numerator']} / {metric['denominator']}")
+        + "</td><td>"
+        + _escape(estimate)
+        + "</td><td>"
+        + _escape(interval)
+        + "</td></tr>"
+    )
+
+
+def _summary_row(label: str, summary: dict[str, Any]) -> str:
+    range_text = (
+        "unknown"
+        if summary["minimum"] is None
+        else f"{summary['minimum']:g} - {summary['maximum']:g}"
+    )
+    values = (
+        label,
+        summary["known_count"],
+        summary["unknown_count"],
+        _number(summary["total"]),
+        _number(summary["mean"]),
+        range_text,
+    )
+    return "<tr>" + "".join(f"<td>{_escape(value)}</td>" for value in values) + "</tr>"
+
+
+def _categorical_rows(values: dict[str, int]) -> str:
+    return "".join(_row(label, count) for label, count in values.items()) or _row(
+        "unknown", 0
+    )
+
+
+def _record_row(item: dict[str, Any]) -> str:
+    truth = item["oracle"]["truth"]
+    values = (
+        item["run_id"],
+        item["run_kind"],
+        item["gate"]["verdict"],
+        "error" if truth is None else "correct" if truth else "wrong",
+        item["oracle"]["classification"],
+        item["ai"]["model"] or "unknown",
+        item["ai"]["human_step"] or "unknown",
+    )
+    cells = "".join(f"<td>{_escape(value)}</td>" for value in values)
+    css = (
+        ' class="alert"'
+        if item["oracle"]["classification"] == "FALSE_RELEASE"
+        else ""
+    )
+    return f"<tr{css}>{cells}</tr>"
+
+
+def _percent(value: float | None) -> str:
+    return "unknown" if value is None else f"{value * 100:.1f}%"
+
+
+def _number(value: float | None) -> str:
+    return "unknown" if value is None else f"{value:g}"
+
+
+def _escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
 
 
 def _mapping(value: object, label: str, keys: set[str]) -> dict[str, Any]:

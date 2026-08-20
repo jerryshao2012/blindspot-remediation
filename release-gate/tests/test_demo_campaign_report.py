@@ -197,3 +197,41 @@ def test_human_step_text_never_changes_structured_primary_cohort() -> None:
 
     assert data["run_kind_counts"] == {"trial": 1, "re-gate": 1, "control": 0}
     assert data["primary"]["attempts"] == 1
+
+
+def test_html_is_deterministic_escaped_self_contained_and_honest() -> None:
+    campaign = load_campaign()
+    value = record(
+        "html",
+        model="<script>alert(1)</script>",
+        human_step="review & fix",
+    )
+    data = campaign.build_campaign_data([value])
+
+    first = campaign.render_campaign_html(data)
+    second = campaign.render_campaign_html(data)
+
+    assert first == second
+    assert "<script>alert(1)</script>" not in first
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in first
+    assert "review &amp; fix" in first
+    assert data["generation_id"] in first
+    assert "False releases given PASS" in first
+    assert "Repeated X1 trials measure X1 repeatability" in first
+    assert "https://" not in first and "http://" not in first
+
+
+def test_html_displays_false_release_counts_and_wilson_denominators() -> None:
+    campaign = load_campaign()
+    false_release = record(
+        "false-release",
+        truth=False,
+        classification="FALSE_RELEASE",
+    )
+    data = campaign.build_campaign_data([false_release])
+
+    rendered = campaign.render_campaign_html(data)
+
+    assert "FALSE_RELEASE" in rendered
+    assert "1 / 1" in rendered
+    assert "95% Wilson interval" in rendered
