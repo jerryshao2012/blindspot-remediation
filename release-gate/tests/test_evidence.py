@@ -201,6 +201,43 @@ def test_run_ids_are_append_only_and_casefold_unique(tmp_path: Path) -> None:
         )
 
 
+def test_optional_artifact_reserves_final_manifest_slots_and_byte_budget(
+    tmp_path: Path,
+) -> None:
+    patch = b"p"
+    config = b"{}"
+    run = EvidenceRun.create(
+        tmp_path,
+        "optional-capacity",
+        total_bytes=FINALIZATION_RESERVE + len(patch) + len(config),
+        patch=patch,
+        effective_config=config,
+    )
+    assert (
+        run.try_write_optional_artifact("observability/gate-decisions.html", b"x")
+        is None
+    )
+
+    # The public helper must also protect the schema's 4740 artifact maximum:
+    # snapshot + trace + result need three slots after existing inventory.
+    run._artifacts.update(
+        {
+            f"reserved/{index}": {
+                "path": f"reserved/{index}",
+                "media_type": "application/octet-stream",
+                "size_bytes": 0,
+                "sha256": _sha(b""),
+                "truncated": False,
+            }
+            for index in range(4736)
+        }
+    )
+    assert (
+        run.try_write_optional_artifact("observability/gate-decisions.html", b"")
+        is None
+    )
+
+
 def test_atomic_write_retries_windows_sharing_violation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

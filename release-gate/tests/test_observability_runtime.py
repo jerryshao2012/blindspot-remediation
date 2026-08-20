@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -71,6 +73,7 @@ def test_refresh_rejects_casefold_and_symlink_namespace(tmp_path: Path) -> None:
     assert ObservabilityWarning.PATH_UNSAFE in result.warnings
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX record-lock behavior")
 def test_refresh_lock_busy_is_a_non_gating_outcome(tmp_path: Path) -> None:
     from release_gate.observability_runtime import (
         ObservabilityWarning,
@@ -78,12 +81,88 @@ def test_refresh_lock_busy_is_a_non_gating_outcome(tmp_path: Path) -> None:
     )
 
     root = tmp_path / "evidence"
-    root.mkdir()
-    with RefreshSession.acquire(root, _summary("first")) as first:
-        assert first.locked
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    lock = namespace / ".refresh.lock"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import fcntl, os, sys, time; fd = os.open(sys.argv[1], "
+                "os.O_RDWR | os.O_CREAT); fcntl.lockf(fd, fcntl.LOCK_EX, 1, 0); "
+                "print('ready', flush=True); time.sleep(5)"
+            ),
+            str(lock),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None and holder.stdout.readline() == "ready\n"
         second = RefreshSession.acquire(root, _summary("second"), timeout_seconds=0)
         assert ObservabilityWarning.LOCK_BUSY in second.warnings
         assert not second.locked
+    finally:
+        holder.terminate()
+        holder.wait()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX record-lock behavior")
+def test_refresh_uses_a_one_byte_record_lock_visible_to_another_process(
+    tmp_path: Path,
+) -> None:
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    with RefreshSession.acquire(root, _summary("first")) as session:
+        assert session.locked
+        contender = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import fcntl, os, sys; fd = os.open(sys.argv[1], os.O_RDWR); "
+                "fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 1, 0);",
+                str(root / "_observability/.refresh.lock"),
+            ],
+            capture_output=True,
+            check=False,
+        )
+    assert contender.returncode != 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX record-lock behavior")
+def test_refresh_contends_with_a_standard_one_byte_record_lock(tmp_path: Path) -> None:
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    lock = namespace / ".refresh.lock"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import fcntl, os, sys, time; fd = os.open(sys.argv[1], "
+                "os.O_RDWR | os.O_CREAT); fcntl.lockf(fd, fcntl.LOCK_EX, 1, 0); "
+                "print('ready', flush=True); time.sleep(5)"
+            ),
+            str(lock),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None and holder.stdout.readline() == "ready\n"
+        contender = RefreshSession.acquire(
+            root, _summary("contender"), timeout_seconds=0
+        )
+        assert not contender.locked
+    finally:
+        holder.terminate()
+        holder.wait()
 
 
 def test_stale_or_corrupt_cache_is_recovered_by_rescan(tmp_path: Path) -> None:
@@ -125,3 +204,36 @@ def test_partial_replace_failure_leaves_the_other_file_readable(
         result = session.publish()
     assert "OBSERVABILITY_PUBLISH_FAILED" in result.warning_codes
     assert result.data_path is not None or result.dashboard_path is not None
+
+
+def test_swapped_staged_file_is_never_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    monkeypatch.setattr(runtime, "_same_staged_file", lambda _: False)
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+    assert "OBSERVABILITY_PATH_UNSAFE" in result.warning_codes
+    assert not (root / "_observability/gate-decisions-v1.json").exists()
+
+
+def test_cleanup_exception_is_converted_to_a_publication_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    session = RefreshSession.acquire(root, _summary("run-one"))
+    monkeypatch.setattr(
+        runtime,
+        "_unlock",
+        lambda _: (_ for _ in ()).throw(RuntimeError("unlock failed")),
+    )
+    session.close()
+    assert "OBSERVABILITY_PUBLISH_FAILED" in session.result.warning_codes

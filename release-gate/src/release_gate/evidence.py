@@ -21,6 +21,7 @@ FINALIZATION_RESERVE = 7_340_032
 RESULT_LIMIT = 2 * 1024 * 1024
 MANIFEST_LIMIT = 4 * 1024 * 1024
 TRACE_LIMIT = 1024 * 1024
+MANIFEST_ARTIFACT_LIMIT = 4_740
 MAX_TOTAL = 200 * 1024 * 1024
 _REPLACE_RETRY_DELAY = 0.05
 _REPLACE_RETRIES = 3
@@ -112,6 +113,29 @@ class EvidenceRun:
             full_sha256=full_sha256,
             preserve_finalization_reserve=True,
         )
+
+    def try_write_optional_artifact(
+        self,
+        relative_path: str,
+        data: bytes,
+        media_type: str | None = None,
+        *,
+        maximum_bytes: int | None = None,
+    ) -> Path | None:
+        """Best-effort artifact write which cannot consume finalization capacity.
+
+        ``trace.json`` and ``result.json`` are still pending at this point, so
+        reserve both inventory slots in addition to the ordinary byte reserve.
+        """
+
+        if maximum_bytes is not None and len(data) > maximum_bytes:
+            return None
+        if len(self._artifacts) + 3 > MANIFEST_ARTIFACT_LIMIT:
+            return None
+        try:
+            return self.write_artifact(relative_path, data, media_type)
+        except EvidenceBudgetExhausted:
+            return None
 
     def _write_artifact(
         self,

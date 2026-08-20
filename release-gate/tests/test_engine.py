@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from release_gate.cli import main
-from release_gate.evidence import verify_run
+from release_gate.evidence import EvidenceError, EvidenceRun, verify_run
 
 
 def git(repo: Path, *arguments: str) -> None:
@@ -128,6 +128,59 @@ def test_run_publishes_verified_snapshot_and_stable_dashboard(
         f"VERDICT: PASS\nRESULT: {output / 'observed' / 'result.json'}\n"
     )
     verify_run(output / "observed")
+
+
+def test_finalization_failure_never_publishes_stable_observability(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
+    output = tmp_path / "evidence"
+
+    def fail_finalize(
+        self: EvidenceRun,
+        result: dict[str, object],
+        manifest: dict[str, object],
+        trace: bytes,
+    ) -> Path:
+        raise EvidenceError("finalization failed")
+
+    monkeypatch.setattr(EvidenceRun, "finalize", fail_finalize)
+    assert main(
+        ["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)]
+    ) == 4
+    assert not (output / "_observability/gate-decisions-v1.json").exists()
+    assert not (output / "_observability/index.html").exists()
+
+
+def test_shared_custom_root_rolls_up_all_three_gate_verdicts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = tmp_path / "shared-evidence"
+    cases = (
+        ([sys.executable, "-c", "print('ok')"], "blocking", "PASS"),
+        ([sys.executable, "-c", "raise SystemExit(1)"], "blocking", "FAIL"),
+        ([sys.executable, "-c", "raise SystemExit(1)"], "advisory", "NEEDS_HUMAN"),
+    )
+    for index, (command, severity, verdict) in enumerate(cases):
+        case_root = tmp_path / f"case-{index}"
+        case_root.mkdir()
+        repo = repository(case_root, command, severity=severity)
+        assert main(
+            [
+                "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
+                "--run-id", f"verdict-{index}",
+            ]
+        ) == index
+        captured = capsys.readouterr()
+        assert captured.out.startswith(f"VERDICT: {verdict}\n")
+    report = json.loads((output / "_observability/gate-decisions-v1.json").read_bytes())
+    assert [item["verdict"] for item in report["source_runs"]] == [
+        "PASS", "FAIL", "NEEDS_HUMAN"
+    ]
+    assert report["series"][-1]["windows"]["10"]["counts"] == {
+        "releasing": 1, "failing": 1, "human_review": 1
+    }
+    assert report["series"][-1]["windows"]["100"]["sample_size"] == 3
 
 
 def test_policy_change_stops_commands_and_needs_human(

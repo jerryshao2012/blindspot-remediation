@@ -58,6 +58,24 @@ class ObservabilityResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _FileSnapshot:
+    identity: tuple[int, int]
+    size: int
+
+
+@dataclass(frozen=True, slots=True)
+class _TargetSnapshot:
+    exists: bool
+    file: _FileSnapshot | None
+
+
+@dataclass(frozen=True, slots=True)
+class _StagedFile:
+    path: Path
+    file: _FileSnapshot
+
+
 @dataclass(slots=True)
 class RefreshSession:
     """A cooperative lock held over a run's snapshot, finalization and refresh."""
@@ -107,15 +125,17 @@ class RefreshSession:
             deadline = clock() + max(0.0, timeout_seconds)
             while not _try_lock(descriptor):
                 if clock() >= deadline:
-                    os.close(descriptor)
+                    if not _close_quietly(descriptor):
+                        session._warn(ObservabilityWarning.PUBLISH_FAILED)
+                    descriptor = None
                     return session._warn(ObservabilityWarning.LOCK_BUSY)
                 wait(min(0.05, max(0.0, deadline - clock())))
             session._lock_fd = descriptor
             descriptor = None
             return session
         except Exception:
-            if descriptor is not None:
-                os.close(descriptor)
+            if descriptor is not None and not _close_quietly(descriptor):
+                session._warn(ObservabilityWarning.PUBLISH_FAILED)
             return session._warn(ObservabilityWarning.PATH_UNSAFE)
 
     def __enter__(self) -> Self:
@@ -128,12 +148,10 @@ class RefreshSession:
         if self._lock_fd is not None:
             try:
                 _unlock(self._lock_fd)
-            except OSError:
+            except Exception:
                 self._warn(ObservabilityWarning.PUBLISH_FAILED)
             finally:
-                try:
-                    os.close(self._lock_fd)
-                except OSError:
+                if not _close_quietly(self._lock_fd):
                     self._warn(ObservabilityWarning.PUBLISH_FAILED)
                 self._lock_fd = None
 
@@ -145,9 +163,14 @@ class RefreshSession:
         try:
             report = self._report(include_pending=True)
             payload = render_html(report)
-            if len(payload) > _MAX_SNAPSHOT_BYTES:
+            path = evidence.try_write_optional_artifact(
+                _SNAPSHOT_NAME,
+                payload,
+                "text/html",
+                maximum_bytes=_MAX_SNAPSHOT_BYTES,
+            )
+            if path is None:
                 return self._warn(ObservabilityWarning.BUDGET_EXHAUSTED).result
-            path = evidence.write_artifact(_SNAPSHOT_NAME, payload, "text/html")
             self._result = ObservabilityResult(
                 path,
                 self._result.dashboard_path,
@@ -177,22 +200,36 @@ class RefreshSession:
             paths: dict[str, Path] = {}
             for name, payload in payloads:
                 target = self.namespace / name
-                if not _safe_target(target):
+                before = _safe_target_snapshot(target)
+                if before is None:
                     self._warn(ObservabilityWarning.PATH_UNSAFE)
                     continue
                 temporary = _stage(self.namespace, payload)
                 try:
-                    if not self._safe_namespace() or not _safe_target(target):
+                    if (
+                        not self._safe_namespace()
+                        or not _same_staged_file(temporary)
+                        or _safe_target_snapshot(target) != before
+                    ):
                         self._warn(ObservabilityWarning.PATH_UNSAFE)
                         continue
-                    os.replace(temporary, target)
+                    os.replace(temporary.path, target)
+                    after = _safe_target_snapshot(target)
+                    if (
+                        after is None
+                        or not after.exists
+                        or after.file != temporary.file
+                    ):
+                        self._warn(ObservabilityWarning.PUBLISH_FAILED)
+                        continue
+                    _fsync_directory(self.namespace)
                     paths[name] = target
-                except OSError:
+                except Exception:
                     self._warn(ObservabilityWarning.PUBLISH_FAILED)
                 finally:
                     try:
-                        temporary.unlink()
-                    except FileNotFoundError:
+                        temporary.path.unlink()
+                    except (FileNotFoundError, OSError):
                         pass
             self._result = ObservabilityResult(
                 self._result.snapshot_path,
@@ -317,7 +354,7 @@ def _try_lock(descriptor: int) -> bool:
     import fcntl
 
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.lockf(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB, 1, 0, os.SEEK_SET)
         return True
     except OSError:
         return False
@@ -332,15 +369,19 @@ def _unlock(descriptor: int) -> None:
     else:
         import fcntl
 
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        fcntl.lockf(descriptor, fcntl.LOCK_UN, 1, 0, os.SEEK_SET)
 
 
-def _safe_target(path: Path) -> bool:
+def _safe_target_snapshot(path: Path) -> _TargetSnapshot | None:
     metadata = _lstat(path)
-    return metadata is None or _safe_file(metadata)
+    if metadata is None:
+        return _TargetSnapshot(False, None)
+    if not _safe_file(metadata):
+        return None
+    return _TargetSnapshot(True, _file_snapshot(metadata))
 
 
-def _stage(directory: Path, payload: bytes) -> Path:
+def _stage(directory: Path, payload: bytes) -> _StagedFile:
     descriptor, temporary = tempfile.mkstemp(prefix=".release-gate-", dir=directory)
     try:
         with os.fdopen(descriptor, "wb") as stream:
@@ -354,4 +395,41 @@ def _stage(directory: Path, payload: bytes) -> Path:
             pass
         Path(temporary).unlink(missing_ok=True)
         raise
-    return Path(temporary)
+    path = Path(temporary)
+    metadata = _lstat(path)
+    if not _safe_file(metadata):
+        path.unlink(missing_ok=True)
+        raise OSError("staged observability file is unsafe")
+    assert metadata is not None
+    return _StagedFile(path, _file_snapshot(metadata))
+
+
+def _same_staged_file(staged: _StagedFile) -> bool:
+    metadata = _lstat(staged.path)
+    return (
+        _safe_file(metadata)
+        and metadata is not None
+        and _file_snapshot(metadata) == staged.file
+    )
+
+
+def _file_snapshot(metadata: os.stat_result) -> _FileSnapshot:
+    return _FileSnapshot((metadata.st_dev, metadata.st_ino), metadata.st_size)
+
+
+def _fsync_directory(directory: Path) -> None:
+    if os.name == "nt":
+        return
+    descriptor = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _close_quietly(descriptor: int) -> bool:
+    try:
+        os.close(descriptor)
+    except Exception:
+        return False
+    return True
