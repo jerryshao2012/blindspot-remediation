@@ -86,6 +86,7 @@ class RefreshSession:
     root: Path
     pending_result: Mapping[str, Any]
     namespace: Path | None = None
+    _root_fd: int | None = None
     _namespace_identity: tuple[int, int] | None = None
     _namespace_fd: int | None = None
     _local_lock: threading.Lock | None = None
@@ -117,15 +118,17 @@ class RefreshSession:
         session = cls(root=root, pending_result=pending_result)
         descriptor: int | None = None
         try:
-            namespace = _safe_namespace(root)
-            if namespace is None:
+            session._root_fd = _open_directory(root)
+            if session._root_fd is None:
                 return session._warn(ObservabilityWarning.PATH_UNSAFE)
+            opened_namespace = _open_namespace_at(session._root_fd, root)
+            if opened_namespace is None:
+                session.close()
+                return session._warn(ObservabilityWarning.PATH_UNSAFE)
+            namespace, session._namespace_fd = opened_namespace
             session.namespace = namespace
             session._namespace_identity = _directory_identity(namespace)
             if session._namespace_identity is None:
-                return session._warn(ObservabilityWarning.PATH_UNSAFE)
-            session._namespace_fd = _open_directory(namespace)
-            if session._namespace_fd is None:
                 return session._warn(ObservabilityWarning.PATH_UNSAFE)
             descriptor = _open_lock_at(session._namespace_fd)
             if descriptor is None:
@@ -158,6 +161,9 @@ class RefreshSession:
             if session._namespace_fd is not None:
                 _close_quietly(session._namespace_fd)
                 session._namespace_fd = None
+            if session._root_fd is not None:
+                _close_quietly(session._root_fd)
+                session._root_fd = None
             if session._local_lock is not None:
                 session._local_lock.release()
                 session._local_lock = None
@@ -183,6 +189,10 @@ class RefreshSession:
             if not _close_quietly(self._namespace_fd):
                 self._warn(ObservabilityWarning.PUBLISH_FAILED)
             self._namespace_fd = None
+        if self._root_fd is not None:
+            if not _close_quietly(self._root_fd):
+                self._warn(ObservabilityWarning.PUBLISH_FAILED)
+            self._root_fd = None
         if self._local_lock is not None:
             try:
                 self._local_lock.release()
@@ -330,6 +340,41 @@ def _safe_namespace(root: Path) -> Path | None:
         except (FileExistsError, OSError):
             return None
     return namespace if _safe_directory(_lstat(namespace)) else None
+
+
+def _open_namespace_at(root_fd: int, root: Path) -> tuple[Path, int] | None:
+    """Create/open the reserved namespace without reopening the root pathname."""
+
+    try:
+        entries = list(os.scandir(root_fd))
+    except OSError:
+        return None
+    matches = [entry.name for entry in entries if entry.name.casefold() == _NAMESPACE]
+    if len(matches) > 1 or (matches and matches[0] != _NAMESPACE):
+        return None
+    if not matches:
+        try:
+            os.mkdir(_NAMESPACE, mode=0o700, dir_fd=root_fd)
+        except OSError:
+            return None
+    try:
+        inspected = os.stat(_NAMESPACE, dir_fd=root_fd, follow_symlinks=False)
+        namespace_fd = os.open(
+            _NAMESPACE,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=root_fd,
+        )
+    except OSError:
+        return None
+    opened = os.fstat(namespace_fd)
+    if (
+        not _safe_directory(inspected)
+        or not _safe_directory(opened)
+        or (inspected.st_dev, inspected.st_ino) != (opened.st_dev, opened.st_ino)
+    ):
+        _close_quietly(namespace_fd)
+        return None
+    return root / _NAMESPACE, namespace_fd
 
 
 def _lstat(path: Path) -> os.stat_result | None:
