@@ -27,6 +27,7 @@ _DATA_NAME = "gate-decisions-v1.json"
 _DASHBOARD_NAME = "index.html"
 _SNAPSHOT_NAME = "observability/gate-decisions.html"
 _MAX_SNAPSHOT_BYTES = 512 * 1024
+_LOCK_OFFSET = 0
 _LOCAL_LOCKS: dict[tuple[int, int], tuple[threading.Lock, int]] = {}
 _LOCAL_LOCKS_GUARD = threading.Lock()
 
@@ -77,12 +78,16 @@ class _TargetSnapshot:
 class _StagedFile:
     name: str
     file: _FileSnapshot
+    descriptor: int
+    payload: bytes
 
 
 @dataclass(frozen=True, slots=True)
 class _StagedPath:
     path: Path
     file: _FileSnapshot
+    descriptor: int
+    payload: bytes
 
 
 @dataclass(slots=True)
@@ -187,6 +192,23 @@ class RefreshSession:
                     session.close()
                     return session._warn(ObservabilityWarning.LOCK_BUSY)
                 wait(min(0.05, max(0.0, deadline - clock())))
+            if not _same_open_file_at(
+                descriptor, session._namespace_fd, _LOCK_NAME
+            ):
+                try:
+                    _unlock(descriptor)
+                except Exception:
+                    session._warn(ObservabilityWarning.PUBLISH_FAILED)
+                _close_quietly(descriptor)
+                descriptor = None
+                assert session._local_lock is not None
+                session._local_lock.release()
+                local_acquired = False
+                _release_local(session._local_identity)
+                session._local_lock = None
+                session._local_identity = None
+                session.close()
+                return session._warn(ObservabilityWarning.PATH_UNSAFE)
             session._lock_fd = descriptor
             descriptor = None
             return session
@@ -320,17 +342,21 @@ class RefreshSession:
                         or not after.exists
                         or after.file != temporary.file
                     ):
-                        self._warn(ObservabilityWarning.PUBLISH_FAILED)
+                        self._warn(ObservabilityWarning.PATH_UNSAFE)
+                        if _restore_staged_file_at(
+                            self._namespace_fd, name, temporary
+                        ):
+                            _fsync_directory_fd(self._namespace_fd)
+                            paths[name] = self.namespace / name
+                        else:
+                            self._warn(ObservabilityWarning.PUBLISH_FAILED)
                         continue
                     _fsync_directory_fd(self._namespace_fd)
                     paths[name] = self.namespace / name
                 except Exception:
                     self._warn(ObservabilityWarning.PUBLISH_FAILED)
                 finally:
-                    try:
-                        os.unlink(temporary.name, dir_fd=self._namespace_fd)
-                    except (FileNotFoundError, OSError):
-                        pass
+                    _close_quietly(temporary.descriptor)
             self._result = ObservabilityResult(
                 self._result.snapshot_path,
                 paths.get(_DASHBOARD_NAME),
@@ -607,28 +633,37 @@ def _open_lock_at(directory_fd: int) -> int | None:
     if (opened.st_dev, opened.st_ino) != (at_path.st_dev, at_path.st_ino):
         os.close(descriptor)
         return None
-    try:
-        os.ftruncate(descriptor, 1)
-    except OSError:
-        os.close(descriptor)
-        return None
     return descriptor
+
+
+def _same_open_file_at(descriptor: int, directory_fd: int, name: str) -> bool:
+    try:
+        opened = os.fstat(descriptor)
+        at_path = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return (
+        _safe_file(opened)
+        and opened.st_nlink == 1
+        and _safe_file(at_path)
+        and at_path.st_nlink == 1
+        and _file_snapshot(opened).identity == _file_snapshot(at_path).identity
+    )
 
 
 def _try_lock(descriptor: int) -> bool:
     if os.name == "nt":
-        import msvcrt
-
-        try:
-            os.lseek(descriptor, 0, os.SEEK_SET)
-            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
-            return True
-        except OSError:
-            return False
+        return _try_lock_windows(descriptor)
     import fcntl
 
     try:
-        fcntl.lockf(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB, 1, 0, os.SEEK_SET)
+        fcntl.lockf(
+            descriptor,
+            fcntl.LOCK_EX | fcntl.LOCK_NB,
+            1,
+            _LOCK_OFFSET,
+            os.SEEK_SET,
+        )
         return True
     except OSError:
         return False
@@ -636,14 +671,79 @@ def _try_lock(descriptor: int) -> bool:
 
 def _unlock(descriptor: int) -> None:
     if os.name == "nt":
-        import msvcrt
-
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
+        _unlock_windows(descriptor)
     else:
         import fcntl
 
-        fcntl.lockf(descriptor, fcntl.LOCK_UN, 1, 0, os.SEEK_SET)
+        fcntl.lockf(
+            descriptor, fcntl.LOCK_UN, 1, _LOCK_OFFSET, os.SEEK_SET
+        )
+
+
+def _try_lock_windows(descriptor: int) -> bool:
+    try:
+        _windows_file_lock(descriptor, lock=True)
+    except OSError:
+        return False
+    return True
+
+
+def _unlock_windows(descriptor: int) -> None:
+    _windows_file_lock(descriptor, lock=False)
+
+
+def _windows_file_lock(descriptor: int, *, lock: bool) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    class _Overlapped(ctypes.Structure):
+        _fields_ = (
+            ("internal", ctypes.c_size_t),
+            ("internal_high", ctypes.c_size_t),
+            ("offset", wintypes.DWORD),
+            ("offset_high", wintypes.DWORD),
+            ("event", wintypes.HANDLE),
+        )
+
+    overlapped = _Overlapped()
+    overlapped.offset = _LOCK_OFFSET & 0xFFFFFFFF
+    overlapped.offset_high = (_LOCK_OFFSET >> 32) & 0xFFFFFFFF
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    handle = wintypes.HANDLE(_windows_handle_from_fd(descriptor))
+    if lock:
+        operation = kernel32.LockFileEx
+        operation.argtypes = (
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.POINTER(_Overlapped),
+        )
+        operation.restype = wintypes.BOOL
+        succeeded = operation(
+            handle,
+            0x00000001 | 0x00000002,
+            0,
+            1,
+            0,
+            ctypes.byref(overlapped),
+        )
+    else:
+        operation = kernel32.UnlockFileEx
+        operation.argtypes = (
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.POINTER(_Overlapped),
+        )
+        operation.restype = wintypes.BOOL
+        succeeded = operation(
+            handle, 0, 1, 0, ctypes.byref(overlapped)
+        )
+    if not succeeded:
+        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
 
 
 def _safe_target_snapshot_at(
@@ -662,40 +762,108 @@ def _safe_target_snapshot_at(
 
 def _stage_at(directory_fd: int, payload: bytes) -> _StagedFile:
     name = f".release-gate-{secrets.token_hex(12)}"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(name, flags, 0o600, dir_fd=directory_fd)
     try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
+        _write_descriptor(descriptor, payload)
+        os.fsync(descriptor)
+        opened = os.fstat(descriptor)
+        metadata = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if (
+            not _safe_file(opened)
+            or opened.st_nlink != 1
+            or not _safe_file(metadata)
+            or metadata.st_nlink != 1
+            or _file_snapshot(opened) != _file_snapshot(metadata)
+            or metadata.st_size != len(payload)
+        ):
+            raise OSError("staged observability file is unsafe")
+        return _StagedFile(name, _file_snapshot(opened), descriptor, payload)
     except Exception:
-        try:
-            os.close(descriptor)
-        except OSError:
-            pass
-        try:
-            os.unlink(name, dir_fd=directory_fd)
-        except OSError:
-            pass
+        _close_quietly(descriptor)
         raise
-    metadata = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-    if not _safe_file(metadata):
-        os.unlink(name, dir_fd=directory_fd)
-        raise OSError("staged observability file is unsafe")
-    return _StagedFile(name, _file_snapshot(metadata))
 
 
 def _same_staged_file_at(directory_fd: int, staged: _StagedFile) -> bool:
     try:
+        opened = os.fstat(staged.descriptor)
         metadata = os.stat(staged.name, dir_fd=directory_fd, follow_symlinks=False)
     except OSError:
         return False
     return (
-        _safe_file(metadata)
+        _safe_file(opened)
+        and opened.st_nlink == 1
+        and _safe_file(metadata)
         and metadata is not None
+        and metadata.st_nlink == 1
+        and _file_snapshot(opened) == staged.file
         and _file_snapshot(metadata) == staged.file
     )
+
+
+def _write_descriptor(descriptor: int, payload: bytes) -> None:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    view = memoryview(payload)
+    written = 0
+    while written < len(view):
+        count = os.write(descriptor, view[written:])
+        if count <= 0:
+            raise OSError("short observability stage write")
+        written += count
+
+
+def _read_staged_payload(staged: _StagedFile | _StagedPath) -> bytes | None:
+    try:
+        metadata = os.fstat(staged.descriptor)
+        if (
+            not _safe_file(metadata)
+            or _file_snapshot(metadata) != staged.file
+        ):
+            return None
+        os.lseek(staged.descriptor, 0, os.SEEK_SET)
+        chunks: list[bytes] = []
+        remaining = staged.file.size
+        while remaining:
+            chunk = os.read(staged.descriptor, min(remaining, 64 * 1024))
+            if not chunk:
+                return None
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        return payload if payload == staged.payload else None
+    except OSError:
+        return None
+
+
+def _restore_staged_file_at(
+    directory_fd: int, target: str, trusted: _StagedFile
+) -> bool:
+    payload = _read_staged_payload(trusted)
+    if payload is None:
+        return False
+    recovery: _StagedFile | None = None
+    try:
+        recovery = _stage_at(directory_fd, payload)
+        if not _same_staged_file_at(directory_fd, recovery):
+            return False
+        os.replace(
+            recovery.name,
+            target,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        installed = _safe_target_snapshot_at(directory_fd, target)
+        return (
+            installed is not None
+            and installed.exists
+            and installed.file == recovery.file
+            and _read_staged_payload(recovery) == payload
+        )
+    except OSError:
+        return False
+    finally:
+        if recovery is not None:
+            _close_quietly(recovery.descriptor)
 
 
 def _file_snapshot(metadata: os.stat_result) -> _FileSnapshot:
@@ -1006,7 +1174,6 @@ def _open_lock_path(
             or not parent_is_safe()
         ):
             return None
-        os.ftruncate(descriptor, 1)
         if not parent_is_safe() or not _same_open_file_path(
             descriptor, path, directory_fd
         ):
@@ -1043,9 +1210,13 @@ def _open_windows_child(
     path: Path,
     flags: int,
     mode: int,
+    *,
+    delete_access: bool = False,
 ) -> int:
     if _uses_native_windows_paths() and directory_fd is not None:
-        return _open_windows_relative_native(directory_fd, path.name, flags)
+        return _open_windows_relative_native(
+            directory_fd, path.name, flags, delete_access=delete_access
+        )
     if directory_fd is None:
         return os.open(path, flags, mode)
     return os.open(path.name, flags, mode, dir_fd=directory_fd)
@@ -1062,13 +1233,13 @@ def _windows_child_lstat(
 
 
 def _replace_windows_child(
-    directory_fd: int, source: str, target: str
+    directory_fd: int, staged: _StagedPath, target: str
 ) -> None:
     if _uses_native_windows_paths():
-        _replace_windows_relative_native(directory_fd, source, target)
+        _replace_windows_relative_native(directory_fd, staged, target)
         return
     os.replace(
-        source,
+        staged.path.name,
         target,
         src_dir_fd=directory_fd,
         dst_dir_fd=directory_fd,
@@ -1080,7 +1251,11 @@ def _uses_native_windows_paths() -> bool:
 
 
 def _open_windows_relative_native(
-    directory_fd: int, name: str, flags: int
+    directory_fd: int,
+    name: str,
+    flags: int,
+    *,
+    delete_access: bool = False,
 ) -> int:
     desired_access = 0x00100080  # SYNCHRONIZE | FILE_READ_ATTRIBUTES
     if flags & os.O_RDWR:
@@ -1089,6 +1264,8 @@ def _open_windows_relative_native(
         desired_access |= 0x40000000  # GENERIC_WRITE
     else:
         desired_access |= 0x80000000  # GENERIC_READ
+    if delete_access:
+        desired_access |= 0x00010000  # DELETE
     disposition = 1  # FILE_OPEN
     if flags & os.O_CREAT:
         disposition = 2 if flags & os.O_EXCL else 3  # FILE_CREATE / FILE_OPEN_IF
@@ -1120,76 +1297,66 @@ def _stat_windows_relative_native(
 
 
 def _replace_windows_relative_native(
-    directory_fd: int, source: str, target: str
+    directory_fd: int, staged: _StagedPath, target: str
 ) -> None:
     import ctypes
     from ctypes import wintypes
 
-    source_handle = _nt_create_relative_handle(
-        directory_fd,
-        source,
-        desired_access=0x00110080,  # DELETE | SYNCHRONIZE | FILE_READ_ATTRIBUTES
-        share_access=0x0001 | 0x0002 | 0x0004,
-        disposition=1,
-    )
-    try:
-        parent_handle = _windows_handle_from_fd(directory_fd)
+    opened = os.fstat(staged.descriptor)
+    if (
+        not _safe_file(opened)
+        or not _single_link(opened)
+        or _file_snapshot(opened) != staged.file
+        or _read_staged_payload(staged) != staged.payload
+    ):
+        raise OSError("staged observability handle changed before rename")
+    parent_handle = _windows_handle_from_fd(directory_fd)
 
-        class _FileRenameInformation(ctypes.Structure):
-            _fields_ = (
-                ("replace_if_exists", wintypes.BOOLEAN),
-                ("root_directory", wintypes.HANDLE),
-                ("file_name_length", wintypes.DWORD),
-                ("file_name", wintypes.WCHAR * (len(target) + 1)),
-            )
-
-        information = _FileRenameInformation()
-        information.replace_if_exists = 1
-        information.root_directory = wintypes.HANDLE(parent_handle)
-        information.file_name_length = len(target.encode("utf-16-le"))
-        information.file_name = target
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
-        set_information = kernel32.SetFileInformationByHandle
-        set_information.argtypes = (
-            wintypes.HANDLE,
-            ctypes.c_int,
-            wintypes.LPVOID,
-            wintypes.DWORD,
+    class _FileRenameInformation(ctypes.Structure):
+        _fields_ = (
+            ("replace_if_exists", wintypes.BOOLEAN),
+            ("root_directory", wintypes.HANDLE),
+            ("file_name_length", wintypes.DWORD),
+            ("file_name", wintypes.WCHAR * (len(target) + 1)),
         )
-        set_information.restype = wintypes.BOOL
-        if not set_information(
-            wintypes.HANDLE(source_handle),
-            3,  # FileRenameInfo
-            ctypes.byref(information),
-            ctypes.sizeof(information),
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
-    finally:
-        _close_windows_handle(source_handle)
+
+    information = _FileRenameInformation()
+    information.replace_if_exists = 1
+    information.root_directory = wintypes.HANDLE(parent_handle)
+    information.file_name_length = len(target.encode("utf-16-le"))
+    information.file_name = target
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    set_information = kernel32.SetFileInformationByHandle
+    set_information.argtypes = (
+        wintypes.HANDLE,
+        ctypes.c_int,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+    )
+    set_information.restype = wintypes.BOOL
+    if not set_information(
+        wintypes.HANDLE(_windows_handle_from_fd(staged.descriptor)),
+        3,  # FileRenameInfo
+        ctypes.byref(information),
+        ctypes.sizeof(information),
+    ):
+        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
 
 
-def _unlink_windows_child(directory_fd: int, name: str) -> None:
-    try:
-        if _uses_native_windows_paths():
-            _unlink_windows_relative_native(directory_fd, name)
-        else:
-            os.unlink(name, dir_fd=directory_fd)
-    except OSError:
-        pass
-
-
-def _unlink_windows_relative_native(directory_fd: int, name: str) -> None:
+def _discard_windows_staged_handle(
+    descriptor: int, expected_identity: tuple[int, int]
+) -> None:
     import ctypes
     from ctypes import wintypes
 
-    handle = _nt_create_relative_handle(
-        directory_fd,
-        name,
-        desired_access=0x00110080,  # DELETE | SYNCHRONIZE | FILE_READ_ATTRIBUTES
-        share_access=0x0001 | 0x0002 | 0x0004,
-        disposition=1,
-    )
     try:
+        metadata = os.fstat(descriptor)
+        if (
+            not _safe_file(metadata)
+            or _file_snapshot(metadata).identity != expected_identity
+        ):
+            return
+
         class _FileDispositionInformation(ctypes.Structure):
             _fields_ = (("delete_file", wintypes.BOOLEAN),)
 
@@ -1204,14 +1371,14 @@ def _unlink_windows_relative_native(directory_fd: int, name: str) -> None:
         )
         set_information.restype = wintypes.BOOL
         if not set_information(
-            wintypes.HANDLE(handle),
+            wintypes.HANDLE(_windows_handle_from_fd(descriptor)),
             4,  # FileDispositionInfo
             ctypes.byref(information),
             ctypes.sizeof(information),
         ):
             raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
-    finally:
-        _close_windows_handle(handle)
+    except OSError:
+        return
 
 
 def _nt_create_relative_handle(
@@ -1371,7 +1538,7 @@ def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
     ):
         return None
     path = session.namespace / f".release-gate-{secrets.token_hex(12)}"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     descriptor: int | None = None
     opened_identity: tuple[int, int] | None = None
     completed = False
@@ -1379,7 +1546,11 @@ def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
         if not session._safe_namespace():
             return None
         descriptor = _open_windows_child(
-            session._namespace_fd, path, flags, 0o600
+            session._namespace_fd,
+            path,
+            flags,
+            0o600,
+            delete_access=True,
         )
         opened = os.fstat(descriptor)
         at_path = _windows_child_lstat(session._namespace_fd, path)
@@ -1393,38 +1564,43 @@ def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
         ):
             return None
         opened_identity = _file_snapshot(opened).identity
-        stream = os.fdopen(descriptor, "wb")
-        descriptor = None
-        with stream:
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
+        _write_descriptor(descriptor, payload)
+        os.fsync(descriptor)
+        opened_after = os.fstat(descriptor)
         after = _windows_child_lstat(session._namespace_fd, path)
         if (
-            not _safe_file(after)
+            not _safe_file(opened_after)
+            or not _single_link(opened_after)
+            or not _safe_file(after)
             or not _single_link(after)
+            or _file_snapshot(opened_after).identity != opened_identity
             or _file_snapshot(after).identity != opened_identity
+            or _file_snapshot(opened_after) != _file_snapshot(after)
             or after.st_size != len(payload)
             or not session._safe_namespace()
         ):
             return None
         completed = True
-        return _StagedPath(path, _file_snapshot(after))
+        staged = _StagedPath(
+            path, _file_snapshot(after), descriptor, payload
+        )
+        descriptor = None
+        return staged
     except OSError:
         return None
     finally:
         if descriptor is not None:
-            _close_quietly(descriptor)
-        if (
-            not completed
-            and opened_identity is not None
-            and session._safe_namespace()
-            and _path_has_identity(
-                path, opened_identity, session._namespace_fd
-            )
-        ):
-            assert session._namespace_fd is not None
-            _unlink_windows_child(session._namespace_fd, path.name)
+            try:
+                if (
+                    not completed
+                    and opened_identity is not None
+                    and _uses_native_windows_paths()
+                ):
+                    _discard_windows_staged_handle(
+                        descriptor, opened_identity
+                    )
+            finally:
+                _close_quietly(descriptor)
 
 
 def _path_has_identity(
@@ -1442,16 +1618,30 @@ def _path_has_identity(
 
 
 def _same_staged_path(session: RefreshSession, staged: _StagedPath) -> bool:
-    return session._safe_namespace() and _path_has_identity(
-        staged.path, staged.file.identity, session._namespace_fd
+    try:
+        opened = os.fstat(staged.descriptor)
+    except OSError:
+        return False
+    return (
+        session._safe_namespace()
+        and _safe_file(opened)
+        and _single_link(opened)
+        and _file_snapshot(opened) == staged.file
+        and _read_staged_payload(staged) == staged.payload
+        and _path_has_identity(
+            staged.path, staged.file.identity, session._namespace_fd
+        )
     )
 
 
-def _remove_staged_path(session: RefreshSession, staged: _StagedPath) -> None:
-    if not _same_staged_path(session, staged):
-        return
-    assert session._namespace_fd is not None
-    _unlink_windows_child(session._namespace_fd, staged.path.name)
+def _close_staged_path(staged: _StagedPath, *, installed: bool) -> None:
+    try:
+        if not installed and _uses_native_windows_paths():
+            _discard_windows_staged_handle(
+                staged.descriptor, staged.file.identity
+            )
+    finally:
+        _close_quietly(staged.descriptor)
 
 
 def _fsync_directory_path(session: RefreshSession) -> None:
@@ -1500,6 +1690,7 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
             if staged is None:
                 session._warn(ObservabilityWarning.PATH_UNSAFE)
                 continue
+            renamed = False
             try:
                 if (
                     not _same_staged_path(session, staged)
@@ -1509,8 +1700,9 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
                     session._warn(ObservabilityWarning.PATH_UNSAFE)
                     continue
                 _replace_windows_child(
-                    session._namespace_fd, staged.path.name, target.name
+                    session._namespace_fd, staged, target.name
                 )
+                renamed = True
                 after = _safe_target_snapshot_path(target, session._namespace_fd)
                 if (
                     after is None
@@ -1518,14 +1710,19 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
                     or after.file != staged.file
                     or not session._safe_namespace()
                 ):
-                    session._warn(ObservabilityWarning.PUBLISH_FAILED)
+                    session._warn(ObservabilityWarning.PATH_UNSAFE)
+                    if _restore_staged_path(session, target, staged):
+                        _fsync_directory_path(session)
+                        paths[name] = target
+                    else:
+                        session._warn(ObservabilityWarning.PUBLISH_FAILED)
                     continue
                 _fsync_directory_path(session)
                 paths[name] = target
             except OSError:
                 session._warn(ObservabilityWarning.PUBLISH_FAILED)
             finally:
-                _remove_staged_path(session, staged)
+                _close_staged_path(staged, installed=renamed)
         session._result = ObservabilityResult(
             session.result.snapshot_path,
             paths.get(_DASHBOARD_NAME),
@@ -1549,3 +1746,35 @@ def _safe_target_snapshot_path(
     if not _safe_file(metadata) or not _single_link(metadata):
         return None
     return _TargetSnapshot(True, _file_snapshot(metadata))
+
+
+def _restore_staged_path(
+    session: RefreshSession, target: Path, trusted: _StagedPath
+) -> bool:
+    payload = _read_staged_payload(trusted)
+    if payload is None or session._namespace_fd is None:
+        return False
+    recovery = _stage_path(session, payload)
+    if recovery is None:
+        return False
+    renamed = False
+    try:
+        if not _same_staged_path(session, recovery):
+            return False
+        _replace_windows_child(
+            session._namespace_fd, recovery, target.name
+        )
+        renamed = True
+        after = _safe_target_snapshot_path(target, session._namespace_fd)
+        installed = (
+            after is not None
+            and after.exists
+            and after.file == recovery.file
+            and _read_staged_payload(recovery) == payload
+            and session._safe_namespace()
+        )
+        return installed
+    except OSError:
+        return False
+    finally:
+        _close_staged_path(recovery, installed=renamed)

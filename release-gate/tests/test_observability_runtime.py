@@ -316,6 +316,195 @@ def test_hard_linked_lock_is_not_truncated_or_locked(tmp_path: Path) -> None:
     assert ObservabilityWarning.PATH_UNSAFE in session.warnings
 
 
+@pytest.mark.skipif(os.name == "nt", reason="hard-link injection uses POSIX links")
+@pytest.mark.parametrize("backend", ("posix", "windows"))
+def test_lock_linked_after_validation_never_mutates_outside_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import (
+        ObservabilityWarning,
+        RefreshSession,
+    )
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    lock = namespace / ".refresh.lock"
+    lock.write_bytes(b"do-not-mutate")
+    outside = tmp_path / "outside-lock"
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+    original_try_lock = runtime._try_lock
+    linked = False
+
+    def link_then_lock(descriptor: int) -> bool:
+        nonlocal linked
+        if not linked:
+            linked = True
+            os.link(lock, outside)
+        return original_try_lock(descriptor)
+
+    monkeypatch.setattr(runtime, "_try_lock", link_then_lock)
+    session = RefreshSession.acquire(root, _summary("run-one"))
+    try:
+        assert not session.locked
+        assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
+        assert outside.read_bytes() == b"do-not-mutate"
+        assert lock.read_bytes() == b"do-not-mutate"
+    finally:
+        session.close()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="factorized swap uses POSIX links")
+@pytest.mark.parametrize("backend", ("posix", "windows"))
+def test_stage_swapped_after_validation_never_remains_at_stable_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    target = namespace / "gate-decisions-v1.json"
+    target.write_bytes(b"prior-readable-output")
+    attacker = tmp_path / "attacker"
+    attacker.write_bytes(b"attacker-controlled")
+    swapped = False
+
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+        original_same = runtime._same_staged_path
+
+        def swap_path(
+            session: RefreshSession, staged: runtime._StagedPath
+        ) -> bool:
+            nonlocal swapped
+            valid = original_same(session, staged)
+            if valid and not swapped:
+                swapped = True
+                staged.path.unlink()
+                os.link(attacker, staged.path)
+            return valid
+
+        monkeypatch.setattr(runtime, "_same_staged_path", swap_path)
+    else:
+        original_same_at = runtime._same_staged_file_at
+
+        def swap_at(
+            directory_fd: int, staged: runtime._StagedFile
+        ) -> bool:
+            nonlocal swapped
+            valid = original_same_at(directory_fd, staged)
+            if valid and not swapped:
+                swapped = True
+                os.unlink(staged.name, dir_fd=directory_fd)
+                os.link(attacker, staged.name, dst_dir_fd=directory_fd)
+            return valid
+
+        monkeypatch.setattr(runtime, "_same_staged_file_at", swap_at)
+
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+
+    assert swapped
+    assert json.loads(target.read_bytes())["version"] == 1
+    assert attacker.read_bytes() == b"attacker-controlled"
+    assert result.warning_codes
+
+
+@pytest.mark.skipif(os.name == "nt", reason="factorized swap uses POSIX renames")
+@pytest.mark.parametrize("backend", ("posix", "windows"))
+def test_unsafe_cleanup_never_deletes_stage_name_swapped_after_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    import release_gate.observability as observability
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    victim = namespace / "victim-source"
+    victim.write_bytes(b"must-survive")
+    staged_path: Path | None = None
+    snapshots = 0
+
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
+        monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
+        original_stage = runtime._stage_path
+        original_snapshot = runtime._safe_target_snapshot_path
+
+        def capture_stage(
+            session: RefreshSession, payload: bytes
+        ) -> runtime._StagedPath | None:
+            nonlocal staged_path
+            staged = original_stage(session, payload)
+            assert staged is not None
+            if staged_path is None:
+                staged_path = staged.path
+            return staged
+
+        def swap_before_second_snapshot(
+            path: Path, directory_fd: int | None = None
+        ) -> runtime._TargetSnapshot | None:
+            nonlocal snapshots
+            if path.name == "gate-decisions-v1.json":
+                snapshots += 1
+                if snapshots == 2:
+                    assert staged_path is not None
+                    os.replace(victim, staged_path)
+                    return None
+            return original_snapshot(path, directory_fd)
+
+        monkeypatch.setattr(runtime, "_stage_path", capture_stage)
+        monkeypatch.setattr(
+            runtime, "_safe_target_snapshot_path", swap_before_second_snapshot
+        )
+    else:
+        original_stage_at = runtime._stage_at
+        original_snapshot_at = runtime._safe_target_snapshot_at
+
+        def capture_stage_at(
+            directory_fd: int, payload: bytes
+        ) -> runtime._StagedFile:
+            nonlocal staged_path
+            staged = original_stage_at(directory_fd, payload)
+            if staged_path is None:
+                staged_path = namespace / staged.name
+            return staged
+
+        def swap_before_second_snapshot_at(
+            directory_fd: int, name: str
+        ) -> runtime._TargetSnapshot | None:
+            nonlocal snapshots
+            if name == "gate-decisions-v1.json":
+                snapshots += 1
+                if snapshots == 2:
+                    assert staged_path is not None
+                    os.replace(victim, staged_path)
+                    return None
+            return original_snapshot_at(directory_fd, name)
+
+        monkeypatch.setattr(runtime, "_stage_at", capture_stage_at)
+        monkeypatch.setattr(
+            runtime, "_safe_target_snapshot_at", swap_before_second_snapshot_at
+        )
+
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+
+    assert staged_path is not None
+    assert staged_path.read_bytes() == b"must-survive"
+    assert "OBSERVABILITY_PATH_UNSAFE" in result.warning_codes
+
+
 def test_lock_busy_does_not_add_path_unsafe_warning(tmp_path: Path) -> None:
     from release_gate.observability_runtime import (
         ObservabilityWarning,
@@ -751,15 +940,15 @@ def test_native_windows_child_open_is_handle_relative(
 ) -> None:
     import release_gate.observability_runtime as runtime
 
-    calls: list[tuple[int, str, int]] = []
+    calls: list[tuple[int, str, int, bool]] = []
     monkeypatch.setattr(
         runtime, "_uses_native_windows_paths", lambda: True, raising=False
     )
     monkeypatch.setattr(
         runtime,
         "_open_windows_relative_native",
-        lambda directory_fd, name, flags: calls.append(
-            (directory_fd, name, flags)
+        lambda directory_fd, name, flags, *, delete_access=False: calls.append(
+            (directory_fd, name, flags, delete_access)
         )
         or 91,
         raising=False,
@@ -777,7 +966,7 @@ def test_native_windows_child_open_is_handle_relative(
     )
 
     assert descriptor == 91
-    assert calls == [(17, "child.lock", os.O_RDWR | os.O_CREAT)]
+    assert calls == [(17, "child.lock", os.O_RDWR | os.O_CREAT, False)]
 
 
 def test_native_windows_child_stat_is_handle_relative(
@@ -806,11 +995,21 @@ def test_native_windows_child_stat_is_handle_relative(
 
 
 def test_native_windows_replace_is_handle_relative(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import release_gate.observability_runtime as runtime
 
-    calls: list[tuple[int, str, str]] = []
+    stage_path = tmp_path / "stage"
+    stage_path.write_bytes(b"trusted")
+    descriptor = os.open(stage_path, os.O_RDWR)
+    metadata = os.fstat(descriptor)
+    staged = runtime._StagedPath(
+        stage_path,
+        runtime._file_snapshot(metadata),
+        descriptor,
+        b"trusted",
+    )
+    calls: list[tuple[int, int, str]] = []
     monkeypatch.setattr(
         runtime, "_uses_native_windows_paths", lambda: True, raising=False
     )
@@ -818,7 +1017,7 @@ def test_native_windows_replace_is_handle_relative(
         runtime,
         "_replace_windows_relative_native",
         lambda directory_fd, source, target: calls.append(
-            (directory_fd, source, target)
+            (directory_fd, source.descriptor, target)
         ),
         raising=False,
     )
@@ -830,9 +1029,46 @@ def test_native_windows_replace_is_handle_relative(
         ),
     )
 
-    runtime._replace_windows_child(29, "stage", "index.html")
+    try:
+        runtime._replace_windows_child(29, staged, "index.html")
+    finally:
+        os.close(descriptor)
 
-    assert calls == [(29, "stage", "index.html")]
+    assert calls == [(29, descriptor, "index.html")]
+
+
+def test_windows_stage_descriptor_closes_when_disposition_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    stage_path = tmp_path / "stage"
+    stage_path.write_bytes(b"trusted")
+    descriptor = os.open(stage_path, os.O_RDWR)
+    staged = runtime._StagedPath(
+        stage_path,
+        runtime._file_snapshot(os.fstat(descriptor)),
+        descriptor,
+        b"trusted",
+    )
+    closed: list[int] = []
+    monkeypatch.setattr(runtime, "_uses_native_windows_paths", lambda: True)
+    monkeypatch.setattr(
+        runtime,
+        "_discard_windows_staged_handle",
+        lambda *_: (_ for _ in ()).throw(RuntimeError("disposition failed")),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_close_quietly",
+        lambda current: not closed.append(current),
+    )
+
+    with pytest.raises(RuntimeError, match="disposition failed"):
+        runtime._close_staged_path(staged, installed=False)
+
+    assert closed == [descriptor]
+    os.close(descriptor)
 
 
 def test_windows_acquire_validates_lock_through_namespace_handle(
@@ -1021,6 +1257,40 @@ def test_windows_directory_pins_deny_root_and_namespace_rename(
             session.namespace.rename(root / "moved-observability")
     finally:
         session.close()
+
+
+@pytest.mark.skipif(
+    os.name != "nt", reason="requires native Windows delete-sharing semantics"
+)
+def test_windows_staged_handle_denies_post_validation_name_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    original_same = runtime._same_staged_path
+    attempted = False
+
+    def attempt_swap(
+        session: RefreshSession, staged: runtime._StagedPath
+    ) -> bool:
+        nonlocal attempted
+        valid = original_same(session, staged)
+        if valid and not attempted:
+            attempted = True
+            with pytest.raises(OSError):
+                staged.path.unlink()
+        return valid
+
+    monkeypatch.setattr(runtime, "_same_staged_path", attempt_swap)
+    with RefreshSession.acquire(root, _summary("windows-run")) as session:
+        result = session.publish()
+
+    assert attempted
+    assert result.data_path is not None
+    assert json.loads(result.data_path.read_bytes())["version"] == 1
 
 
 @pytest.mark.skipif(
