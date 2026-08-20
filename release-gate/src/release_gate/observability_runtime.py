@@ -261,6 +261,11 @@ class RefreshSession:
         self._result = self._result.with_warning(warning)
         return self
 
+    def record_warning(self, warning: ObservabilityWarning) -> None:
+        """Record an integration-boundary failure without affecting the gate."""
+
+        self._warn(warning)
+
 
 def _safe_namespace(root: Path) -> Path | None:
     metadata = _lstat(root)
@@ -373,9 +378,12 @@ def _unlock(descriptor: int) -> None:
 
 
 def _safe_target_snapshot(path: Path) -> _TargetSnapshot | None:
-    metadata = _lstat(path)
-    if metadata is None:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
         return _TargetSnapshot(False, None)
+    except OSError:
+        return None
     if not _safe_file(metadata):
         return None
     return _TargetSnapshot(True, _file_snapshot(metadata))

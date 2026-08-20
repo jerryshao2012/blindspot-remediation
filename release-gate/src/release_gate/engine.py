@@ -11,7 +11,7 @@ import secrets
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,7 +34,11 @@ from release_gate.models import (
     ResolvedCommand,
     Scalar,
 )
-from release_gate.observability_runtime import ObservabilityWarning, RefreshSession
+from release_gate.observability_runtime import (
+    ObservabilityResult,
+    ObservabilityWarning,
+    RefreshSession,
+)
 from release_gate.policy import (
     CheckOutcome,
     CheckStatus,
@@ -73,6 +77,33 @@ class RunOutcome:
     dashboard_path: Path | None = None
     observability_data_path: Path | None = None
     observability_warnings: tuple[ObservabilityWarning, ...] = ()
+
+
+@dataclass(slots=True)
+class _DisabledObservabilitySession:
+    """Best-effort fallback when the runtime integration itself raises."""
+
+    _result: ObservabilityResult = field(default_factory=ObservabilityResult)
+
+    @property
+    def locked(self) -> bool:
+        return False
+
+    @property
+    def result(self) -> ObservabilityResult:
+        return self._result
+
+    def write_snapshot(self, _: EvidenceRun) -> None:
+        return None
+
+    def publish(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    def record_warning(self, warning: ObservabilityWarning) -> None:
+        self._result = self._result.with_warning(warning)
 
 
 @dataclass(slots=True)
@@ -209,18 +240,35 @@ def run_gate(
         duration_ms,
     )
     trace.add("verdict_decided", verdict=decision.verdict.value)
-    session = RefreshSession.acquire(root, result)
-    with session:
+    try:
+        session: RefreshSession | _DisabledObservabilitySession = (
+            RefreshSession.acquire(root, result)
+        )
+    except Exception:
+        session = _DisabledObservabilitySession()
+        session.record_warning(ObservabilityWarning.PUBLISH_FAILED)
+    try:
         # The per-run artifact deliberately contains the exact pending decision.
         # Publication remains best-effort and cannot affect the gate decision.
-        session.write_snapshot(evidence)
+        try:
+            session.write_snapshot(evidence)
+        except Exception:
+            session.record_warning(ObservabilityWarning.PUBLISH_FAILED)
         completed = evidence.finalize(
             result,
             manifest,
             trace.finish(reason_codes=decision.reason_codes),
         )
         if session.locked:
-            session.publish()
+            try:
+                session.publish()
+            except Exception:
+                session.record_warning(ObservabilityWarning.PUBLISH_FAILED)
+    finally:
+        try:
+            session.close()
+        except Exception:
+            session.record_warning(ObservabilityWarning.PUBLISH_FAILED)
     exit_code = {
         Verdict.PASS: 0,
         Verdict.FAIL: 1,

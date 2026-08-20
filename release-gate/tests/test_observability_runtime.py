@@ -221,6 +221,37 @@ def test_swapped_staged_file_is_never_installed(
     assert not (root / "_observability/gate-decisions-v1.json").exists()
 
 
+def test_target_lstat_error_is_unsafe_and_never_replaced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import release_gate.observability_runtime as runtime
+    from release_gate.observability_runtime import RefreshSession
+
+    root = tmp_path / "evidence"
+    namespace = root / "_observability"
+    namespace.mkdir(parents=True)
+    target = namespace / "gate-decisions-v1.json"
+    target.write_bytes(b"owned")
+    original_lstat = Path.lstat
+    replaced: list[object] = []
+
+    def denied(path: Path) -> os.stat_result:
+        if path == target:
+            raise PermissionError("denied")
+        return original_lstat(path)
+
+    def replace(_: object, destination: object) -> None:
+        replaced.append(destination)
+
+    monkeypatch.setattr(Path, "lstat", denied)
+    monkeypatch.setattr(runtime.os, "replace", replace)
+    with RefreshSession.acquire(root, _summary("run-one")) as session:
+        result = session.publish()
+    assert target not in replaced
+    assert target.read_bytes() == b"owned"
+    assert "OBSERVABILITY_PATH_UNSAFE" in result.warning_codes
+
+
 def test_cleanup_exception_is_converted_to_a_publication_warning(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

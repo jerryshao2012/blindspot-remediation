@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -8,8 +9,10 @@ from pathlib import Path
 
 import pytest
 
+import release_gate.engine as engine
 from release_gate.cli import main
 from release_gate.evidence import EvidenceError, EvidenceRun, verify_run
+from release_gate.observability_runtime import RefreshSession
 
 
 def git(repo: Path, *arguments: str) -> None:
@@ -181,6 +184,87 @@ def test_shared_custom_root_rolls_up_all_three_gate_verdicts(
         "releasing": 1, "failing": 1, "human_review": 1
     }
     assert report["series"][-1]["windows"]["100"]["sample_size"] == 3
+
+
+@pytest.mark.parametrize("operation", ("acquire", "write_snapshot", "publish", "close"))
+def test_observability_runtime_exceptions_do_not_change_a_valid_gate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
+    output = tmp_path / "evidence"
+
+    def fail(*_: object, **__: object) -> None:
+        raise RuntimeError(operation)
+
+    if operation == "acquire":
+        monkeypatch.setattr(engine.RefreshSession, "acquire", fail)
+    else:
+        monkeypatch.setattr(RefreshSession, operation, fail)
+    assert main(
+        [
+            "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
+            "--run-id", "runtime-error",
+        ]
+    ) == 0
+    captured = capsys.readouterr()
+    result = output / "runtime-error/result.json"
+    assert captured.out == f"VERDICT: PASS\nRESULT: {result}\n"
+    assert "WARNING: OBSERVABILITY_PUBLISH_FAILED\n" in captured.err
+    verify_run(output / "runtime-error")
+
+
+def test_exit_three_never_attempts_observability(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
+    (repo / "tracked.txt").write_text("base\n", encoding="utf-8")
+
+    def forbidden(*_: object, **__: object) -> None:
+        raise AssertionError("observability must not start")
+
+    monkeypatch.setattr(engine.RefreshSession, "acquire", forbidden)
+    assert main(["run", "--repo", str(repo), "--base", "HEAD"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "empty candidate" in captured.err
+
+
+def test_concurrent_cli_finalizers_publish_both_completed_runs(tmp_path: Path) -> None:
+    output = tmp_path / "shared-evidence"
+    command = [sys.executable, "-c", "import time; time.sleep(0.5); print('ok')"]
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first = repository(first_root, command)
+    second = repository(second_root, command)
+    environment = os.environ | {"PYTHONPATH": str(Path(__file__).parents[1] / "src")}
+    processes = [
+        subprocess.Popen(
+            [
+                sys.executable, "-m", "release_gate", "run", "--repo", str(repo),
+                "--base", "HEAD", "--output", str(output), "--run-id", run_id,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=environment,
+        )
+        for repo, run_id in ((first, "concurrent-a"), (second, "concurrent-b"))
+    ]
+    outputs = [process.communicate(timeout=30) for process in processes]
+    assert [process.returncode for process in processes] == [0, 0]
+    assert all(stdout.startswith("VERDICT: PASS\n") for stdout, _ in outputs)
+    for run_id in ("concurrent-a", "concurrent-b"):
+        verify_run(output / run_id)
+    data = json.loads((output / "_observability/gate-decisions-v1.json").read_bytes())
+    assert [item["run_id"] for item in data["source_runs"]] == [
+        "concurrent-a", "concurrent-b"
+    ]
+    html = (output / "_observability/index.html").read_bytes()
+    assert data["generation_id"].encode() in html
+    assert not list((output / "_observability").glob(".release-gate-*"))
 
 
 def test_policy_change_stops_commands_and_needs_human(
