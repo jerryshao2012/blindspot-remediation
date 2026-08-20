@@ -167,6 +167,22 @@ def test_equal_finished_instants_tie_break_by_run_id_not_timestamp_spelling() ->
     assert [item["run_id"] for item in report["source_runs"]] == ["a-run", "z-run"]
 
 
+def test_timestamp_order_preserves_nanoseconds_before_run_id_tiebreak() -> None:
+    from release_gate.observability import build_report_from_summaries
+
+    report = build_report_from_summaries(
+        [
+            summary("a-later", "2026-01-01T00:00:00.000000002Z"),
+            summary("z-earlier", "2026-01-01T00:00:00.000000001Z"),
+        ]
+    )
+
+    assert [item["run_id"] for item in report["source_runs"]] == [
+        "z-earlier",
+        "a-later",
+    ]
+
+
 def test_renderers_are_safe_accessible_and_self_contained() -> None:
     from release_gate.observability import (
         build_report_from_summaries,
@@ -335,6 +351,9 @@ def test_schema_rejects_non_profile_timestamps_and_ten_window_overflow() -> None
     candidate = json.loads(json.dumps(valid))
     candidate["series"][0]["windows"]["10"]["sample_size"] = 11
     assert list(validator.iter_errors(candidate))
+    candidate = json.loads(json.dumps(valid))
+    candidate["series"][0]["windows"]["10"]["counts"]["releasing"] = 100
+    assert list(validator.iter_errors(candidate))
 
 
 def test_history_scans_at_most_1000_safe_directories(tmp_path: Path) -> None:
@@ -404,6 +423,41 @@ def test_history_rejects_directory_symlinks_and_detects_result_swap(
     assert collected.source_runs == ()
     assert collected.skipped_runs == 2
     assert observability.WarningCategory.RUN_DIRECTORY_UNSAFE in collected.warnings
+
+
+def test_history_skips_invalid_utf8_cache_and_run(tmp_path: Path) -> None:
+    from release_gate.observability import WarningCategory, collect_history
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    bad = root / "bad-utf8"
+    bad.mkdir()
+    (bad / "result.json").write_bytes(b"\xff")
+    (bad / "manifest.json").write_bytes(b"\xff")
+    cache = tmp_path / "cache.json"
+    cache.write_bytes(b"\xff")
+
+    collected = collect_history(root, cache=cache)
+
+    assert collected.source_runs == ()
+    assert collected.skipped_runs == 2
+    assert WarningCategory.CACHE_INVALID in collected.warnings
+    assert WarningCategory.MALFORMED_RUN in collected.warnings
+
+
+def test_history_path_fallback_collects_a_valid_run(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import release_gate.observability as observability
+
+    root = tmp_path / "evidence"
+    root.mkdir()
+    write_valid_run(root, "valid")
+    monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)  # type: ignore[union-attr]
+
+    collected = observability.collect_history(root)
+
+    assert [item.run_id for item in collected.source_runs] == ["valid"]
 
 
 def test_gate_decisions_schema_validates_report() -> None:

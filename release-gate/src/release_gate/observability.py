@@ -11,6 +11,7 @@ import re
 import stat
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
@@ -28,6 +29,10 @@ RESULT_READ_LIMIT = 2 * 1024 * 1024
 MANIFEST_READ_LIMIT = 4 * 1024 * 1024
 _RUN_ID = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9_-])?$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_TIMESTAMP = re.compile(
+    r"^(?P<date>\d{4}-\d{2}-\d{2})T(?P<time>\d{2}:\d{2}:\d{2})"
+    r"(?P<fraction>\.\d{1,9})?(?P<zone>Z|[+-]\d{2}:\d{2})$"
+)
 _VERDICTS = frozenset(("PASS", "FAIL", "NEEDS_HUMAN"))
 
 
@@ -148,6 +153,11 @@ def collect_history(
         skipped += 1
         warnings.add(cache_warning)
     candidates.extend(cache_values)
+
+    if not _uses_dir_fd():
+        return _collect_path_fallback(
+            evidence_root, candidates, skipped, warnings, budget
+        )
 
     root_fd = _open_directory(evidence_root)
     if root_fd is None:
@@ -402,6 +412,102 @@ def _path_lstat(path: str | Path, *, dir_fd: int | None = None) -> os.stat_resul
     return os.stat(path, dir_fd=dir_fd, follow_symlinks=False)
 
 
+def _uses_dir_fd() -> bool:
+    return os.name != "nt"
+
+
+def _collect_path_fallback(
+    evidence_root: Path,
+    candidates: list[DecisionSummary | Mapping[str, Any]],
+    skipped: int,
+    warnings: set[WarningCategory],
+    budget: _ReadBudget,
+) -> HistoryCollection:
+    """Windows-safe path traversal without ``dir_fd`` or descriptor scandir."""
+
+    selected: list[_ScanCandidate] = []
+    scan_truncated = False
+    try:
+        with os.scandir(evidence_root) as entries:
+            for entry in entries:
+                if entry.name == "_observability":
+                    continue
+                path = evidence_root / entry.name
+                try:
+                    metadata = _path_lstat(path)
+                except OSError:
+                    skipped += 1
+                    warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
+                    continue
+                if not _is_safe_directory(metadata):
+                    if stat.S_ISLNK(metadata.st_mode) or _is_reparse_point(metadata):
+                        skipped += 1
+                        warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
+                    continue
+                candidate = _ScanCandidate(
+                    entry.name, metadata.st_mtime, _identity(metadata)
+                )
+                if len(selected) < MAX_SCAN_DIRECTORIES:
+                    heapq.heappush(selected, candidate)
+                elif selected[0] < candidate:
+                    heapq.heapreplace(selected, candidate)
+                    scan_truncated = True
+                else:
+                    scan_truncated = True
+    except OSError:
+        skipped += 1
+        warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
+    if scan_truncated:
+        warnings.add(WarningCategory.SCAN_LIMIT_REACHED)
+    for candidate in sorted(selected, key=lambda item: (-item.mtime, item.name)):
+        directory = evidence_root / candidate.name
+        descriptor = _open_directory(directory, expected=candidate.identity)
+        if descriptor is None:
+            skipped += 1
+            warnings.add(WarningCategory.RUN_DIRECTORY_UNSAFE)
+            continue
+        os.close(descriptor)
+        parsed, reason = _read_completed_run_path(directory, candidate, budget)
+        if parsed is None:
+            skipped += 1
+            warnings.add(reason)
+        else:
+            candidates.append(parsed)
+    return _collected(candidates, skipped, warnings, scan_truncated)
+
+
+def _read_completed_run_path(
+    directory: Path, candidate: _ScanCandidate, budget: _ReadBudget
+) -> tuple[DecisionSummary | None, WarningCategory]:
+    try:
+        if _identity(_path_lstat(directory)) != candidate.identity:
+            return None, WarningCategory.RUN_DIRECTORY_UNSAFE
+        _path_lstat(directory / ".incomplete")
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return None, WarningCategory.RUN_DIRECTORY_UNSAFE
+    else:
+        return None, WarningCategory.INCOMPLETE_RUN
+    result_bytes, result_reason = _read_pinned_file(
+        directory / "result.json", budget, RESULT_READ_LIMIT
+    )
+    if result_bytes is None:
+        return None, result_reason
+    manifest_bytes, manifest_reason = _read_pinned_file(
+        directory / "manifest.json", budget, MANIFEST_READ_LIMIT
+    )
+    if manifest_bytes is None:
+        return None, manifest_reason
+    try:
+        current = _path_lstat(directory)
+    except OSError:
+        return None, WarningCategory.RUN_DIRECTORY_UNSAFE
+    if _identity(current) != candidate.identity:
+        return None, WarningCategory.RUN_DIRECTORY_UNSAFE
+    return _decode_completed_run(result_bytes, manifest_bytes, candidate.name)
+
+
 def _read_completed_run(
     directory_fd: int, directory_name: str, budget: _ReadBudget
 ) -> tuple[DecisionSummary | None, WarningCategory]:
@@ -423,10 +529,16 @@ def _read_completed_run(
     )
     if manifest_bytes is None:
         return None, manifest_reason
+    return _decode_completed_run(result_bytes, manifest_bytes, directory_name)
+
+
+def _decode_completed_run(
+    result_bytes: bytes, manifest_bytes: bytes, directory_name: str
+) -> tuple[DecisionSummary | None, WarningCategory]:
     try:
         result = json.loads(result_bytes)
         manifest = json.loads(manifest_bytes)
-    except (TypeError, json.JSONDecodeError):
+    except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
         return None, WarningCategory.MALFORMED_RUN
     if not isinstance(result, Mapping) or not isinstance(manifest, Mapping):
         return None, WarningCategory.MALFORMED_RUN
@@ -463,7 +575,7 @@ def _cache_summaries(
             return [], WarningCategory.CACHE_INVALID
         try:
             value = json.loads(content)
-        except json.JSONDecodeError:
+        except (UnicodeDecodeError, json.JSONDecodeError):
             return [], WarningCategory.CACHE_INVALID
     if not isinstance(value, Mapping) or not isinstance(value.get("source_runs"), list):
         return [], WarningCategory.CACHE_INVALID
@@ -634,8 +746,20 @@ def _same_identity(first: os.stat_result, second: os.stat_result) -> bool:
     return _identity(first) == _identity(second)
 
 
-def _timestamp_key(value: str) -> float:
-    return parse_timestamp(value).timestamp()
+def _timestamp_key(value: str) -> int:
+    """Return UTC nanoseconds without float or microsecond truncation."""
+
+    parse_timestamp(value)
+    match = _TIMESTAMP.fullmatch(value)
+    if match is None:
+        raise ValueError("timestamp is outside the Release Gate v1 profile")
+    zone = "+00:00" if match.group("zone") == "Z" else match.group("zone")
+    base = datetime.fromisoformat(f"{match.group('date')}T{match.group('time')}{zone}")
+    delta = base.astimezone(UTC) - datetime(1970, 1, 1, tzinfo=UTC)
+    seconds = delta.days * 86_400 + delta.seconds
+    fraction = (match.group("fraction") or ".0")[1:]
+    nanoseconds = int((fraction + "0" * 9)[:9])
+    return seconds * 1_000_000_000 + nanoseconds
 
 
 def _summary_identity(value: DecisionSummary) -> tuple[str, str, str, str]:

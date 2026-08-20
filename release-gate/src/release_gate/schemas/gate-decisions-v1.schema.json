@@ -32,9 +32,9 @@
       "type": "object", "additionalProperties": false,
       "required": ["releasing", "failing", "human_review"],
       "properties": {
-        "releasing": {"type": "integer", "minimum": 0, "maximum": 100},
-        "failing": {"type": "integer", "minimum": 0, "maximum": 100},
-        "human_review": {"type": "integer", "minimum": 0, "maximum": 100}
+        "releasing": {"type": "integer", "minimum": 0, "maximum": 10},
+        "failing": {"type": "integer", "minimum": 0, "maximum": 10},
+        "human_review": {"type": "integer", "minimum": 0, "maximum": 10}
       }
     },
     "rates": {
@@ -59,7 +59,16 @@
       "required": ["sample_size", "counts", "rates"],
       "properties": {
         "sample_size": {"type": "integer", "minimum": 1, "maximum": 100},
-        "counts": {"$ref": "#/$defs/outcomes"}, "rates": {"$ref": "#/$defs/rates"}
+        "counts": {"$ref": "#/$defs/outcomes100"}, "rates": {"$ref": "#/$defs/rates"}
+      }
+    },
+    "outcomes100": {
+      "type": "object", "additionalProperties": false,
+      "required": ["releasing", "failing", "human_review"],
+      "properties": {
+        "releasing": {"type": "integer", "minimum": 0, "maximum": 100},
+        "failing": {"type": "integer", "minimum": 0, "maximum": 100},
+        "human_review": {"type": "integer", "minimum": 0, "maximum": 100}
       }
     },
     "seriesPoint": {
