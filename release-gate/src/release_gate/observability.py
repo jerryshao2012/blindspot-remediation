@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
+from string import Template
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
@@ -252,7 +253,7 @@ def render_html(report: Mapping[str, Any]) -> bytes:
         for point in reversed(series[-10:])
     )
     data = _safe_json_text(report)
-    document = (
+    document = Template(
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         "<title>Release Gate decision observability</title><style>"
@@ -269,27 +270,27 @@ def render_html(report: Mapping[str, Any]) -> bytes:
         "margin-right:.3rem}.sr-only{position:absolute;width:1px;height:1px;padding:0;"
         "margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}"
         "</style></head><body><main><h1>Release Gate decision observability</h1>"
-        '<p class="meta">Generation <code>__GENERATION__</code> · '
+        '<p class="meta">Generation <code>$generation</code> · '
         "evidence root scope</p>"
-        '<section class="cards" aria-label="Decision summary">__CARDS__</section>'
+        '<section class="cards" aria-label="Decision summary">$cards</section>'
         '<section><h2>Rolling trends</h2><p class="legend">'
         '<span><i class="key pass"></i>Releasing</span>'
         '<span><i class="key fail"></i>Failing</span>'
         '<span><i class="key human"></i>Human review</span>'
-        "<span>Vertical marker: configuration transition</span></p>__CHARTS__</section>"
+        "<span>Vertical marker: configuration transition</span></p>$charts</section>"
         '<section><h2>Recent runs</h2><table><caption class="sr-only">'
         "The ten most recent visible Release Gate decisions</caption><thead><tr>"
         "<th>Run</th><th>Finished</th><th>Verdict</th><th>Config</th>"
-        "</tr></thead><tbody>__ROWS__</tbody></table></section>"
-        '<script id="gate-decisions-data" type="application/json">__DATA__</script>'
+        "</tr></thead><tbody>$rows</tbody></table></section>"
+        '<script id="gate-decisions-data" type="application/json">$data</script>'
         "</main></body></html>"
     )
-    output = (
-        document.replace("__GENERATION__", html.escape(generation_id, quote=True))
-        .replace("__CARDS__", cards)
-        .replace("__CHARTS__", _chart(series, "10") + _chart(series, "100"))
-        .replace("__ROWS__", table_rows)
-        .replace("__DATA__", data)
+    output = document.substitute(
+        generation=html.escape(generation_id, quote=True),
+        cards=cards,
+        charts=_chart(series, "10") + _chart(series, "100"),
+        rows=table_rows,
+        data=data,
     ).encode("utf-8")
     if len(output) > 512 * 1024:
         raise ValueError("rendered observability HTML exceeds 512 KiB")

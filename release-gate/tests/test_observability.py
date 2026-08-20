@@ -206,6 +206,26 @@ def test_renderers_are_safe_accessible_and_self_contained() -> None:
     assert b"<script src=" not in html
 
 
+def test_renderer_keeps_placeholder_like_run_ids_literal_and_bounded() -> None:
+    from release_gate.observability import build_report_from_summaries, render_html
+
+    report = build_report_from_summaries(
+        [
+            summary(f"run-__DATA__-{number:03}", f"2026-01-01T00:01:{number % 60:02}Z")
+            for number in range(100)
+        ]
+    )
+    html = render_html(report)
+    table = html.split(b"<tbody>", 1)[1].split(b"</tbody>", 1)[0]
+    embedded = html.split(b' id="gate-decisions-data" type="application/json">', 1)[
+        1
+    ].split(b"</script>", 1)[0]
+
+    assert b"<td>run-__DATA__-059</td>" in table
+    assert json.loads(embedded) == report
+    assert len(html) <= 512 * 1024
+
+
 def test_history_accepts_only_complete_digest_matched_runs_and_cache(
     tmp_path: Path,
 ) -> None:
