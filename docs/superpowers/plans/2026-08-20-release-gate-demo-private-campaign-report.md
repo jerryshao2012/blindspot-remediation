@@ -1021,5 +1021,5 @@ test run.
 - `oracle_error` is visible but excluded from correctness denominators.
 - Missing cost/time/model data stays unknown and keeps its own denominator.
 - No automatic retry, merge, deployment, browser opening, or network publishing.
-- Preserve the user's unrelated untracked `demo-rate-limiter/` and
+- Preserve the user's unrelated untracked `../../../release-gate/demo/rate-limiter/` and
   `demo/runs/setup-verification-20260817/` directories.

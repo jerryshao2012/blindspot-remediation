@@ -236,7 +236,7 @@ plugin or host-specific adapter is part of v1.
 
 **What we found.**
 
-The `main` branch was not empty. It contained `demo-rate-limiter/`, a small library
+The `main` branch was not empty. It contained `release-gate/demo/rate-limiter/`, a small library
 with a full test and analysis chain: a spec with Gherkin scenarios, a gauntlet script
 that ran tests, coverage, type checks, lint checks, and fail-closed forbidden-pattern
 scans, scripted mutation analysis, property tests, and an evidence report. The clock

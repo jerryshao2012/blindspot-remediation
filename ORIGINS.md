@@ -213,14 +213,14 @@ So 5 runs size the bill; 30+ runs start to be evidence.
 
 ## 11. demo-rate-limiter (removed 2026-08-16)
 
-The repository briefly contained `demo-rate-limiter/`, a small hand-built rate
+The repository briefly contained `release-gate/demo/rate-limiter/`, a small hand-built rate
 limiter with its own test-and-analysis chain. It predated the scaffolding (first
 commit `9f58041`) and was not part of the A/B/E build flow. It was removed on
 2026-08-16 to keep this repository purely about the original scaffolding (decision
 recorded in NOTES.md, closed note N-1). It remains in git history:
 
 ```bash
-git checkout $(git log --diff-filter=D --format=%H -1 -- demo-rate-limiter)^ -- demo-rate-limiter
+git checkout $(git log --diff-filter=D --format=%H -1 -- rate-limiter)^ -- rate-limiter
 ```
 
 ## 12. Current state — 2026-08-18
