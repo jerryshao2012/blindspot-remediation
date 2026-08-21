@@ -233,6 +233,9 @@ isolates one gate behavior.
 From the demo directory:
 
 ```powershell
+New-Item -ItemType Directory -Force C:\rg-temp | Out-Null
+$env:TEMP = "C:\rg-temp"
+$env:TMP = "C:\rg-temp"
 py -3 demo.py control pass
 ```
 
@@ -250,6 +253,12 @@ Start `copilot` in `workbench/python-slugify` and enter:
 
 Expected: `PASS`; oracle classification `good_pass`.
 
+On Windows, the short `TEMP`/`TMP` directory prevents pip's build tracker and
+Release Gate's isolated workspaces from nesting under a long profile or prior
+probe path. After `control pass`, these modified files are expected:
+`README.md`, `setup.py`, `slugify/slugify.py`, and `tox.ini`. They are the
+known-good candidate patch, not a failed reset.
+
 ### FAIL
 
 Run `demo.py control fail`, start Copilot in the candidate repository, and
@@ -257,12 +266,28 @@ invoke the same `/release-gate run` command. Expected: `FAIL` with
 `PATH_FORBIDDEN` and/or `PATH_OUTSIDE_ALLOWED`, because the control changes
 `test.py`; oracle classification `good_catch`.
 
+After `control fail`, the modified files should be the PASS patch plus
+`test.py`: `README.md`, `setup.py`, `slugify/slugify.py`, `test.py`, and
+`tox.ini`. The configured checks may still pass; the final verdict is `FAIL`
+because scope policy forbids `test.py` and keeps it outside the allowed path
+set. A successful inspection reports `forbidden: test.py` and
+`outside allowed: test.py`.
+
 ### NEEDS_HUMAN
 
 Run `demo.py control needs-human`, start Copilot, and invoke the same gate
 command. Expected: `NEEDS_HUMAN` with `POLICY_FILE_CHANGED`; configured checks
 are skipped because a candidate cannot change the policy that judges it.
 Oracle classification: `escalated`.
+
+After `control needs-human`, the modified files should be the PASS patch plus
+`.release-gate.yaml`: `.release-gate.yaml`, `README.md`, `setup.py`,
+`slugify/slugify.py`, and `tox.ini`. The policy file is outside the allowed
+path set and is review-required, so a successful inspection reports
+`POLICY_FILE_CHANGED`, `PATH_OUTSIDE_ALLOWED`, `PATH_REVIEW_REQUIRED`,
+`outside allowed: .release-gate.yaml`, and
+`review required: .release-gate.yaml`. Configured checks are skipped with
+`POLICY_FILE_CHANGED`.
 
 Completed default evidence remains under
 `workbench/python-slugify/.release-gate/runs/` when `reset` runs.
@@ -325,6 +350,18 @@ Common failures:
   explicitly and run `setup` again. Do not gate from a broken baseline.
 - **Preparation cannot reach the package index:** configure the corporate
   proxy/index and create a new run. A missing check is not a pass.
+- **PASS control reports `NEEDS_HUMAN` with `PREPARATION_FAILED`:** inspect the
+  recorded `result.json` first. If `scope.status` is `PASS` and the changed
+  paths are only `README.md`, `setup.py`, `slugify/slugify.py`, and `tox.ini`,
+  the candidate patch was accepted and the failure is in isolated preparation.
+  On Windows, reset `TEMP` and `TMP` to a short path before running the gate:
+  ```powershell
+  New-Item -ItemType Directory -Force C:\rg-temp | Out-Null
+  $env:TEMP = "C:\rg-temp"
+  $env:TMP = "C:\rg-temp"
+  ```
+  A stale nested temp path can make pip fail with `[Errno 2] No such file or
+  directory` or a Windows long-path hint while building `python-slugify`.
 - **Exit 3 or 4:** this is an operational error, not a fourth verdict, and a
   complete `result.json` is not guaranteed.
 - **An evidence directory contains `.incomplete`:** do not consume it.
@@ -335,7 +372,7 @@ Common failures:
   when the custom-named exe is not. Still request an allow-list exception for
   `release-gate.exe` from your security team for `copilot skill` invocations,
   which call the exe directly.
-- Coporate proxy settings:
+- Corporate proxy settings:
   ```shell
 $username = [uri]::EscapeDataString("office\your_username")
 $password = [uri]::EscapeDataString("your_password")

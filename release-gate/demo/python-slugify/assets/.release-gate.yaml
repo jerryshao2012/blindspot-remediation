@@ -47,22 +47,20 @@ prepare:
           - ".release-gate-venv"
         inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
 
-  - id: install-demo-dependencies
+  - id: install-build-tools
     argv:
       - ".release-gate-venv/bin/python"
       - "-m"
       - "pip"
       - "install"
       - "--disable-pip-version-check"
-      - "."
-      - "pytest==8.4.2"
-      - "pytest-cov==6.3.0"
-      - "mypy==1.20.2"
+      - "setuptools>=61.2"
     cwd: "."
     timeout: 600
-    inherit_environment: ["PATH"]
+    inherit_environment: ["PATH", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
     environment:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
     exit_classes:
       pass: [0]
       fail: [1]
@@ -75,11 +73,45 @@ prepare:
           - "pip"
           - "install"
           - "--disable-pip-version-check"
+          - "setuptools>=61.2"
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+
+  - id: install-demo-dependencies
+    argv:
+      - ".release-gate-venv/bin/python"
+      - "-m"
+      - "pip"
+      - "install"
+      - "--disable-pip-version-check"
+      - "--no-build-isolation"
+      - "."
+      - "pytest==8.4.2"
+      - "pytest-cov==6.3.0"
+      - "mypy==1.20.2"
+    cwd: "."
+    timeout: 600
+    inherit_environment: ["PATH", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+    environment:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: []
+    platform:
+      windows:
+        argv:
+          - ".release-gate-venv/Scripts/python.exe"
+          - "-m"
+          - "pip"
+          - "install"
+          - "--disable-pip-version-check"
+          - "--no-build-isolation"
           - "."
           - "pytest==8.4.2"
           - "pytest-cov==6.3.0"
           - "mypy==1.20.2"
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
 
 limits:
   stream_bytes: 1048576

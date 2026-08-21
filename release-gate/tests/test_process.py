@@ -11,8 +11,14 @@ from pathlib import Path
 import psutil
 import pytest
 
+from release_gate import process as process_module
 from release_gate.models import ExitClasses, FrozenDict, ResolvedCommand
-from release_gate.process import ExecutionClass, classify_exit, run_command
+from release_gate.process import (
+    ExecutionClass,
+    _resolve_argv_for_cwd,
+    classify_exit,
+    run_command,
+)
 
 
 def command(
@@ -74,6 +80,27 @@ def test_runs_direct_argv_with_spaces_and_classifies_failure(tmp_path: Path) -> 
     assert result.reason_codes == ("COMMAND_FAILED",)
     assert result.stdout.path.read_text() == "argument with spaces\n"
     assert result.stderr.path.read_text() == "problem\n"
+
+
+def test_windows_resolves_workspace_relative_executable_before_spawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "isolated candidate"
+    workspace.mkdir()
+    argv = (
+        ".release-gate-venv/Scripts/python.exe",
+        "-m",
+        "pytest",
+    )
+    monkeypatch.setattr(process_module.os, "name", "nt")
+
+    resolved = _resolve_argv_for_cwd(argv, workspace)
+
+    assert resolved == (
+        str((workspace / argv[0]).resolve()),
+        "-m",
+        "pytest",
+    )
 
 
 def test_missing_executable_and_missing_inherited_environment_are_errors(

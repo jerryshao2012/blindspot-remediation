@@ -4,6 +4,11 @@ All notable changes to the standalone Release Gate are recorded here.
 
 ## 0.3.0
 
+- Resolve workspace-relative executable paths before Windows process creation,
+  so isolated virtual-environment commands run from their configured workspace.
+- Harden the cross-platform `python-slugify` demo's dependency preparation and
+  document the expected control patches and Windows temporary-path recovery.
+- Align demo regression coverage with the intentionally simplified driver.
 - Refresh a self-contained, non-gating rolling 10/100 gate-decision dashboard
   after each finalized `PASS`, `FAIL`, or `NEEDS_HUMAN` run.
 - Add tamper-evident per-run HTML snapshots, mutable stable JSON/HTML reports,

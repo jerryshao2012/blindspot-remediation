@@ -111,9 +111,10 @@ def run_command(
         creation_flags = 0
         if os.name == "nt":
             creation_flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        argv = _resolve_argv_for_cwd(command.argv, cwd)
         try:
             process = subprocess.Popen(
-                command.argv,
+                argv,
                 cwd=cwd,
                 env=environment,
                 stdin=subprocess.DEVNULL,
@@ -244,6 +245,25 @@ def _build_environment(
     else:
         environment["TMPDIR"] = str(temporary)
     return environment, missing
+
+
+def _resolve_argv_for_cwd(
+    argv: tuple[str, ...], cwd: Path
+) -> tuple[str, ...]:
+    """Resolve a relative, path-separated executable against ``cwd``.
+
+    On Windows, ``CreateProcess`` resolves a relative executable path
+    against the *caller's* working directory, not the ``cwd`` argument
+    passed to ``Popen``, so a relative launcher silently fails to spawn
+    once the caller's directory differs from the target workspace.
+    """
+    if os.name != "nt" or not argv:
+        return argv
+    executable = argv[0]
+    if os.path.isabs(executable) or ("/" not in executable and "\\" not in executable):
+        return argv
+    resolved = (cwd / executable).resolve()
+    return (str(resolved), *argv[1:])
 
 
 def _safe_cwd(workspace: Path, relative: str) -> Path | None:
