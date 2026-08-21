@@ -1,0 +1,9 @@
+diff --git a/.release-gate.yaml b/.release-gate.yaml
+--- a/.release-gate.yaml
++++ b/.release-gate.yaml
+@@ -1,4 +1,5 @@
+ version: 1
++# Candidate policy edits always require human review.
+ 
+ scope:
+   allowed_paths:

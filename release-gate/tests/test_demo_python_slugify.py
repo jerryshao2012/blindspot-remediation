@@ -43,13 +43,13 @@ def test_parser_exposes_simplified_demo_commands() -> None:
         parser.parse_args(["campaign-report"])
 
 
-def test_platform_commands_are_native() -> None:
+def test_platform_support_is_explicit() -> None:
     driver = load_driver()
 
-    assert driver.host_python_argv("win32") == ("py", "-3")
-    assert driver.host_python_argv("darwin") == ("python3",)
+    assert driver.require_supported_platform("win32") is None
+    assert driver.require_supported_platform("darwin") is None
     with pytest.raises(driver.DemoError, match="Windows and macOS"):
-        driver.host_python_argv("linux")
+        driver.require_supported_platform("linux")
 
 
 def test_classify_oracle_preserves_escalation_precedence() -> None:
@@ -174,15 +174,29 @@ def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:
 
 
 def test_demo_dependency_preparation_is_build_isolation_safe() -> None:
+    driver = load_driver()
     config = load_config(POLICY)
-    build_tools, dependencies = config.prepare[1:]
+    environment, build_tools, dependencies = config.prepare
 
-    assert build_tools.argv[-1] == "setuptools>=61.2"
+    assert environment.argv == (
+        "uv",
+        "venv",
+        "--python",
+        "3.12",
+        "--seed",
+        ".release-gate-venv",
+    )
+    assert environment.resolve(PlatformName.WINDOWS).argv == environment.argv
+
+    assert "setuptools>=61.2" in build_tools.argv
+    assert "wheel>=0.37" in build_tools.argv
+    assert build_tools.argv[:3] == ("uv", "pip", "install")
+    assert dependencies.argv[:3] == ("uv", "pip", "install")
+    assert "wheel>=0.37" in driver.BUILD_TOOLS
     assert "--no-build-isolation" in dependencies.argv
     assert dependencies.environment["PIP_NO_CACHE_DIR"] == "1"
-    for variable in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"):
-        assert variable in build_tools.inherit_environment
-        assert variable in dependencies.inherit_environment
+    assert build_tools.inherit_environment == ("PATH",)
+    assert dependencies.inherit_environment == ("PATH",)
 
 
 def test_committed_demo_assets_and_windows_guidance_are_self_contained() -> None:
@@ -200,6 +214,12 @@ def test_committed_demo_assets_and_windows_guidance_are_self_contained() -> None
 
     readme = (DEMO / "README.md").read_text(encoding="utf-8")
     for phrase in (
+        "Choose a path",
+        "uv tool install --force .\\release-gate",
+        "cd .\\release-gate\\demo\\python-slugify",
+        "uv run --python 3.12 --no-project python demo.py verify",
+        "uv pip install",
+        "demo.py verify",
         "C:\\rg-temp",
         "PREPARATION_FAILED",
         "outside allowed: test.py",
@@ -237,9 +257,7 @@ def test_trusted_base_validation_checks_origin_parent_and_policy(
     git("commit", "-qm", "upstream")
     upstream = git("rev-parse", "HEAD")
     (repository / ".release-gate.yaml").write_bytes(POLICY.read_bytes())
-    (repository / ".gitignore").write_text(
-        "/.release-gate/runs/\n", encoding="utf-8"
-    )
+    (repository / ".gitignore").write_text("/.release-gate/runs/\n", encoding="utf-8")
     git("add", ".release-gate.yaml", ".gitignore")
     git("commit", "-qm", "policy")
     git("tag", driver.BASE_REF)

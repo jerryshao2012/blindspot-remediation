@@ -1,0 +1,79 @@
+version: 1
+
+scope:
+  allowed_paths:
+    - "/README.md"
+    - "src/**"
+    - "examples/**"
+  forbidden_paths:
+    - "tests/**"
+    - ".github/**"
+  review_required_paths:
+    - "/.release-gate.yaml"
+    - "/.release-gate-venv/"
+    - "tools/**"
+    - "/spec.md"
+    - "/evidence.md"
+    - "/requirements-dev.txt"
+    - "/pyproject.toml"
+    - "/.gitignore"
+
+prepare:
+  - id: create-demo-venv
+    argv: ["uv", "venv", "--python", "3.12", "--seed", ".release-gate-venv"]
+    cwd: "."
+    timeout: 300
+    inherit_environment: ["PATH"]
+    exit_classes: {pass: [0], fail: [1], error: []}
+    platform:
+      windows:
+        argv: ["uv", "venv", "--python", "3.12", "--seed", ".release-gate-venv"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+
+  - id: install-demo-dependencies
+    argv:
+      - "uv"
+      - "pip"
+      - "install"
+      - "--python"
+      - ".release-gate-venv/bin/python"
+      - "--disable-pip-version-check"
+      - "--no-cache-dir"
+      - "-r"
+      - "requirements-dev.txt"
+    cwd: "."
+    timeout: 600
+    inherit_environment: ["PATH"]
+    exit_classes: {pass: [0], fail: [1], error: []}
+    platform:
+      windows:
+        argv:
+          - "uv"
+          - "pip"
+          - "install"
+          - "--python"
+          - ".release-gate-venv/Scripts/python.exe"
+          - "--disable-pip-version-check"
+          - "--no-cache-dir"
+          - "-r"
+          - "requirements-dev.txt"
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+
+limits:
+  stream_bytes: 1048576
+  report_bytes: 5242880
+  total_bytes: 209715200
+
+checks:
+  - id: quality-gauntlet
+    mode: differential
+    severity: blocking
+    argv: [".release-gate-venv/bin/python", "tools/gauntlet.py"]
+    cwd: "."
+    timeout: 900
+    inherit_environment: ["PATH"]
+    exit_classes: {pass: [0], fail: [1], error: [2]}
+    platform:
+      windows:
+        argv: [".release-gate-venv/Scripts/python.exe", "tools/gauntlet.py"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]

@@ -1,0 +1,12 @@
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,8 @@ This demo answers a concrete question: can Release Gate distinguish a safe
+ candidate, a behavioral regression, and a change to the policy that judges the
+ candidate?
+ 
++A limiter should use an injected monotonic clock in production.
++
+ The helper creates an isolated Git repository under `workbench/`. Release Gate
+ reconstructs separate base and candidate workspaces, records its verdict, and
+ only then runs an independent oracle. A complete automated run normally takes

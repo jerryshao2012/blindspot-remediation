@@ -26,9 +26,11 @@ scope:
 prepare:
   - id: create-demo-venv
     argv:
-      - "python3"
-      - "-m"
+      - "uv"
       - "venv"
+      - "--python"
+      - "3.12"
+      - "--seed"
       - ".release-gate-venv"
     cwd: "."
     timeout: 600
@@ -40,24 +42,27 @@ prepare:
     platform:
       windows:
         argv:
-          - "py"
-          - "-3"
-          - "-m"
+          - "uv"
           - "venv"
+          - "--python"
+          - "3.12"
+          - "--seed"
           - ".release-gate-venv"
         inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
 
   - id: install-build-tools
     argv:
-      - ".release-gate-venv/bin/python"
-      - "-m"
+      - "uv"
       - "pip"
       - "install"
+      - "--python"
+      - ".release-gate-venv/bin/python"
       - "--disable-pip-version-check"
       - "setuptools>=61.2"
+      - "wheel>=0.37"
     cwd: "."
     timeout: 600
-    inherit_environment: ["PATH", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+    inherit_environment: ["PATH"]
     environment:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_NO_CACHE_DIR: "1"
@@ -68,20 +73,23 @@ prepare:
     platform:
       windows:
         argv:
-          - ".release-gate-venv/Scripts/python.exe"
-          - "-m"
+          - "uv"
           - "pip"
           - "install"
+          - "--python"
+          - ".release-gate-venv/Scripts/python.exe"
           - "--disable-pip-version-check"
           - "setuptools>=61.2"
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+          - "wheel>=0.37"
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
 
   - id: install-demo-dependencies
     argv:
-      - ".release-gate-venv/bin/python"
-      - "-m"
+      - "uv"
       - "pip"
       - "install"
+      - "--python"
+      - ".release-gate-venv/bin/python"
       - "--disable-pip-version-check"
       - "--no-build-isolation"
       - "."
@@ -90,7 +98,7 @@ prepare:
       - "mypy==1.20.2"
     cwd: "."
     timeout: 600
-    inherit_environment: ["PATH", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+    inherit_environment: ["PATH"]
     environment:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_NO_CACHE_DIR: "1"
@@ -101,17 +109,18 @@ prepare:
     platform:
       windows:
         argv:
-          - ".release-gate-venv/Scripts/python.exe"
-          - "-m"
+          - "uv"
           - "pip"
           - "install"
+          - "--python"
+          - ".release-gate-venv/Scripts/python.exe"
           - "--disable-pip-version-check"
           - "--no-build-isolation"
           - "."
           - "pytest==8.4.2"
           - "pytest-cov==6.3.0"
           - "mypy==1.20.2"
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
 
 limits:
   stream_bytes: 1048576

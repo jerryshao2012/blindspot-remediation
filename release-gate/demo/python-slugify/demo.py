@@ -29,7 +29,7 @@ UPSTREAM_SHA = "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
 BASE_REF = "release-gate-demo-base"
 EXPECTED_GATE_VERSION = "release-gate 0.3.0"
 TEST_TOOLS = ("pytest==8.4.2",)
-BUILD_TOOLS = ("setuptools>=61.2",)
+BUILD_TOOLS = ("setuptools>=61.2", "wheel>=0.37")
 
 
 class DemoError(RuntimeError):
@@ -66,13 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def host_python_argv(platform: str | None = None) -> tuple[str, ...]:
+def require_supported_platform(platform: str | None = None) -> None:
     selected = platform or sys.platform
-    if selected == "win32":
-        return ("py", "-3")
-    if selected == "darwin":
-        return ("python3",)
-    raise DemoError("this demo supports native Windows and macOS hosts")
+    if selected not in {"win32", "darwin"}:
+        raise DemoError("this demo supports native Windows and macOS hosts")
 
 
 def classify_oracle(verdict: str, correct: bool) -> str:
@@ -175,9 +172,7 @@ def _run(
         raise DemoError(f"command failed: {' '.join(command)} ({detail})") from error
 
 
-def _git(
-    *arguments: str, cwd: Path | None = None, capture: bool = False
-) -> str:
+def _git(*arguments: str, cwd: Path | None = None, capture: bool = False) -> str:
     result = _run(("git", *arguments), cwd=cwd or REPOSITORY, capture=capture)
     return result.stdout.strip() if capture else ""
 
@@ -202,8 +197,10 @@ def _gate_argv(
 
     exe = shutil.which("release-gate")
     if exe is not None:
-        venv_python = Path(exe).with_name(
-            "python.exe" if sys.platform == "win32" else "python"
+        venv_python = (
+            Path(exe)
+            .resolve()
+            .with_name("python.exe" if sys.platform == "win32" else "python")
         )
         if venv_python.is_file():
             return (venv_python, "-m", "release_gate", *arguments)
@@ -216,28 +213,30 @@ def _task_python(venv: Path = TASK_VENV) -> Path:
     return venv / "bin" / "python"
 
 
-def _task_pip(venv: Path = TASK_VENV) -> tuple[Path, str, str]:
-    return (_task_python(venv), "-m", "pip")
+def _uv_pip_install(venv: Path = TASK_VENV) -> tuple[str | Path, ...]:
+    return ("uv", "pip", "install", "--python", _task_python(venv))
 
 
 def doctor() -> None:
-    host_python_argv()
+    require_supported_platform()
     for executable in ("git", "uv", "copilot", "release-gate"):
         print(f"{executable}: {_which(executable)}")
-    if not (sys.version_info.major == 3 and 11 <= sys.version_info.minor <= 13):
-        raise DemoError("Python 3.11 through 3.13 is required")
+    evaluation_python = _run(
+        ("uv", "python", "find", "3.12"), capture=True
+    ).stdout.strip()
     version = _run(_gate_argv("--version"), capture=True).stdout.strip()
     if version != EXPECTED_GATE_VERSION:
         raise DemoError(
             f"Release Gate version mismatch: expected {EXPECTED_GATE_VERSION!r}, "
             f"got {version!r}"
         )
-    print(f"python: {sys.version.split()[0]}")
+    print(f"runner python: {sys.version.split()[0]}")
+    print(f"evaluation python: {evaluation_python}")
     print("doctor: ready")
 
 
 def setup() -> None:
-    host_python_argv()
+    require_supported_platform()
     _which("git")
     _require_gate_version()
     if WORKBENCH.exists() or WORKBENCH.is_symlink():
@@ -415,11 +414,10 @@ def _verify_repository() -> None:
 
 
 def _create_task_environment(venv: Path) -> None:
-    _run((*host_python_argv(), "-m", "venv", venv))
+    _run(("uv", "venv", "--python", "3.12", "--seed", venv))
     _run(
         (
-            *_task_pip(venv),
-            "install",
+            *_uv_pip_install(venv),
             "--disable-pip-version-check",
             "--no-build-isolation",
             "-q",
@@ -428,8 +426,7 @@ def _create_task_environment(venv: Path) -> None:
     )
     _run(
         (
-            *_task_pip(venv),
-            "install",
+            *_uv_pip_install(venv),
             "--disable-pip-version-check",
             "--no-build-isolation",
             "-q",
@@ -461,11 +458,10 @@ def _verify_upstream_tests() -> None:
 
 def _oracle_truth() -> bool:
     _remove_owned_directory(ORACLE_VENV)
-    _run((*host_python_argv(), "-m", "venv", ORACLE_VENV))
+    _run(("uv", "venv", "--python", "3.12", "--seed", ORACLE_VENV))
     _run(
         (
-            *_task_pip(ORACLE_VENV),
-            "install",
+            *_uv_pip_install(ORACLE_VENV),
             "--disable-pip-version-check",
             "--no-build-isolation",
             "-q",
@@ -474,8 +470,7 @@ def _oracle_truth() -> bool:
     )
     _run(
         (
-            *_task_pip(ORACLE_VENV),
-            "install",
+            *_uv_pip_install(ORACLE_VENV),
             "--disable-pip-version-check",
             "--no-build-isolation",
             "-q",

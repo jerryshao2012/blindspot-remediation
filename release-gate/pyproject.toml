@@ -51,7 +51,10 @@ dev = [
 packages = ["src/release_gate"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/demo/python-slugify/workbench"]
+exclude = [
+  "/demo/python-slugify/workbench",
+  "/demo/rate-limiter/workbench",
+]
 
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"

@@ -1,87 +1,40 @@
 # Release Gate end-to-end demo: `python-slugify`
 
-This demo shows how to use Release Gate **through GitHub Copilot CLI**. Native
-Windows PowerShell is the primary walkthrough; each step includes the secondary
-macOS zsh equivalent. Copilot edits a real repository, then the explicitly
-invoked `/release-gate` skill validates policy, runs the gate, and explains the
-evidence without changing the verdict.
+This demo lets an assistant implement a real maintenance task, then asks
+Release Gate to judge the candidate against a reviewed policy and trusted Git
+base. The gate records its verdict before an external oracle grades whether the
+candidate is actually correct.
 
-If Copilot CLI cannot reach GitHub on your network (see
-[Troubleshooting: Copilot CLI blocked by corporate firewall](#maintainer-verification-and-troubleshooting)),
-use [VS Code Copilot Chat instead](#appendix-driving-the-demo-with-vs-code-copilot-chat).
-Steps 3, 6, 7 (setup, inspect/grade, reset) are unaffected either way — they
-run through `demo.py`, not Copilot.
+Budget about 15 minutes for one interactive run. The automated three-verdict
+verification normally takes another 10–20 minutes because each gate run
+installs dependencies in fresh evaluation workspaces.
 
-Budget about 15 minutes for the first live run. The deterministic controls take
-another 10–20 minutes because each gate run installs dependencies into fresh
-evaluation workspaces.
+## Choose a path
 
-## What is isolated
+| Goal | Path |
+|---|---|
+| Verify setup and all three verdict controls | Follow [automated verification](#automated-verification). |
+| Let GitHub Copilot CLI implement and gate X1 | Follow [interactive Copilot CLI walkthrough](#interactive-copilot-cli-walkthrough). |
+| Copilot CLI is blocked by your network | Use [VS Code Copilot Chat](#vs-code-copilot-chat). |
+| Demonstrate policy generation instead of the fixed experiment | See [guided initialization](#optional-guided-initialization). |
 
-`demo.py setup` generates this ignored layout:
+## 1. Prerequisites and one-time installation
 
-```text
-workbench/
-├── python-slugify/     # the only directory in which Copilot is started
-└── task-venv/          # local environment for Copilot's own verification
-```
+Install Git, Python 3.12, `uv`, and GitHub Copilot CLI. Authenticate
+Copilot before the live walkthrough. Setup clones GitHub and installs Python
+packages, so configure your approved proxy or package index on restricted
+networks.
 
-The candidate repository is pinned to upstream commit
-`7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4`. Setup adds the reviewed policy in
-`assets/.release-gate.yaml`, commits it, and tags that trusted commit as
-`release-gate-demo-base`. Release Gate reconstructs separate base and candidate
-workspaces for every run. The hidden oracle remains outside the candidate
-repository and runs only after the verdict is recorded.
-
-The scenario is self-contained but derives from the legacy experiment:
-
-- [frozen X1 task](../../../demo/tasks/X1_v2.md)
-- [legacy hidden oracle](../../../demo/oracle/test_x1_oracle.py)
-- [legacy run history](../../../demo/runs/RUNLOG.md)
-
-The new demo does not call the legacy Bash gate or depend on its workbench.
-
-## 1. Prerequisites
-
-Install and authenticate:
-
-- Git;
-- Python 3.11, 3.12, or 3.13;
-- [uv](https://docs.astral.sh/uv/getting-started/installation/);
-- [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
-
-The setup and gate preparation steps clone from GitHub and install packages.
-On a restricted corporate network, configure the approved Git and Python
-package-index proxy before starting.
-
-```shell
-uv --version
-uv 0.11.16 (135a36367 2026-05-21 x86_64-pc-windows-msvc)
-
-python --version
-Python 3.12.3
-
-git --version
-git version 2.39.2.windows.1
-
-copilot --version
-GitHub Copilot CLI 1.0.80.
-Run 'copilot update' to check for updates.
-```
-
-## 2. Install this checkout and register its Copilot skill
-
-Run these commands from the root of `blindspot-remediation`. The path argument
-is important: an unrelated package on PyPI is also named `release-gate`.
+Run these commands from the root of `blindspot-remediation`. The path is
+important because an unrelated package on PyPI is also named `release-gate`.
 
 ### Windows PowerShell
 
-You will need to setup corporate proxy settings if your network restricts GitHub or PyPI access. Then run `uv sync` in `blindspot-remediation\release-gate` to ensure you have the latest version of `uv` and its dependencies. After that, execute the following commands:
-
 ```powershell
-uv tool install --force .
+uv tool install --force .\release-gate
 release-gate --version
 copilot skill add .\release-gate\skills\release-gate
+cd .\release-gate\demo\python-slugify
 ```
 
 ### macOS zsh
@@ -90,9 +43,10 @@ copilot skill add .\release-gate\skills\release-gate
 uv tool install --force ./release-gate
 release-gate --version
 copilot skill add ./release-gate/skills/release-gate
+cd release-gate/demo/python-slugify
 ```
 
-The required version output is:
+The required version is:
 
 <!-- release-version-sync:start -->
 ```text
@@ -100,116 +54,150 @@ release-gate 0.3.0
 ```
 <!-- release-version-sync:end -->
 
-The local directory registration is for this source demo. It does not replace
-the checksum-verified wheel and host archive procedure in
-[Adoption](../../docs/adoption.md).
+Every helper command below uses `uv run --python 3.12`; Windows and macOS
+therefore select the same interpreter instead of relying on `py` or `python3`.
+The helper and Release Gate also use `uv venv --python 3.12 --seed` followed by
+`uv pip install`. The reviewed setuptools and wheel versions are installed
+before the project, so package building never depends on a global toolchain.
 
-Start Copilot once and enter `/skills info release-gate`. Confirm that the
-skill is visible, then exit. GitHub documents project and personal skill
-locations and `/SKILL-NAME` invocation in its
-[Copilot CLI skills guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills).
+Optionally start Copilot once and enter `/skills info release-gate` to confirm
+that the skill is registered, then exit.
 
-## 3. Check the host and create the workbench
+## Automated verification
 
-Change to this directory:
+This path does not use Copilot. It creates or validates the workbench, applies
+the known PASS, FAIL, and NEEDS_HUMAN candidates, invokes the direct Release
+Gate CLI, grades every result with the hidden oracle, and resets safely.
 
 ### Windows PowerShell
 
 ```powershell
-cd .\demo\python-slugify
-py -3 demo.py doctor
-py -3 demo.py setup
+uv run --python 3.12 --no-project python demo.py verify
 ```
 
 ### macOS zsh
 
 ```zsh
-cd release-gate/demo/python-slugify
-python3 demo.py doctor
-python3 demo.py setup
+uv run --python 3.12 --no-project python demo.py verify
 ```
 
-Expected final setup lines include:
+The final line must be:
 
 ```text
-INITIALIZED: your_path_to\.release-gate.yaml
-........................................................................ [ 87%]
-..........                                                               [100%]
-82 passed in 0.57s
+verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations
+```
+
+Do not treat an earlier green line as completion. `verify` fails if setup, a
+gate result, oracle grading, or the final reset fails.
+
+## Interactive Copilot CLI walkthrough
+
+### 2. Check the host and create the trusted base
+
+Run from `release-gate/demo/python-slugify`:
+
+#### Windows PowerShell
+
+```powershell
+uv run --python 3.12 --no-project python demo.py doctor
+uv run --python 3.12 --no-project python demo.py setup
+```
+
+#### macOS zsh
+
+```zsh
+uv run --python 3.12 --no-project python demo.py doctor
+uv run --python 3.12 --no-project python demo.py setup
+```
+
+Expected final setup output includes:
+
+```text
+82 passed
 BASELINE GREEN at 7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4
 trusted base: release-gate-demo-base
 ```
 
-`setup` refuses to overwrite an existing workbench. Use `reset` between runs.
+Setup creates this ignored layout:
 
-## 4. Let Copilot implement X1
+```text
+workbench/
+├── python-slugify/   # the only directory in which Copilot is started
+└── task-venv/        # local candidate-verification environment
+```
 
-Before starting Copilot, open [the frozen task card](assets/TASK.md) and copy
-its entire contents. Do not include hints or mention the oracle.
+The candidate is pinned to upstream commit
+`7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4`. Setup commits the reviewed
+policy and tags that commit `release-gate-demo-base`. It refuses to overwrite
+an existing workbench.
 
-Start Copilot **inside the candidate repository**:
+### 3. Let Copilot implement X1
 
-### Windows PowerShell
+Open [the complete frozen task card](assets/TASK.md) and copy all of it. Do not
+include hints or mention the oracle.
+
+Start Copilot inside the generated candidate repository:
 
 ```powershell
 cd workbench\python-slugify
 copilot
 ```
 
-### macOS zsh
-
 ```zsh
 cd workbench/python-slugify
 copilot
 ```
 
-Paste [the complete task card](assets/TASK.md). Let Copilot edit and test the candidate. Review
-its changes with `/diff`; do not accept edits to `test.py`,
-`.release-gate.yaml`, or evidence.
+Paste the task card and let Copilot edit and test the candidate. Review `/diff`.
+Do not accept changes to `test.py`, `.release-gate.yaml`, or evidence.
 
-## 5. Use Release Gate through Copilot CLI
+### 4. Validate and run Release Gate
 
-In the same Copilot session, explicitly enter:
+In the same Copilot session, enter:
 
 ```text
 /release-gate validate
-```
-
-Expected result: Copilot first checks `release-gate --version`, then reports a
-`VALID:` policy without editing it.
-
-Run the candidate against the trusted policy commit:
-
-```text
 /release-gate run --base release-gate-demo-base
 ```
 
-Copilot must invoke the gate once, preserve the exact `PASS`, `FAIL`, or
-`NEEDS_HUMAN` verdict, read the produced `result.json`, and report its reason
-codes and evidence path. It must not retry, edit evidence, merge, or deploy.
+Copilot must invoke the gate once, preserve the exact verdict, read the
+produced `result.json`, and report its reason codes and evidence path. It must
+not retry, edit evidence, merge, or deploy. Copy the absolute path printed
+after `RESULT:` and exit Copilot.
 
-Copy the absolute path printed after `RESULT:` and exit Copilot.
+### Direct CLI equivalent
 
-## 6. Inspect and grade the recorded run
-
-Return to this demo directory and quote the result path if it contains spaces.
-
-### Windows PowerShell
+From the demo directory:
 
 ```powershell
-py -3 demo.py inspect --result "C:\absolute\path\to\result.json"
-py -3 demo.py grade --result "C:\absolute\path\to\result.json"
+release-gate validate --repo .\workbench\python-slugify
+release-gate run --repo .\workbench\python-slugify --base release-gate-demo-base
 ```
-
-### macOS zsh
 
 ```zsh
-python3 demo.py inspect --result "/absolute/path/to/result.json"
-python3 demo.py grade --result "/absolute/path/to/result.json"
+release-gate validate --repo ./workbench/python-slugify
+release-gate run --repo ./workbench/python-slugify --base release-gate-demo-base
 ```
 
-The grader runs the oracle only after the verdict exists. Its classifications
-are:
+Exit codes are 0 for `PASS`, 1 for `FAIL`, and 2 for `NEEDS_HUMAN`. Exit 3 or 4
+is an operational error, not another verdict.
+
+### 5. Inspect and grade the recorded run
+
+Return to `release-gate/demo/python-slugify` and quote paths containing spaces:
+
+```powershell
+uv run --python 3.12 --no-project python demo.py inspect --result "C:\absolute\path\to\result.json"
+uv run --python 3.12 --no-project python demo.py grade --result "C:\absolute\path\to\result.json"
+```
+
+```zsh
+uv run --python 3.12 --no-project python demo.py inspect --result "/absolute/path/to/result.json"
+uv run --python 3.12 --no-project python demo.py grade --result "/absolute/path/to/result.json"
+```
+
+The hidden oracle remains outside the candidate repository and runs only after
+the verdict exists. It cannot change or retry that verdict.
 
 | Gate | Oracle truth | Classification |
 |---|---|---|
@@ -222,272 +210,159 @@ are:
 `PASS` means only that the recorded policy accepted this candidate. It is not
 a merge, deployment, security attestation, or proof that no defect exists.
 
-## 7. Demonstrate all three verdicts through Copilot
+## 6. Demonstrate every verdict
 
-Each `control` command resets the repository first. The `fail` and
-`needs-human` patches are layered on the known-good `pass` patch so each result
-isolates one gate behavior.
+Each control resets first and then creates one known candidate. Run the gate
+immediately after selecting a control.
 
-### PASS
+| Control | Expected gate result | Expected grade | Important evidence |
+|---|---|---|---|
+| `pass` | `PASS` | `good_pass` | Only the reviewed X1 files changed. |
+| `fail` | `FAIL` | `good_catch` | `test.py` is forbidden and outside allowed scope. |
+| `needs-human` | `NEEDS_HUMAN` | `escalated` | `POLICY_FILE_CHANGED`; configured checks are skipped. |
 
-From the demo directory:
+```powershell
+uv run --python 3.12 --no-project python demo.py control pass
+uv run --python 3.12 --no-project python demo.py control fail
+uv run --python 3.12 --no-project python demo.py control needs-human
+```
+
+```zsh
+uv run --python 3.12 --no-project python demo.py control pass
+uv run --python 3.12 --no-project python demo.py control fail
+uv run --python 3.12 --no-project python demo.py control needs-human
+```
+
+The PASS candidate changes `README.md`, `setup.py`, `slugify/slugify.py`, and
+`tox.ini`. The FAIL candidate adds `test.py`; inspection reports
+`outside allowed: test.py` and `forbidden: test.py`. The NEEDS_HUMAN candidate
+adds `.release-gate.yaml`; inspection reports
+`review required: .release-gate.yaml`.
+
+On Windows, set a short temporary directory before the PASS control if your
+profile path is long:
 
 ```powershell
 New-Item -ItemType Directory -Force C:\rg-temp | Out-Null
 $env:TEMP = "C:\rg-temp"
 $env:TMP = "C:\rg-temp"
-py -3 demo.py control pass
 ```
 
-or on macOS:
-
-```zsh
-python3 demo.py control pass
-```
-
-Start `copilot` in `workbench/python-slugify` and enter:
-
-```text
-/release-gate run --base release-gate-demo-base
-```
-
-Expected: `PASS`; oracle classification `good_pass`.
-
-On Windows, the short `TEMP`/`TMP` directory prevents pip's build tracker and
-Release Gate's isolated workspaces from nesting under a long profile or prior
-probe path. After `control pass`, these modified files are expected:
-`README.md`, `setup.py`, `slugify/slugify.py`, and `tox.ini`. They are the
-known-good candidate patch, not a failed reset.
-
-### FAIL
-
-Run `demo.py control fail`, start Copilot in the candidate repository, and
-invoke the same `/release-gate run` command. Expected: `FAIL` with
-`PATH_FORBIDDEN` and/or `PATH_OUTSIDE_ALLOWED`, because the control changes
-`test.py`; oracle classification `good_catch`.
-
-After `control fail`, the modified files should be the PASS patch plus
-`test.py`: `README.md`, `setup.py`, `slugify/slugify.py`, `test.py`, and
-`tox.ini`. The configured checks may still pass; the final verdict is `FAIL`
-because scope policy forbids `test.py` and keeps it outside the allowed path
-set. A successful inspection reports `forbidden: test.py` and
-`outside allowed: test.py`.
-
-### NEEDS_HUMAN
-
-Run `demo.py control needs-human`, start Copilot, and invoke the same gate
-command. Expected: `NEEDS_HUMAN` with `POLICY_FILE_CHANGED`; configured checks
-are skipped because a candidate cannot change the policy that judges it.
-Oracle classification: `escalated`.
-
-After `control needs-human`, the modified files should be the PASS patch plus
-`.release-gate.yaml`: `.release-gate.yaml`, `README.md`, `setup.py`,
-`slugify/slugify.py`, and `tox.ini`. The policy file is outside the allowed
-path set and is review-required, so a successful inspection reports
-`POLICY_FILE_CHANGED`, `PATH_OUTSIDE_ALLOWED`, `PATH_REVIEW_REQUIRED`,
-`outside allowed: .release-gate.yaml`, and
-`review required: .release-gate.yaml`. Configured checks are skipped with
-`POLICY_FILE_CHANGED`.
-
-Completed default evidence remains under
-`workbench/python-slugify/.release-gate/runs/` when `reset` runs.
-
-## 8. Reset
-
-### Windows PowerShell
+## 7. Reset
 
 ```powershell
-py -3 demo.py reset
+uv run --python 3.12 --no-project python demo.py reset
 ```
-
-### macOS zsh
 
 ```zsh
-python3 demo.py reset
+uv run --python 3.12 --no-project python demo.py reset
 ```
 
-Reset verifies the origin, trusted tag, upstream parent, and committed policy
-before changing the generated workbench. It restores the baseline and rebuilds
-the task environment so an installed `Unidecode` cannot contaminate the next
-run.
+Reset verifies the origin, trusted tag, pinned upstream parent, and committed
+policy before changing the generated workbench. It rebuilds the task
+environment so a prior dependency cannot contaminate the next run. Completed
+evidence remains under `workbench/python-slugify/.release-gate/runs/`.
 
-## Optional: see guided `/release-gate init`
+## What is isolated and what is measured
 
-The main path uses the committed reviewed policy so the three verdicts are
-repeatable. To demonstrate guided onboarding, create a separate raw clone at
-the pinned upstream commit, start Copilot inside it, and enter:
+Release Gate reconstructs independent base and candidate workspaces for every
+run. The candidate cannot edit the policy at the trusted base, the hidden
+oracle, or completed evidence. The scenario derives from:
+
+- [frozen X1 task](../../../demo/tasks/X1_v2.md)
+- [legacy hidden oracle](../../../demo/oracle/test_x1_oracle.py)
+- [legacy run history](../../../demo/runs/RUNLOG.md)
+
+The new demo does not call the legacy Bash gate or depend on its workbench.
+Repeated X1 trials measure X1 repeatability, not universal model reliability.
+
+## Optional: guided initialization
+
+The repeatable walkthrough uses a committed reviewed policy. To demonstrate
+onboarding, create a separate raw clone at the pinned upstream commit, start
+Copilot inside it, and enter:
 
 ```text
 /release-gate init
 ```
 
-Copilot should inspect only manifests and declared configuration, propose the
-complete policy and `.gitignore` diff, ask for explicit approval, then call
-`release-gate init --from-config` and validate the result. Compare its proposal
-with [the reviewed demo policy](assets/.release-gate.yaml). Do not use that
-variable guided clone for the deterministic controls.
+Copilot should inspect manifests and declared configuration, propose the full
+policy and `.gitignore` diff, ask for approval, call
+`release-gate init --from-config`, and validate the result. Compare it with
+[the reviewed demo policy](assets/.release-gate.yaml). Do not use this variable
+clone for deterministic controls.
 
-## Maintainer verification and troubleshooting
+## Troubleshooting
 
-`verify` exercises the direct CLI noninteractively for CI; it is not the
-operator-facing Copilot walkthrough:
-
-```powershell
-py -3 demo.py verify
-```
-
-```zsh
-python3 demo.py verify
-```
-
-Common failures:
-
-- **`doctor` cannot find Copilot or Release Gate:** install/register them from
-  the repository root, then open a new terminal so `PATH` is refreshed.
+- **Doctor cannot find Copilot or Release Gate:** repeat the one-time install
+  from the repository root, then open a new terminal.
 - **Wrong Release Gate version:** reinstall this checkout by path. The skill
   intentionally stops on a version mismatch.
-- **Baseline is not 82 passing tests:** remove the generated `workbench`
-  explicitly and run `setup` again. Do not gate from a broken baseline.
-- **Preparation cannot reach the package index:** configure the corporate
-  proxy/index and create a new run. A missing check is not a pass.
-- **PASS control reports `NEEDS_HUMAN` with `PREPARATION_FAILED`:** inspect the
-  recorded `result.json` first. If `scope.status` is `PASS` and the changed
-  paths are only `README.md`, `setup.py`, `slugify/slugify.py`, and `tox.ini`,
-  the candidate patch was accepted and the failure is in isolated preparation.
-  On Windows, reset `TEMP` and `TMP` to a short path before running the gate:
-  ```powershell
-  New-Item -ItemType Directory -Force C:\rg-temp | Out-Null
-  $env:TEMP = "C:\rg-temp"
-  $env:TMP = "C:\rg-temp"
-  ```
-  A stale nested temp path can make pip fail with `[Errno 2] No such file or
-  directory` or a Windows long-path hint while building `python-slugify`.
-- **Exit 3 or 4:** this is an operational error, not a fourth verdict, and a
-  complete `result.json` is not guaranteed.
-- **An evidence directory contains `.incomplete`:** do not consume it.
-- **`release-gate.exe` is blocked by corporate policy (`OSError: [WinError 6] The
-  handle is invalid`):** endpoint security killed the freshly spawned process.
-  `demo.py` now runs `python -m release_gate` via the interpreter next to the
-  shim instead of the shim itself, which works if `python.exe` is trusted even
-  when the custom-named exe is not. Still request an allow-list exception for
-  `release-gate.exe` from your security team for `copilot skill` invocations,
-  which call the exe directly.
-- Corporate proxy settings:
-  ```shell
-$username = [uri]::EscapeDataString("office\your_username")
-$password = [uri]::EscapeDataString("your_password")
-$proxy  = "http://${username}:${password}@ebcswg.bmogc.net:8080/"     
-$env:HTTP_PROXY = $proxy
-$env:HTTPS_PROXY = $proxy
-$env:ALL_PROXY = $proxy
-$env:http_proxy = $proxy
-$env:https_proxy = $proxy
-$env:all_proxy = $proxy
-$env:NO_PROXY = "localhost,127.0.0.1"
-$env:UV_SYSTEM_CERTS = "true"
-$env:UV_LINK_MODE="copy"
+- **Baseline is not 82 passing tests:** remove the generated workbench
+  explicitly and run setup again. Do not gate from a broken baseline.
+- **`PREPARATION_FAILED` on the PASS control:** inspect `result.json`. If scope
+  passed and only the four expected files changed, dependency preparation—not
+  the candidate patch—failed. On Windows, use `C:\rg-temp` as shown above.
+- **Exit 3 or 4:** this is an operational error; a complete `result.json` is not
+  guaranteed.
+- **Evidence contains `.incomplete`:** do not consume that evidence package.
+- **`release-gate.exe` is blocked:** endpoint security may reject the shim.
+  `demo.py` prefers the sibling interpreter with `python -m release_gate`, but
+  Copilot calls the executable directly and may require an allow-list exception.
 
-uv sync
-.\.venv\Scripts\activate
-  ```
+### Corporate proxy settings
 
-- **Copilot CLI fails with `ProxyResponseError: HTTP 403 response does not
-  appear to originate from GitHub` (`https://gh.io/copilot-firewall`):** this
-  is Copilot CLI itself failing to reach GitHub's Copilot API through the
-  corporate proxy, not the demo's git clone step — local files cannot work
-  around it because Copilot needs live network access to run at all. Diagnose
-  with `curl.exe`, not the `curl` alias (which is `Invoke-WebRequest` in
-  PowerShell and does not accept `--verbose`/`-x`):
-  ```powershell
-  curl.exe --verbose https://copilot-proxy.githubusercontent.com/_ping
-  curl.exe --verbose -x $env:HTTPS_PROXY -i https://api.githubcopilot.com/_ping
-  ```
-  A 200 response means the connection works. If the request only succeeds
-  with `--insecure` added, the corporate proxy is intercepting TLS and
-  Copilot doesn't trust its certificate; install the corporate root CA into
-  the Windows trust store (Copilot CLI reads it automatically via `win-ca`).
-  If the proxied request returns `403 Forbidden` with an HTML body from your
-  proxy (not GitHub), the proxy is blocking the domain by category (for
-  example, "Generative AI"), not by certificate — request an allow-list
-  exception from IT for `api.githubcopilot.com` and the other domains in the
-  [Copilot allowlist reference](https://gh.io/copilot-firewall). Until that
-  exception is granted, use
-  [VS Code Copilot Chat instead](#appendix-driving-the-demo-with-vs-code-copilot-chat).
-
-## Appendix: driving the demo with VS Code Copilot Chat
-
-Use this appendix in place of steps 4 and 5 if Copilot CLI cannot reach
-GitHub on your network. VS Code's Copilot Chat authenticates and connects
-independently of the CLI, so it can work even while `copilot` is blocked.
-Steps 3 (setup), 6 (inspect/grade), and 8 (reset) are unchanged — run them
-from a terminal exactly as written above.
-
-### A. Register the skill for VS Code
-
-VS Code Copilot Chat discovers project skills from `.github/skills`. Copy
-the skill into the candidate repository once, after `demo.py setup` has
-created it. Run this from **this demo directory**
-(`release-gate/demo/python-slugify`), the same directory used in step 3:
-
-#### Windows PowerShell
+Configure only organization-approved values. A typical PowerShell setup is:
 
 ```powershell
-Copy-Item -Recurse -Force `
-  ..\..\skills\release-gate `
-  workbench\python-slugify\.github\skills\release-gate
+$env:HTTP_PROXY = "http://proxy.example:8080/"
+$env:HTTPS_PROXY = $env:HTTP_PROXY
+$env:NO_PROXY = "localhost,127.0.0.1"
+$env:UV_SYSTEM_CERTS = "true"
+$env:UV_LINK_MODE = "copy"
 ```
 
-#### macOS zsh
+These variables help `demo.py setup`, which runs in the operator environment.
+The committed deterministic gate policy inherits only executable-discovery
+variables: Release Gate treats every requested inherited variable as mandatory,
+so listing optional proxy variables would make direct-network hosts stop with
+`INHERITED_ENVIRONMENT_MISSING`. If isolated gate preparation requires a proxy,
+use your organization's approved non-secret system/package-index configuration
+or review and commit a separate policy for that environment; do not alter the
+trusted deterministic control policy in place.
+
+If Copilot CLI returns a proxy 403, test the documented GitHub endpoints with
+`curl.exe` and request the required allow-list from IT. Local files cannot
+replace Copilot's network connection. Use VS Code Copilot Chat if it is already
+approved and connected in your environment.
+
+## VS Code Copilot Chat
+
+Use this path instead of the Copilot CLI portions of steps 3 and 4. Setup,
+inspection, grading, controls, and reset remain unchanged.
+
+After setup, copy the skill into the generated candidate. Repeat this after
+every reset because `git clean` removes untracked files.
+
+```powershell
+New-Item -ItemType Directory -Force workbench\python-slugify\.github\skills | Out-Null
+Copy-Item -Recurse -Force ..\..\skills\release-gate workbench\python-slugify\.github\skills\release-gate
+code workbench\python-slugify
+```
 
 ```zsh
 mkdir -p workbench/python-slugify/.github/skills
 cp -R ../../skills/release-gate workbench/python-slugify/.github/skills/release-gate
+code workbench/python-slugify
 ```
 
-`demo.py reset` and `demo.py control` run `git clean`, which removes
-untracked files, so repeat this copy after every `reset`.
-
-### B. Let Copilot implement X1
-
-Open the candidate repository as its own VS Code window:
-
-```powershell
-code workbench\python-slugify
-```
-
-Open the Copilot Chat view, switch to **Agent** mode, and paste the complete
-contents of [the frozen task card](assets/TASK.md) — the same card used for
-the CLI walkthrough, with no hints and no mention of the oracle. Let the
-agent edit and test the candidate. Review its changes in the **Source
-Control** view; do not stage or accept edits to `test.py`,
-`.release-gate.yaml`, or evidence.
-
-### C. Use Release Gate through Copilot Chat
-
-In the same chat session, explicitly ask Copilot to use the `release-gate`
-skill, naming both the action and the base ref so it cannot guess:
+Open Copilot Chat in Agent mode, paste the complete
+[task card](assets/TASK.md), and review the candidate in Source Control. Then
+ask:
 
 ```text
 Use the release-gate skill to validate this repository.
-```
-
-Expected result: Copilot first checks `release-gate --version`, then reports
-a `VALID:` policy without editing it.
-
-```text
 Use the release-gate skill to run against base release-gate-demo-base.
 ```
 
-Copilot must invoke the gate once, preserve the exact `PASS`, `FAIL`, or
-`NEEDS_HUMAN` verdict, read the produced `result.json`, and report its reason
-codes and evidence path. It must not retry, edit evidence, merge, or deploy.
-Copy the absolute path printed after `RESULT:`.
-
-If Copilot's terminal tool reports the same `release-gate.exe` blocked error
-described above, ask it to run the equivalent `python -m release_gate`
-command instead (see that troubleshooting entry) — the arguments after the
-subcommand are identical.
-
-Continue with steps 6 (inspect/grade), 7 (all three verdicts, substituting
-this appendix for the Copilot part of each scenario), and 8 (reset) exactly
-as written above.
+Copy the `RESULT:` path and continue with inspection and grading.
