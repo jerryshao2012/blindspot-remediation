@@ -24,7 +24,7 @@ Do not infer a subcommand from repository context.
 ## Informational `--version`
 
 For explicit `/release-gate --version` (or `$release-gate --version` in Codex),
-read `references/compatibility.json`. Report exactly `release-gate 0.3.0` and
+read `references/compatibility.json`. Report exactly `release-gate 0.4.0` and
 stop. Do not call the CLI, do not run compatibility preflight, do not consider
 Graphify, and do not perform an `init`, `validate`, or `run` operation or any
 repository operation.
@@ -38,7 +38,7 @@ release-gate --version
 ```
 
 Read `references/compatibility.json` and require exact output
-`release-gate 0.3.0`. If the executable is missing, the reference is unreadable,
+`release-gate 0.4.0`. If the executable is missing, the reference is unreadable,
 or the output differs, stop safely. Do not install, upgrade, retry, or continue.
 <!-- release-version-sync:end -->
 
@@ -56,7 +56,7 @@ retry Release Gate and must not change policy or verdict.
 
 After preflight:
 
-1. Read `references/initialization.md` and
+1. Read `references/initialization.md`, `references/assurance.md`, and
    `references/config-v1.schema.json` before proposing a policy. Every field in
    the rendered policy must validate against that exact schema and the stated
    CLI semantic rules; do not guess or invent a field.
@@ -77,20 +77,25 @@ After preflight:
    candidate or differential mode, severity, preparation and network behavior,
    scope, and inherited environment variable names. Record names only, never
    values. Resolve ambiguity with the user instead of guessing.
-7. Render the complete candidate policy and a combined final diff for both
+7. Build a user-approved assurance map from each failure mode or assurance claim
+   to its cited repository command or report, candidate or differential mode,
+   severity, and known limitations. Classify every omitted layer as `N-A`,
+   `UNAVAILABLE`, or `SUBSTITUTED`; never present absent work as passed. Apply
+   the aggregate-gauntlet and custom-checker integrity rules in the assurance reference.
+8. Render the complete candidate policy and a combined final diff for both
    `.release-gate.yaml` and `.gitignore`. Explain that `.release-gate.yaml` is
    created and `/.release-gate/runs/` is appended to `.gitignore` if absent.
-8. Make no write without explicit approval of that exact combined diff. On
+9. Make no write without explicit approval of that exact combined diff. On
    cancellation or requested changes, do not create a temporary file or mutate
    the repository.
-9. After approval, create a secure temporary file outside the repository with
+10. After approval, create a secure temporary file outside the repository with
    owner-only permissions, write only the approved policy, and call exactly:
 
    ```text
    release-gate init --repo <repo> --from-config <temporary-approved-config>
    ```
 
-10. Remove the secure temporary file safely in all outcomes. If init succeeds,
+11. Remove the secure temporary file safely in all outcomes. If init succeeds,
    call `release-gate validate --repo <repo>` and report its result. Never repair
    or rewrite an invalid policy automatically, and never retry after mutation.
 
@@ -116,7 +121,9 @@ After preflight:
    Preserve the exact verdict, reason codes, configured check order, and evidence
    handling, including `PASS`,
    `FAIL`, or `NEEDS_HUMAN`. Do not reinterpret any result.
-4. Then inspect stderr for `SNAPSHOT:`, `DASHBOARD:`, `OBSERVABILITY_DATA:`, and
+4. List each configured check's exact status. Label `ERROR` and `SKIPPED` work
+   unverified. State that Release Gate cannot independently attest unreported layers inside an aggregate command.
+5. Then inspect stderr for `SNAPSHOT:`, `DASHBOARD:`, `OBSERVABILITY_DATA:`, and
    refresh warnings. If `OBSERVABILITY_DATA:` is present and readable, validate
    its JSON against `references/gate-decisions-v1.schema.json`. Summarize the
    latest point's non-gating rolling 10 and rolling 100 counts, sample sizes,
@@ -124,14 +131,14 @@ After preflight:
    Link the snapshot, dashboard, and data paths that were emitted. Treat
    generation mismatch or invalid/unreadable data as a refresh warning, never
    as a gate failure.
-5. Report refresh warnings without retrying the CLI or report publication; do
+6. Report refresh warnings without retrying the CLI or report publication; do
    not change the verdict, exit meaning, or evidence. Do not retry a missing
    report, because observability is strictly non-gating.
-6. For exit 3 or 4, do not query Graphify or read observability. Report the input/configuration or
+7. For exit 3 or 4, do not query Graphify or read observability. Report the input/configuration or
    internal-engine error and no verdict. Never fabricate a result.
-7. Link the evidence directory and state that evidence is tamper-evident, not
+8. Link the evidence directory and state that evidence is tamper-evident, not
    immutable. A `PASS` covers only the configured policy and does not merge or deploy.
-8. Graphify advisory last: after the exact result, observability summary, and
+9. Graphify advisory last: after the exact result, observability summary, and
    evidence caveats, eligible Graphify may issue at most one bounded query
    derived only from `result.json` `scope.changed_paths`. Append its output as
    a clearly separate, non-gating Graphify advisory; never mix it into the

@@ -62,9 +62,7 @@ def test_release_version_check_reports_drift_without_writing(tmp_path: Path) -> 
         / "references"
         / "compatibility.json"
     )
-    drifted = compatibility.read_text(encoding="utf-8").replace(
-        __version__, "9.9.9"
-    )
+    drifted = compatibility.read_text(encoding="utf-8").replace(__version__, "9.9.9")
     compatibility.write_text(drifted, encoding="utf-8")
 
     result = _run(checkout, "--check")
@@ -147,10 +145,12 @@ def test_release_version_sync_propagates_a_new_canonical_version(
         ".github/workflows/release-gate-release.yml",
         "release-gate/README.md",
         "release-gate/demo/python-slugify/README.md",
+        "release-gate/demo/rate-limiter/README.md",
         "release-gate/docs/adoption.md",
         "release-gate/docs/cli.md",
         "release-gate/docs/qualification.md",
         "release-gate/demo/python-slugify/demo.py",
+        "release-gate/demo/rate-limiter/demo.py",
         "release-gate/scripts/build_release_assets.py",
         "release-gate/scripts/smoke_installed.py",
         "release-gate/scripts/validate_qualification.py",

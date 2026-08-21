@@ -3,19 +3,20 @@
 This report records the final local verification on 2026-08-21. It is evidence
 for this exact source state, not a general security certification.
 
-- Source-state tree hash: `66b32f3768c083a5`. Reproduce it with
-  `./tools/source_state.sh`; the hash covers the library, visible tests,
-  portable gauntlet, policy, controls, driver, README, and hidden oracle.
-- Outer repository commit reported during the run: `e950f96`. The tree hash is
-  authoritative for this moved, staged demo; the outer commit only identifies
-  the surrounding checkout before these changes are committed.
+- Source-state tree hash:
+  `f9b5b3e657e0d084db3bfcf5d5e1a541a33db88b0dd35992117c515ac8d7003b`.
+  Reproduce it with `python tools/source_state.py`. The manifest hashes each
+  path and file as an unambiguous, length-delimited byte sequence; it rejects
+  missing, special, symlinked, unreadable, or changing inputs.
+- No commit provenance is asserted. The source digest is the binding for this
+  staged demo and avoids inventing provenance from the surrounding checkout.
 - Local toolchain: Python 3.12.13 on macOS; development packages are pinned in
   `requirements-dev.txt`.
 - Portable entry point: `python tools/gauntlet.py`. The Bash script is a POSIX
   convenience wrapper only.
-- CI configuration: the root `release-gate-ci.yml` now includes a Python 3.12
-  Windows/macOS job that runs `demo.py verify`. This report records the local
-  macOS result; it does not claim that the new CI job has run remotely yet.
+- CI configuration includes Python 3.12 Windows and macOS demo jobs. This
+  report records the local macOS result only; those jobs were not independently
+  observed remotely for these bytes.
 
 ## Spec-to-test and oracle mapping
 
@@ -38,39 +39,55 @@ mutants. Every mutant was killed.
 
 ## Portable gauntlet result
 
-The final fresh baseline run of `tools/gauntlet.py` produced:
+The final clean run of `tools/gauntlet.py` produced:
 
 | Layer | Result |
 |---|---|
-| Tests | 17 passed, 0 failed |
-| Coverage | 29/29 statements and 10/10 branches; 100% |
-| Strict types | No issues in 7 source files |
-| Ruff lint and format | Clean; 10 files formatted |
-| Supply chain | No known vulnerabilities; local `ratelimiter` package skipped because it is not on PyPI |
+| Orchestration controls | 5/5: omitted, unknown, duplicate, complete, and child-exit propagation |
+| Checker controls | Clean input accepted; violation detected; missing input reported as an error |
+| Tests and enforced coverage | 17 passed; 29/29 statements and 10/10 branches; `--cov-fail-under=100` satisfied |
+| Strict types | No issues in 9 source files in the outer demo; 8 in the generated candidate |
+| Ruff lint and format | Clean; 14 outer files and 12 candidate files formatted |
+| Supply chain | No known vulnerabilities; local `ratelimiter` skipped because it is not on PyPI |
 | Must-not scans | No wall-clock use in tests and no credential-like patterns |
-| Mutation | 8/8 mutants killed |
+| Mutation negative control | Same-size/same-mtime killer killed; equivalent edit survived |
+| Production mutation | 8/8 mutants killed |
 | Real execution | Burst `[True, True, True, False, False]`; independent key allowed; quota reopened after the window |
+| Source-state audit | All expected layers completed before the sole all-green message |
 
-The mutation runner restores the target byte-for-byte, including CRLF line
-endings. The driver removes coverage, cache, and editable-install artifacts
-after a successful baseline check so they cannot contaminate the candidate.
+The gauntlet uses a fixed expected-layer ledger. It rejects omitted, unknown,
+and duplicate completion records, propagates child exit codes, and prints the
+all-green message only after the final audit. Scanner input failures and
+internal checker errors are distinct from violations.
+
+The mutation runner disables bytecode writes, removes caches before every run,
+requires genuine JUnit test failures for a kill, treats collection/tool errors
+as errors, and restores the target byte-for-byte with its timestamps. Its
+killer-versus-equivalent control also uses same-size, same-mtime edits to prove
+cache isolation.
 
 ## Release Gate controls
 
 `demo.py verify` created an isolated Git repository, committed the reviewed
 policy as `release-gate-rate-limiter-base`, and produced these finalized results:
 
-| Control | Changed path | Gate | Oracle | Classification |
-|---|---|---|---|---|
-| pass | `README.md` | PASS | correct | `good_pass` |
-| fail | `src/ratelimiter/__init__.py` | FAIL | wrong | `good_catch` |
-| needs-human | `.release-gate.yaml` | NEEDS_HUMAN | correct | `escalated` |
+| Control | Changed path | Gate | Check status | Oracle | Classification |
+|---|---|---|---|---|---|
+| pass | `README.md` | PASS | `quality-gauntlet`: PASS | correct | `good_pass` |
+| fail | `src/ratelimiter/__init__.py` | FAIL | `quality-gauntlet`: FAIL (`COMMAND_FAILED`) | wrong | `good_catch` |
+| needs-human | `.release-gate.yaml` | NEEDS_HUMAN | `quality-gauntlet`: SKIPPED (`POLICY_FILE_CHANGED`) | correct | `escalated` |
 
-The FAIL control changed `>` to `>=` at the expiry boundary. The blocking
-`quality-gauntlet` recorded `COMMAND_FAILED`, and the independent oracle failed
-two reference-model tests. The NEEDS_HUMAN control recorded
-`PATH_OUTSIDE_ALLOWED`, `PATH_REVIEW_REQUIRED`, and `POLICY_FILE_CHANGED`; the
-configured gauntlet was skipped, as required when the judging policy changes.
+Each inspector displayed `base_commit`, `candidate_tree`, `patch_sha256`, and
+`config_sha256` from both `result.json` and `manifest.json`. The FAIL control
+changed `>` to `>=` at the expiry boundary; the independent oracle failed two
+reference-model tests. The NEEDS_HUMAN control recorded
+`PATH_OUTSIDE_ALLOWED`, `PATH_REVIEW_REQUIRED`, and `POLICY_FILE_CHANGED`.
+
+For the NEEDS_HUMAN control, the configured gauntlet is **UNAVAILABLE** as
+evidence because it was SKIPPED. No substitute result is presented as a pass.
+Concurrency/thread-safety and memory-bound stress layers are **N-A** for this
+demo's intentionally unchanged functional scope. The external oracle is a
+**SUBSTITUTED** differential check, not an independently authored attestation.
 
 The final verifier line was:
 
@@ -80,11 +97,17 @@ verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations
 
 ## Honest limits
 
+- Release Gate reports the configured `quality-gauntlet` command as one check.
+  It cannot independently attest the gauntlet's internal layer claims; those
+  are supported here by reviewed source and negative controls.
+- Independent fresh-context verification was not performed for this evidence
+  report. Six-surface release qualification remains a separate release step.
 - The specification, implementation, visible tests, policy, and oracle remain
   repository-owned artifacts. Keeping the oracle outside the candidate breaks
   candidate control, but not correlated authorship.
-- The limiter is not thread-safe; locking remains outside this demo's scope.
+- The limiter is not thread-safe; expanded concurrency and memory behavior are
+  outside this demo's scope and were intentionally not imported.
 - A NaN-returning clock fails closed but is not rejected.
 - Dependency installation and auditing require package-index/network access.
-- A PASS is a policy decision for one captured candidate. It is not a merge,
-  deployment, security attestation, or proof that no defect exists.
+- A PASS is a configured-policy decision for one captured candidate. It is not
+  a merge, deployment, security attestation, or proof that no defect exists.

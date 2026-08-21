@@ -39,6 +39,7 @@ def main() -> int:
         "release-gate run --repo <repo> --base <ref>",
         "combined final diff",
         "references/initialization.md",
+        "references/assurance.md",
         "references/config-v1.schema.json",
         "Every field",
         "result.json",
@@ -75,6 +76,13 @@ def main() -> int:
         or "without a shell" not in initialization
     ):
         raise ValueError("initialization reference is incomplete")
+    assurance = (skill_root / "references" / "assurance.md").read_text(encoding="utf-8")
+    if (
+        "user-approved assurance map" not in assurance
+        or "expected-layer manifest" not in assurance
+        or "byte-for-byte" not in assurance
+    ):
+        raise ValueError("assurance reference is incomplete")
 
     agent_metadata = yaml.safe_load(
         (skill_root / "agents" / "openai.yaml").read_text(encoding="utf-8")

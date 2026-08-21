@@ -47,6 +47,7 @@ def _minimal_builder_checkout(destination: Path, *, crlf: bool) -> None:
         Path("skills/release-gate/references/config-v1.schema.json"),
         Path("skills/release-gate/references/gate-decisions-v1.schema.json"),
         Path("skills/release-gate/references/initialization.md"),
+        Path("skills/release-gate/references/assurance.md"),
     )
     for relative in sources:
         target = destination / relative
@@ -199,16 +200,15 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
         ROOT / "src" / "release_gate" / "schemas" / "config-v1.schema.json"
     ).read_bytes()
     canonical_observability_schema = (
-        ROOT
-        / "src"
-        / "release_gate"
-        / "schemas"
-        / "gate-decisions-v1.schema.json"
+        ROOT / "src" / "release_gate" / "schemas" / "gate-decisions-v1.schema.json"
     ).read_bytes()
     canonical_initialization = _lf(
         (
             ROOT / "skills" / "release-gate" / "references" / "initialization.md"
         ).read_bytes()
+    )
+    canonical_assurance = _lf(
+        (ROOT / "skills" / "release-gate" / "references" / "assurance.md").read_bytes()
     )
     for host in HOSTS:
         name = f"release-gate-skill-{host}-{VERSION}.tar.gz"
@@ -222,6 +222,7 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
             "release-gate/references/config-v1.schema.json",
             "release-gate/references/gate-decisions-v1.schema.json",
             "release-gate/references/initialization.md",
+            "release-gate/references/assurance.md",
         }
         if host == "codex":
             expected |= {"release-gate/agents", "release-gate/agents/openai.yaml"}
@@ -255,6 +256,9 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
         )
         assert initialization is not None
         assert initialization.read() == canonical_initialization
+        assurance = archive.extractfile(members["release-gate/references/assurance.md"])
+        assert assurance is not None
+        assert assurance.read() == canonical_assurance
         archive.close()
 
 

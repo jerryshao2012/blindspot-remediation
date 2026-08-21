@@ -70,6 +70,10 @@ def test_result_summary_reads_fields_used_by_the_demo(tmp_path: Path) -> None:
             {
                 "version": 1,
                 "run_id": "control-pass",
+                "base_commit": "a" * 40,
+                "candidate_tree": "b" * 40,
+                "patch_sha256": "c" * 64,
+                "config_sha256": "d" * 64,
                 "verdict": "PASS",
                 "reason_codes": [],
                 "scope": {
@@ -94,6 +98,10 @@ def test_result_summary_reads_fields_used_by_the_demo(tmp_path: Path) -> None:
     summary = driver.read_result_summary(result)
 
     assert summary.run_id == "control-pass"
+    assert summary.base_commit == "a" * 40
+    assert summary.candidate_tree == "b" * 40
+    assert summary.patch_sha256 == "c" * 64
+    assert summary.config_sha256 == "d" * 64
     assert summary.verdict == "PASS"
     assert summary.changed_paths == ("setup.py",)
     assert summary.checks == (("tests-and-coverage", "PASS", ()),)
@@ -225,6 +233,10 @@ def test_committed_demo_assets_and_windows_guidance_are_self_contained() -> None
         "outside allowed: test.py",
         "review required: .release-gate.yaml",
         "Corporate proxy settings",
+        "failure mode or assurance claim",
+        "N-A",
+        "UNAVAILABLE",
+        "SUBSTITUTED",
     ):
         assert phrase in readme
     assert "workbench/" in (DEMO / ".gitignore").read_text(encoding="utf-8")

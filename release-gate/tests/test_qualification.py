@@ -13,9 +13,7 @@ from release_gate import __version__
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "schemas" / "qualification-v1.schema.json"
 VALIDATOR = ROOT / "scripts" / "validate_qualification.py"
-TEMPLATE = (
-    ROOT / "qualification" / f"release-gate-v{__version__}-rc.1.pending.json"
-)
+TEMPLATE = ROOT / "qualification" / f"release-gate-v{__version__}-rc.1.pending.json"
 SURFACES = {
     "Copilot CLI",
     "Codex CLI",
@@ -96,6 +94,15 @@ GRAPHIFY_OBSERVATIONS = {
     ),
 }
 
+ASSURANCE_OBSERVATIONS = {
+    "init-python": (
+        "RG-ASSURANCE-FAILURE-MODE-MAPPING",
+        "RG-ASSURANCE-CUSTOM-CHECKER-INTEGRITY",
+    ),
+    "init-ambiguous-monorepo": ("RG-ASSURANCE-OMISSION-DISCLOSURE",),
+    "run-pass": ("RG-ASSURANCE-AGGREGATE-BOUNDARY",),
+}
+
 
 def _load_validator() -> object:
     spec = importlib.util.spec_from_file_location("qualification_validator", VALIDATOR)
@@ -171,6 +178,7 @@ def _complete_evidence() -> dict[str, object]:
                             (
                                 f"Observed expected effects for {case}.",
                                 *GRAPHIFY_OBSERVATIONS.get(case, ()),
+                                *ASSURANCE_OBSERVATIONS.get(case, ()),
                             )
                         ),
                         "observed_outcome": OUTCOMES[case],
@@ -360,6 +368,31 @@ def test_complete_evidence_requires_each_graphify_observation(
     target["observed_effects"] = target["observed_effects"].replace(marker, "")
     with pytest.raises(ValueError, match="Graphify observation"):
         validate(evidence, expected_tag=f"release-gate-v{__version__}-rc.1")
+
+
+@pytest.mark.parametrize(
+    ("case_name", "marker"),
+    [
+        (case_name, marker)
+        for case_name, markers in ASSURANCE_OBSERVATIONS.items()
+        for marker in markers
+    ],
+)
+def test_complete_evidence_requires_each_assurance_observation(
+    case_name: str, marker: str
+) -> None:
+    validator = _load_validator()
+    evidence = _complete_evidence()
+    target = next(
+        case
+        for case in evidence["surfaces"][0]["case_results"]
+        if case["case"] == case_name
+    )
+    target["observed_effects"] = target["observed_effects"].replace(marker, "")
+    with pytest.raises(ValueError, match="assurance observation"):
+        validator.validate_evidence(
+            evidence, expected_tag=f"release-gate-v{__version__}-rc.1"
+        )
 
 
 @pytest.mark.parametrize("surface_name", sorted(SURFACES))

@@ -349,7 +349,7 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
     try:
         parent = psutil.Process(process.pid)
         descendants = parent.children(recursive=True)
-    except psutil.Error:
+    except (psutil.Error, OSError):
         descendants = []
     for child in descendants:
         try:

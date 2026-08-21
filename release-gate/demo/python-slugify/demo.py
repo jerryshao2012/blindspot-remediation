@@ -27,7 +27,7 @@ CONTROL_EVIDENCE = WORKBENCH / "evidence"
 UPSTREAM_URL = "https://github.com/un33k/python-slugify.git"
 UPSTREAM_SHA = "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
 BASE_REF = "release-gate-demo-base"
-EXPECTED_GATE_VERSION = "release-gate 0.3.0"
+EXPECTED_GATE_VERSION = "release-gate 0.4.0"
 TEST_TOOLS = ("pytest==8.4.2",)
 BUILD_TOOLS = ("setuptools>=61.2", "wheel>=0.37")
 
@@ -39,6 +39,10 @@ class DemoError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class ResultSummary:
     run_id: str
+    base_commit: str
+    candidate_tree: str
+    patch_sha256: str
+    config_sha256: str
     verdict: str
     reason_codes: tuple[str, ...]
     changed_paths: tuple[str, ...]
@@ -117,6 +121,10 @@ def read_result_summary(path: Path) -> ResultSummary:
         )
     return ResultSummary(
         run_id=run_id,
+        base_commit=_required_string(value, "base_commit"),
+        candidate_tree=_required_string(value, "candidate_tree"),
+        patch_sha256=_required_string(value, "patch_sha256"),
+        config_sha256=_required_string(value, "config_sha256"),
         verdict=verdict,
         reason_codes=_string_tuple(value, "reason_codes"),
         changed_paths=_string_tuple(scope, "changed_paths"),
@@ -310,6 +318,10 @@ def inspect_result(path: Path) -> ResultSummary:
     if not manifest.is_file() or (resolved.parent / ".incomplete").exists():
         raise DemoError("evidence package is incomplete or missing manifest.json")
     print(f"run: {summary.run_id}")
+    print(f"base commit: {summary.base_commit}")
+    print(f"candidate tree: {summary.candidate_tree}")
+    print(f"patch sha256: {summary.patch_sha256}")
+    print(f"config sha256: {summary.config_sha256}")
     print(f"verdict: {summary.verdict}")
     print(f"reason codes: {', '.join(summary.reason_codes) or 'none'}")
     print(f"changed paths: {', '.join(summary.changed_paths) or 'none'}")

@@ -80,6 +80,28 @@ def test_guided_init_contract_is_approval_based_and_treats_repo_as_untrusted() -
         assert phrase in text
 
 
+def test_guided_init_requires_an_explicit_assurance_map() -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    assurance = (SKILL.parent / "references" / "assurance.md").read_text(
+        encoding="utf-8"
+    )
+
+    for phrase in (
+        "references/assurance.md",
+        "failure mode or assurance claim",
+        "candidate or differential mode",
+        "N-A",
+        "UNAVAILABLE",
+        "SUBSTITUTED",
+        "expected-layer manifest",
+        "negative controls",
+        "fail closed",
+        "byte-for-byte",
+    ):
+        assert phrase in text or phrase in assurance
+    assert "user-approved assurance map" in text
+
+
 def test_run_contract_preserves_verdicts_and_error_exit_semantics() -> None:
     text = SKILL.read_text(encoding="utf-8")
     required = [
@@ -95,11 +117,26 @@ def test_run_contract_preserves_verdicts_and_error_exit_semantics() -> None:
         assert phrase in text
 
 
+def test_run_contract_reports_exact_check_status_and_aggregate_boundary() -> None:
+    run = " ".join(
+        SKILL.read_text(encoding="utf-8")
+        .split("## run", 1)[1]
+        .split("## Integrity rules", 1)[0]
+        .split()
+    )
+    for phrase in (
+        "each configured check's exact status",
+        "`ERROR` and `SKIPPED`",
+        "unverified",
+        "cannot independently attest unreported layers inside an aggregate command",
+        "configured policy",
+    ):
+        assert phrase in run
+
+
 def test_run_contract_reports_non_gating_observability_before_graphify() -> None:
     text = SKILL.read_text(encoding="utf-8")
-    run = " ".join(
-        text.split("## run", 1)[1].split("## Integrity rules", 1)[0].split()
-    )
+    run = " ".join(text.split("## run", 1)[1].split("## Integrity rules", 1)[0].split())
     required = [
         "Call the gate exactly once",
         "`RESULT:` path",
@@ -146,9 +183,7 @@ def test_graphify_is_portable_optional_read_only_and_non_gating() -> None:
 
 def test_graphify_init_hints_never_authorize_commands() -> None:
     text = SKILL.read_text(encoding="utf-8")
-    init = " ".join(
-        text.split("## init", 1)[1].split("## validate", 1)[0].split()
-    )
+    init = " ".join(text.split("## init", 1)[1].split("## validate", 1)[0].split())
     for phrase in (
         "likely manifests, lockfiles, CI configuration, and declared scripts",
         "existing allowed source categories",
@@ -160,17 +195,13 @@ def test_graphify_init_hints_never_authorize_commands() -> None:
 
 def test_graphify_is_never_used_for_validate() -> None:
     text = SKILL.read_text(encoding="utf-8")
-    validate = " ".join(
-        text.split("## validate", 1)[1].split("## run", 1)[0].split()
-    )
+    validate = " ".join(text.split("## validate", 1)[1].split("## run", 1)[0].split())
     assert "Never invoke Graphify" in validate
 
 
 def test_graphify_run_advisory_follows_exact_result_and_is_bounded() -> None:
     text = SKILL.read_text(encoding="utf-8")
-    run = " ".join(
-        text.split("## run", 1)[1].split("## Integrity rules", 1)[0].split()
-    )
+    run = " ".join(text.split("## run", 1)[1].split("## Integrity rules", 1)[0].split())
     for phrase in (
         "parse and report the exact result first",
         "bounded query",

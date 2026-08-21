@@ -110,3 +110,33 @@ to be justified in the spec. Original setup was authorized conversationally.]
 - Git: repo-level; commits at each milestone; evidence binds to commit SHA.
 - Files the gauntlet adds: `tools/gauntlet.sh` (entry point), `tools/mutants.py`
   (scripted manual mutation), `.github/workflows/gauntlet.yml` (CI).
+
+## Release Gate 0.4.0 assurance hardening
+
+This upgrade does not change limiter behavior, the 17-test application suite,
+or the eight production mutants. It hardens the evidence machinery around them.
+
+- `tools/gauntlet.py` owns a fixed expected-layer manifest. It records a layer
+  only after success, rejects omitted/unknown/duplicate completion, preserves a
+  child failure code, and prints all-green only after its final audit.
+- Orchestration controls prove omission, unknown/duplicate completion, child
+  failure propagation, and one complete positive path. Checker controls prove
+  clean, violating, and broken scan inputs.
+- Coverage is a gate at `--cov-fail-under=100` rather than a percentage-only
+  report.
+- The mutation runner disables bytecode writes, clears caches, validates pytest
+  JUnit counts so collection/tool errors cannot count as kills, restores bytes,
+  and runs a same-size/same-mtime killer-versus-equivalent control.
+- `tools/source_state.py` hashes a fixed cross-platform file manifest using
+  length-delimited paths and contents. Missing, symlinked, special, unreadable,
+  or changing inputs fail instead of producing a digest. It asserts no commit
+  provenance.
+
+Omitted assurance layers are classified rather than silently passed:
+
+- `N-A`: UI, API compatibility, and database migration checks; this is a small
+  in-process library with none of those surfaces.
+- `UNAVAILABLE`: independent fresh-context verification was not performed for
+  this upgrade.
+- `SUBSTITUTED`: eight reviewed manual mutants replace a mutation framework;
+  they do not provide automatic mutation coverage beyond the planted set.

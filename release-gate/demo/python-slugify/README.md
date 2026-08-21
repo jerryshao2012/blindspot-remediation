@@ -50,7 +50,7 @@ The required version is:
 
 <!-- release-version-sync:start -->
 ```text
-release-gate 0.3.0
+release-gate 0.4.0
 ```
 <!-- release-version-sync:end -->
 
@@ -287,7 +287,11 @@ Copilot inside it, and enter:
 ```
 
 Copilot should inspect manifests and declared configuration, propose the full
-policy and `.gitignore` diff, ask for approval, call
+policy and `.gitignore` diff, and ask for an assurance map. For every
+failure mode or assurance claim, it must cite the repository command or report, ask
+whether it runs in candidate or differential mode, record severity and known
+limitations, and classify omitted layers as `N-A`, `UNAVAILABLE`, or
+`SUBSTITUTED`. It must ask for approval, call
 `release-gate init --from-config`, and validate the result. Compare it with
 [the reviewed demo policy](assets/.release-gate.yaml). Do not use this variable
 clone for deterministic controls.

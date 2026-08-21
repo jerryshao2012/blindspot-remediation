@@ -60,8 +60,8 @@ jobs:
       - name: Validate pending qualification template shape
         run: >-
           uv run python scripts/validate_qualification.py
-          qualification/release-gate-v0.3.0-rc.1.pending.json
-          --expected-tag release-gate-v0.3.0-rc.1
+          qualification/release-gate-v0.4.0-rc.1.pending.json
+          --expected-tag release-gate-v0.4.0-rc.1
           --allow-pending-schema-only
       - name: Build deterministic skill archives twice
         shell: bash

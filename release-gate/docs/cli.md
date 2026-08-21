@@ -45,6 +45,14 @@ or non-cooperating same-user process can therefore race those syscall gaps.
 Run initialization without other repository writers; same-user processes are
 inside this local-filesystem trust boundary.
 
+The portable skill adds a read-only guided review before it calls `init`. It
+requires a user-approved assurance map for each failure mode or assurance claim
+and records direct checks, execution mode, severity, and limitations. It labels
+omissions `N-A`, `UNAVAILABLE`, or `SUBSTITUTED`; these labels do not add fields
+to the v1 schema. An aggregate check is proposed only when its reviewed source
+has a fixed expected-layer manifest, fail-closed completion accounting, and
+negative controls.
+
 ## `validate`
 
 ```text
@@ -179,6 +187,9 @@ Human-readable progress goes to stderr. Automation MUST consume `result.json`,
 not parse progress text. The result is complete before the verdict lines are
 printed. Even when later work stops, its `checks` array contains one item per
 effective check in declaration order; unrun checks are reason-coded `SKIPPED`.
+The skill lists those exact statuses after the verdict, labels `ERROR` and
+`SKIPPED` work unverified, and states that Release Gate cannot independently
+attest unreported layers inside an aggregate command.
 Before those lines, the engine validates result and manifest with the bundled
 Draft 2020-12 schemas using an explicit `FormatChecker`, then applies the
 cross-document semantic checks, including the strict timestamp profile and
@@ -235,8 +246,8 @@ commands and their 0/1/2 behavior remain intact. There is no A3 request-file,
 execution-result, plugin, or adapter mode in v1.
 
 <!-- release-version-sync:start -->
-The 0.3.0 assistant archives bundle `references/compatibility.json` and require
-the exact output `release-gate 0.3.0` before `init`, `validate`, or `run`.
+The 0.4.0 assistant archives bundle `references/compatibility.json` and require
+the exact output `release-gate 0.4.0` before `init`, `validate`, or `run`.
 A missing executable or different version is a safe stop. Install the CLI wheel
 and host archive as a separately verified, version-matched pair using the
 [adoption procedure](adoption.md).

@@ -2,6 +2,17 @@
 
 All notable changes to the standalone Release Gate are recorded here.
 
+## 0.4.0
+
+- Add assurance-aware initialization with user-approved failure-mode mapping,
+  explicit omitted-layer classifications, and fail-closed custom-check review.
+- Add honest run reporting for exact check statuses, unverified work, and the
+  assurance boundary around aggregate commands.
+- Add rate-limiter gauntlet hardening for completion accounting, coverage
+  enforcement, mutation cache isolation, negative controls, and content binding.
+- Improve demo evidence and inspectors with result identity fields, source
+  bindings, verdict controls, and explicit independent-verification limits.
+
 ## 0.3.0
 
 - Resolve workspace-relative executable paths before Windows process creation,

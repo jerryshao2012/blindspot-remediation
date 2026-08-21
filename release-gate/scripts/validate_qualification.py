@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate qualification evidence before v0.3.0 promotion."""
+"""Validate qualification evidence before v0.4.0 promotion."""
 
 from __future__ import annotations
 
@@ -97,6 +97,14 @@ GRAPHIFY_OBSERVATIONS = {
         "RG-OBSERVABILITY-VERDICT-UNCHANGED",
         "RG-GRAPHIFY-RUN-ADVISORY-LAST",
     ),
+}
+ASSURANCE_OBSERVATIONS = {
+    "init-python": (
+        "RG-ASSURANCE-FAILURE-MODE-MAPPING",
+        "RG-ASSURANCE-CUSTOM-CHECKER-INTEGRITY",
+    ),
+    "init-ambiguous-monorepo": ("RG-ASSURANCE-OMISSION-DISCLOSURE",),
+    "run-pass": ("RG-ASSURANCE-AGGREGATE-BOUNDARY",),
 }
 
 
@@ -262,6 +270,12 @@ def validate_evidence(
                 if marker not in case["observed_effects"]:
                     raise ValueError(
                         "required Graphify observation is absent: "
+                        f"{name}/{case['case']}/{marker}"
+                    )
+            for marker in ASSURANCE_OBSERVATIONS.get(case["case"], ()):
+                if marker not in case["observed_effects"]:
+                    raise ValueError(
+                        "required assurance observation is absent: "
                         f"{name}/{case['case']}/{marker}"
                     )
             _record_reference(

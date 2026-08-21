@@ -24,7 +24,7 @@ TASK_VENV = WORKBENCH / "task-venv"
 ORACLE_VENV = WORKBENCH / "oracle-venv"
 CONTROL_EVIDENCE = WORKBENCH / "control-evidence"
 BASE_REF = "release-gate-rate-limiter-base"
-EXPECTED_GATE_VERSION = "release-gate 0.3.0"
+EXPECTED_GATE_VERSION = "release-gate 0.4.0"
 SOURCE_ITEMS = (
     "README.md",
     "evidence.md",
@@ -34,7 +34,10 @@ SOURCE_ITEMS = (
     "spec.md",
     "src",
     "tests",
-    "tools",
+    "tools/gauntlet.py",
+    "tools/gauntlet.sh",
+    "tools/mutants.py",
+    "tools/source_state.py",
 )
 
 
@@ -45,6 +48,10 @@ class DemoError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class ResultSummary:
     run_id: str
+    base_commit: str
+    candidate_tree: str
+    patch_sha256: str
+    config_sha256: str
     verdict: str
     reason_codes: tuple[str, ...]
     changed_paths: tuple[str, ...]
@@ -127,6 +134,10 @@ def read_result_summary(path: Path) -> ResultSummary:
     checks = [_check_summary(check, index) for index, check in enumerate(checks_value)]
     return ResultSummary(
         run_id=run_id,
+        base_commit=_required_string(value.get("base_commit"), "base_commit"),
+        candidate_tree=_required_string(value.get("candidate_tree"), "candidate_tree"),
+        patch_sha256=_required_string(value.get("patch_sha256"), "patch_sha256"),
+        config_sha256=_required_string(value.get("config_sha256"), "config_sha256"),
         verdict=verdict,
         reason_codes=_string_tuple(value.get("reason_codes"), "reason_codes"),
         changed_paths=_string_tuple(scope.get("changed_paths"), "scope.changed_paths"),
@@ -217,6 +228,7 @@ def _copy_baseline() -> None:
                 ignore=shutil.ignore_patterns("__pycache__", "*.egg-info"),
             )
         elif source.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
         else:
             raise DemoError(f"baseline source is missing: {source}")
@@ -227,7 +239,7 @@ def _create_environment(venv: Path, *, oracle_only: bool = False) -> None:
     python = _venv_python(venv)
     arguments: tuple[str | os.PathLike[str], ...]
     if oracle_only:
-        arguments = ("-e", REPOSITORY, "pytest==9.1.1")
+        arguments = (REPOSITORY, "pytest==9.1.1")
     else:
         arguments = ("-r", REPOSITORY / "requirements-dev.txt")
     _run(
@@ -344,6 +356,10 @@ def inspect_result(path: Path) -> ResultSummary:
     if not manifest.is_file() or (resolved.parent / ".incomplete").exists():
         raise DemoError("evidence package is incomplete or missing manifest.json")
     print(f"run: {summary.run_id}")
+    print(f"base commit: {summary.base_commit}")
+    print(f"candidate tree: {summary.candidate_tree}")
+    print(f"patch sha256: {summary.patch_sha256}")
+    print(f"config sha256: {summary.config_sha256}")
     print(f"verdict: {summary.verdict}")
     print(f"reason codes: {', '.join(summary.reason_codes) or 'none'}")
     print(f"changed paths: {', '.join(summary.changed_paths) or 'none'}")

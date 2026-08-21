@@ -19,7 +19,8 @@ only then runs an independent oracle. A complete automated run normally takes
 
 ## 1. Prerequisites and one-time installation
 
-You need Git, Python 3.12, `uv`, and Release Gate 0.3.0. The interactive
+<!-- release-version-sync:start -->
+You need Git, Python 3.12, `uv`, and Release Gate 0.4.0. The interactive
 paths also require an authenticated GitHub Copilot CLI or VS Code Copilot Chat.
 
 Run all installation commands from the root of `blindspot-remediation`. The
@@ -47,8 +48,9 @@ cd release-gate/demo/rate-limiter
 The required version is:
 
 ```text
-release-gate 0.3.0
+release-gate 0.4.0
 ```
+<!-- release-version-sync:end -->
 
 Every helper command below uses `uv run --python 3.12`; Windows and macOS
 therefore select the same interpreter instead of relying on `py` or `python3`.
@@ -258,9 +260,11 @@ changes the generated workbench. Completed evidence remains under
 
 The portable `tools/gauntlet.py` runs scenario and property tests, coverage,
 strict typing, Ruff lint/format checks, dependency auditing, must-not scans,
-eight scripted mutants, and a real-clock example. `tools/gauntlet.sh` is only a
-POSIX convenience wrapper. Release Gate invokes the Python entry point on both
-Windows and macOS.
+eight scripted mutants, a real-clock example, and a deterministic source-content
+binding. It self-tests its expected-layer ledger and custom scanner, enforces
+100% branch coverage, and runs a cache-collision negative control before manual
+mutation. `tools/gauntlet.sh` is only a POSIX convenience wrapper. Release Gate
+invokes the Python entry point on both Windows and macOS.
 
 The hidden oracle independently compares the candidate with a brute-force
 reference model across boundary, interleaved-key, denial, and backward-clock

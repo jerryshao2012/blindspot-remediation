@@ -11,9 +11,7 @@ from pathlib import Path
 
 SEMVER = r"[0-9]+\.[0-9]+\.[0-9]+"
 CANONICAL_VERSION = Path("release-gate/src/release_gate/__init__.py")
-COMPATIBILITY = Path(
-    "release-gate/skills/release-gate/references/compatibility.json"
-)
+COMPATIBILITY = Path("release-gate/skills/release-gate/references/compatibility.json")
 QUALIFICATION = Path("release-gate/qualification")
 MARKER_START = "<!-- release-version-sync:start -->"
 MARKER_END = "<!-- release-version-sync:end -->"
@@ -34,6 +32,7 @@ MARKED_PATTERNS = (
 MARKED_RELEASE_FILES = {
     Path("release-gate/README.md"): (MARKED_PATTERNS, 22),
     Path("release-gate/demo/python-slugify/README.md"): (MARKED_PATTERNS, 1),
+    Path("release-gate/demo/rate-limiter/README.md"): (MARKED_PATTERNS, 2),
     Path("release-gate/docs/adoption.md"): (
         (
             *MARKED_PATTERNS,
@@ -65,6 +64,10 @@ ANCHORED_RELEASE_FILES = {
         10,
     ),
     Path("release-gate/demo/python-slugify/demo.py"): (
+        (re.compile(rf"(?<=release-gate ){SEMVER}"),),
+        1,
+    ),
+    Path("release-gate/demo/rate-limiter/demo.py"): (
         (re.compile(rf"(?<=release-gate ){SEMVER}"),),
         1,
     ),
@@ -140,9 +143,7 @@ def _synchronize_marked(
     end = text.index(MARKER_END)
     if start >= end:
         raise ValueError(f"release version sync markers are out of order in {path}")
-    body = _replace_expected(
-        path, text[start:end], version, patterns, expected_count
-    )
+    body = _replace_expected(path, text[start:end], version, patterns, expected_count)
     return text[:start] + body + text[end:]
 
 

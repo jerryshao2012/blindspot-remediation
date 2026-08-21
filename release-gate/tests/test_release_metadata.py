@@ -50,7 +50,7 @@ def test_package_metadata_uses_the_license_file_and_authoritative_urls() -> None
 
 
 def test_version_agrees_across_release_metadata() -> None:
-    assert __version__ == "0.3.0"
+    assert __version__ == "0.4.0"
     compatibility = json.loads(
         _read("skills/release-gate/references/compatibility.json")
     )
@@ -62,6 +62,13 @@ def test_version_agrees_across_release_metadata() -> None:
     assert "byte-identical final promotion" in changelog
     assert "GitHub release page is authoritative" in changelog
     assert "pending release" not in changelog
+    for phrase in (
+        "assurance-aware initialization",
+        "honest run reporting",
+        "gauntlet hardening",
+        "demo evidence",
+    ):
+        assert phrase in changelog
 
 
 def test_observability_behavior_is_documented_across_public_surfaces() -> None:
@@ -95,6 +102,26 @@ def test_observability_behavior_is_documented_across_public_surfaces() -> None:
         "stdout",
         "stderr",
         "non-gating",
+    ):
+        assert phrase.casefold() in text.casefold()
+
+
+def test_assurance_behavior_is_documented_across_public_surfaces() -> None:
+    text = " ".join(
+        "\n".join(
+            _read(path) for path in ("README.md", "docs/adoption.md", "docs/cli.md")
+        ).split()
+    )
+    for phrase in (
+        "user-approved assurance map",
+        "failure mode or assurance claim",
+        "N-A",
+        "UNAVAILABLE",
+        "SUBSTITUTED",
+        "expected-layer manifest",
+        "cannot independently attest unreported layers",
+        "ERROR",
+        "SKIPPED",
     ):
         assert phrase.casefold() in text.casefold()
 

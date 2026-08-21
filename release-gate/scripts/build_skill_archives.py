@@ -319,6 +319,7 @@ def build_archives(root: Path, output_dir: Path) -> list[Path]:
     initialization = _read_normalized_text(
         skill_root / "references" / "initialization.md"
     )
+    assurance = _read_normalized_text(skill_root / "references" / "assurance.md")
 
     metadata, body = _canonical_skill(skill_root)
     openai = _read_normalized_text(skill_root / "agents" / "openai.yaml")
@@ -349,6 +350,7 @@ def build_archives(root: Path, output_dir: Path) -> list[Path]:
                 "release-gate/references/gate-decisions-v1.schema.json"
             ): observability_schema,
             "release-gate/references/initialization.md": initialization,
+            "release-gate/references/assurance.md": assurance,
         }
         if host == "codex":
             files["release-gate/agents/openai.yaml"] = openai

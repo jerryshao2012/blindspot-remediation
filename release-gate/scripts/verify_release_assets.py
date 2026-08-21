@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 HOSTS = ("antigravity", "claude-code", "codex", "copilot")
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 MANIFEST_RE = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$")
-MAX_SKILL_MEMBERS = 9
+MAX_SKILL_MEMBERS = 10
 MAX_SKILL_FILE_BYTES = 1024 * 1024
 MAX_SKILL_TOTAL_BYTES = 4 * 1024 * 1024
 MAX_SDIST_MEMBERS = 4096
@@ -173,6 +173,7 @@ def _verify_skill_archive(
     version: str,
     expected_config_schema: bytes,
     expected_observability_schema: bytes,
+    expected_assurance: bytes,
 ) -> None:
     with tarfile.open(path, "r:gz") as archive:
         members = archive.getmembers()
@@ -185,6 +186,7 @@ def _verify_skill_archive(
             "release-gate/references/config-v1.schema.json",
             "release-gate/references/gate-decisions-v1.schema.json",
             "release-gate/references/initialization.md",
+            "release-gate/references/assurance.md",
         }
         if host == "codex":
             expected |= {
@@ -245,6 +247,12 @@ def _verify_skill_archive(
         if observability_schema.read() != expected_observability_schema:
             raise ValueError(
                 f"{host} archive observability schema does not match the CLI"
+            )
+        assurance = archive.extractfile("release-gate/references/assurance.md")
+        assert assurance is not None
+        if assurance.read() != expected_assurance:
+            raise ValueError(
+                f"{host} archive assurance reference does not match the source"
             )
 
 
@@ -325,6 +333,9 @@ def verify_assets(
     expected_observability_schema = _normalized_text_bytes(
         root / "src/release_gate/schemas/gate-decisions-v1.schema.json"
     )
+    expected_assurance = _normalized_text_bytes(
+        root / "skills/release-gate/references/assurance.md"
+    )
     _verify_wheel(wheel, version)
     _verify_sdist(assets_dir / f"release_gate-{version}.tar.gz", version)
     for host in HOSTS:
@@ -334,6 +345,7 @@ def verify_assets(
             version,
             expected_config_schema,
             expected_observability_schema,
+            expected_assurance,
         )
     if check_installed_cli:
         _verify_installed_cli(wheel, version)

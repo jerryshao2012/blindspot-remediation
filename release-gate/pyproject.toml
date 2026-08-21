@@ -54,6 +54,8 @@ packages = ["src/release_gate"]
 exclude = [
   "/demo/python-slugify/workbench",
   "/demo/rate-limiter/workbench",
+  "/demo/rate-limiter/src/*.egg-info",
+  "/demo/rate-limiter/**/* 2.*",
 ]
 
 [tool.pytest.ini_options]
