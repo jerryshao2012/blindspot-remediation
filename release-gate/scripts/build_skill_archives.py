@@ -20,7 +20,7 @@ import yaml
 
 HOSTS = ("copilot", "codex", "claude-code", "antigravity")
 COMMAND_METADATA = (
-    'argument-hint: "<--version|init|validate|run> [options]"\n'
+    'argument-hint: "<--version|init|validate|run|repair> [options]"\n'
     "user-invocable: true\n"
     "disable-model-invocation: true\n"
 )
@@ -320,6 +320,7 @@ def build_archives(root: Path, output_dir: Path) -> list[Path]:
         skill_root / "references" / "initialization.md"
     )
     assurance = _read_normalized_text(skill_root / "references" / "assurance.md")
+    repair = _read_normalized_text(skill_root / "references" / "repair.md")
 
     metadata, body = _canonical_skill(skill_root)
     openai = _read_normalized_text(skill_root / "agents" / "openai.yaml")
@@ -351,6 +352,7 @@ def build_archives(root: Path, output_dir: Path) -> list[Path]:
             ): observability_schema,
             "release-gate/references/initialization.md": initialization,
             "release-gate/references/assurance.md": assurance,
+            "release-gate/references/repair.md": repair,
         }
         if host == "codex":
             files["release-gate/agents/openai.yaml"] = openai

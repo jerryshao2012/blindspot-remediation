@@ -24,7 +24,7 @@ TASK_VENV = WORKBENCH / "task-venv"
 ORACLE_VENV = WORKBENCH / "oracle-venv"
 CONTROL_EVIDENCE = WORKBENCH / "control-evidence"
 BASE_REF = "release-gate-rate-limiter-base"
-EXPECTED_GATE_VERSION = "release-gate 0.4.0"
+EXPECTED_GATE_VERSION = "release-gate 0.5.0"
 SOURCE_ITEMS = (
     "README.md",
     "evidence.md",

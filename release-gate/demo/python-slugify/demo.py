@@ -27,7 +27,7 @@ CONTROL_EVIDENCE = WORKBENCH / "evidence"
 UPSTREAM_URL = "https://github.com/un33k/python-slugify.git"
 UPSTREAM_SHA = "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
 BASE_REF = "release-gate-demo-base"
-EXPECTED_GATE_VERSION = "release-gate 0.4.0"
+EXPECTED_GATE_VERSION = "release-gate 0.5.0"
 TEST_TOOLS = ("pytest==8.4.2",)
 BUILD_TOOLS = ("setuptools>=61.2", "wheel>=0.37")
 

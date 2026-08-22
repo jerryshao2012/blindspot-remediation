@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate qualification evidence before v0.4.0 promotion."""
+"""Validate qualification evidence before v0.5.0 promotion."""
 
 from __future__ import annotations
 

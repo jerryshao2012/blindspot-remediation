@@ -429,3 +429,22 @@ host.
 V1 does not prescribe retention duration or remote storage. Organizations may
 copy, sign, or retain the package according to their own controls without
 changing the local contract.
+
+## Repair evidence namespace (`_repairs`)
+
+Repair sessions write chained lifecycle artifacts under `<evidence_root>/_repairs/<session-id>/`:
+
+```text
+.release-gate/runs/_repairs/<session-id>/
+├── repair-session-v1.json
+├── approval-request.json
+├── final-approval.json
+├── repair-summary.md
+├── lesson-proposal.md
+├── repair-manifest.json
+├── C0.patch
+├── C1.patch
+└── ...
+```
+
+The repair evidence namespace is isolated from ordinary gate runs. Observability scanners explicitly skip `_repairs` directories so that repair iterations do not pollute release trend metrics or rolling window statistics. All session documents are validated with SHA-256 digests in `repair-manifest.json`.

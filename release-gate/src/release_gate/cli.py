@@ -21,6 +21,16 @@ from release_gate.config import (
     load_config_bytes,
 )
 from release_gate.engine import GateInputError, run_gate
+from release_gate.repair.controller import (
+    apply_repair,
+    approve_repair,
+    cancel_repair,
+    evaluate_repair,
+    finalize_repair,
+    request_repair,
+    start_repair,
+)
+from release_gate.repair.workspace import RepairWorkspaceError
 
 _POLICY_NAME = ".release-gate.yaml"
 _EVIDENCE_IGNORE = "/.release-gate/runs/"
@@ -126,14 +136,108 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"VERDICT: {outcome.verdict.value}")
             print(f"RESULT: {outcome.result_path}")
             return outcome.exit_code
+        if arguments.command.startswith("repair-"):
+            try:
+                if arguments.command == "repair-start":
+                    repair_outcome = start_repair(
+                        Path(arguments.repo),
+                        base=arguments.base,
+                        output=Path(arguments.output) if arguments.output else None,
+                        session_id=arguments.session_id,
+                    )
+                    print(f"REPAIR_SESSION: {repair_outcome.session_dir.absolute()}")
+                    print(f"REPAIR_STATE: {repair_outcome.state.value}")
+                    print(f"NEXT_ACTION: {repair_outcome.next_action}")
+                    if (
+                        repair_outcome.approval_request_path
+                        and repair_outcome.approval_request_path.exists()
+                    ):
+                        req_path = (
+                            repair_outcome.approval_request_path.absolute()
+                        )
+                        print(f"REPAIR_REQUEST: {req_path}")
+                    if (
+                        repair_outcome.summary_path
+                        and repair_outcome.summary_path.exists()
+                    ):
+                        print(
+                            f"REPAIR_SUMMARY: {repair_outcome.summary_path.absolute()}"
+                        )
+                    return 0
+                if arguments.command == "repair-approve":
+                    repair_outcome = approve_repair(
+                        Path(arguments.session),
+                        Path(arguments.approval),
+                    )
+                    print(f"REPAIR_SESSION: {repair_outcome.session_dir.absolute()}")
+                    print(f"REPAIR_STATE: {repair_outcome.state.value}")
+                    print(f"NEXT_ACTION: {repair_outcome.next_action}")
+                    return 0
+                if arguments.command == "repair-request":
+                    req_info = request_repair(Path(arguments.session))
+                    print(f"REPAIR_SESSION: {Path(arguments.session).absolute()}")
+                    print(f"REPAIR_STATE: {req_info['state']}")
+                    print(f"NEXT_ACTION: {req_info['next_action']}")
+                    print(f"WORKSPACE: {req_info['workspace_path']}")
+                    print(f"APPROVED_PATHS: {', '.join(req_info['approved_paths'])}")
+                    print(f"FAILED_CHECKS: {', '.join(req_info['failed_check_ids'])}")
+                    return 0
+                if arguments.command == "repair-evaluate":
+                    repair_outcome = evaluate_repair(Path(arguments.session))
+                    print(f"REPAIR_SESSION: {repair_outcome.session_dir.absolute()}")
+                    print(f"REPAIR_STATE: {repair_outcome.state.value}")
+                    print(f"NEXT_ACTION: {repair_outcome.next_action}")
+                    if (
+                        repair_outcome.summary_path
+                        and repair_outcome.summary_path.exists()
+                    ):
+                        print(
+                            f"REPAIR_SUMMARY: {repair_outcome.summary_path.absolute()}"
+                        )
+                    return 0
+                if arguments.command == "repair-finalize":
+                    repair_outcome = finalize_repair(Path(arguments.session))
+                    print(f"REPAIR_SESSION: {repair_outcome.session_dir.absolute()}")
+                    print(f"REPAIR_STATE: {repair_outcome.state.value}")
+                    print(f"NEXT_ACTION: {repair_outcome.next_action}")
+                    if (
+                        repair_outcome.summary_path
+                        and repair_outcome.summary_path.exists()
+                    ):
+                        print(
+                            f"REPAIR_SUMMARY: {repair_outcome.summary_path.absolute()}"
+                        )
+                    return 0
+                if arguments.command == "repair-apply":
+                    repair_outcome = apply_repair(
+                        Path(arguments.session),
+                        Path(arguments.approval),
+                    )
+                    print(f"REPAIR_SESSION: {repair_outcome.session_dir.absolute()}")
+                    print(f"REPAIR_STATE: {repair_outcome.state.value}")
+                    print(f"NEXT_ACTION: {repair_outcome.next_action}")
+                    if (
+                        repair_outcome.summary_path
+                        and repair_outcome.summary_path.exists()
+                    ):
+                        print(
+                            f"REPAIR_SUMMARY: {repair_outcome.summary_path.absolute()}"
+                        )
+                    return 0
+                if arguments.command == "repair-cancel":
+                    repair_outcome = cancel_repair(Path(arguments.session))
+                    print(f"REPAIR_SESSION: {repair_outcome.session_dir.absolute()}")
+                    print(f"REPAIR_STATE: {repair_outcome.state.value}")
+                    print(f"NEXT_ACTION: {repair_outcome.next_action}")
+                    return 0
+            except (ValueError, FileNotFoundError, RepairWorkspaceError) as error:
+                print(f"ERROR: {error}", file=sys.stderr)
+                return 3
         raise _UsageError("a command is required")
     except _UsageError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 3
-    except ConfigError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 3
-    except GateInputError as error:
+    except (ConfigError, GateInputError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 3
     except Exception as error:
@@ -155,6 +259,33 @@ def _build_parser() -> _ArgumentParser:
     run.add_argument("--base", required=True, metavar="REF")
     run.add_argument("--output", metavar="PATH")
     run.add_argument("--run-id", metavar="ID")
+
+    repair_start = commands.add_parser("repair-start")
+    repair_start.add_argument("--repo", default=".", metavar="PATH")
+    repair_start.add_argument("--base", required=True, metavar="REF")
+    repair_start.add_argument("--output", metavar="PATH")
+    repair_start.add_argument("--session-id", metavar="ID")
+
+    repair_approve = commands.add_parser("repair-approve")
+    repair_approve.add_argument("--session", required=True, metavar="PATH")
+    repair_approve.add_argument("--approval", required=True, metavar="PATH")
+
+    repair_request = commands.add_parser("repair-request")
+    repair_request.add_argument("--session", required=True, metavar="PATH")
+
+    repair_evaluate = commands.add_parser("repair-evaluate")
+    repair_evaluate.add_argument("--session", required=True, metavar="PATH")
+
+    repair_finalize = commands.add_parser("repair-finalize")
+    repair_finalize.add_argument("--session", required=True, metavar="PATH")
+
+    repair_apply = commands.add_parser("repair-apply")
+    repair_apply.add_argument("--session", required=True, metavar="PATH")
+    repair_apply.add_argument("--approval", required=True, metavar="PATH")
+
+    repair_cancel = commands.add_parser("repair-cancel")
+    repair_cancel.add_argument("--session", required=True, metavar="PATH")
+
     return parser
 
 

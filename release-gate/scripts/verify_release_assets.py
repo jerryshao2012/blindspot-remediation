@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 HOSTS = ("antigravity", "claude-code", "codex", "copilot")
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 MANIFEST_RE = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$")
-MAX_SKILL_MEMBERS = 10
+MAX_SKILL_MEMBERS = 16
 MAX_SKILL_FILE_BYTES = 1024 * 1024
 MAX_SKILL_TOTAL_BYTES = 4 * 1024 * 1024
 MAX_SDIST_MEMBERS = 4096
@@ -174,6 +174,7 @@ def _verify_skill_archive(
     expected_config_schema: bytes,
     expected_observability_schema: bytes,
     expected_assurance: bytes,
+    expected_repair: bytes,
 ) -> None:
     with tarfile.open(path, "r:gz") as archive:
         members = archive.getmembers()
@@ -187,6 +188,7 @@ def _verify_skill_archive(
             "release-gate/references/gate-decisions-v1.schema.json",
             "release-gate/references/initialization.md",
             "release-gate/references/assurance.md",
+            "release-gate/references/repair.md",
         }
         if host == "codex":
             expected |= {
@@ -253,6 +255,12 @@ def _verify_skill_archive(
         if assurance.read() != expected_assurance:
             raise ValueError(
                 f"{host} archive assurance reference does not match the source"
+            )
+        repair = archive.extractfile("release-gate/references/repair.md")
+        assert repair is not None
+        if repair.read() != expected_repair:
+            raise ValueError(
+                f"{host} archive repair reference does not match the source"
             )
 
 
@@ -336,6 +344,9 @@ def verify_assets(
     expected_assurance = _normalized_text_bytes(
         root / "skills/release-gate/references/assurance.md"
     )
+    expected_repair = _normalized_text_bytes(
+        root / "skills/release-gate/references/repair.md"
+    )
     _verify_wheel(wheel, version)
     _verify_sdist(assets_dir / f"release_gate-{version}.tar.gz", version)
     for host in HOSTS:
@@ -346,6 +357,7 @@ def verify_assets(
             expected_config_schema,
             expected_observability_schema,
             expected_assurance,
+            expected_repair,
         )
     if check_installed_cli:
         _verify_installed_cli(wheel, version)

@@ -239,6 +239,24 @@ the engine cannot finalize a complete result. If a check process is interrupted
 but the engine remains able to record and finalize the event, it is an evidence
 error and yields `NEEDS_HUMAN` instead.
 
+## `repair` (Protocol Commands)
+
+The user-facing repair workflow is invoked exclusively via `/release-gate repair --base <ref>` (or `$release-gate repair --base <ref>`).
+The CLI provides private protocol commands to coordinate the bounded repair state machine:
+
+- `repair-start --repo PATH --base REF [--output PATH] [--session-id ID]`: Initializes a repair session, evaluates `C0`, creates an isolated workspace, and prepares `approval-request.json`.
+- `repair-approve --session PATH --approval PATH`: Validates user approval and transitions the session to `repairing`.
+- `repair-request --session PATH`: Returns workspace path, active constraints, and playbook guidance.
+- `repair-evaluate --session PATH`: Exports the candidate from the isolated workspace, runs the release gate, and records lineage.
+- `repair-finalize --session PATH`: Refreshes session summary and evidence manifest.
+- `repair-apply --session PATH --approval PATH`: Verifies that the source worktree matches `C0`, verifies final approval, and transactionally applies the passing patch.
+- `repair-cancel --session PATH`: Cancels the active repair session cleanly.
+
+Protocol commands emit line-oriented status headers:
+- `REPAIR_SESSION: <path>`
+- `REPAIR_STATE: <state>`
+- `NEXT_ACTION: <action>`
+
 ## Compatibility
 
 The new CLI does not replace or proxy `demo/gate/gate.sh`. Existing demo
@@ -246,8 +264,8 @@ commands and their 0/1/2 behavior remain intact. There is no A3 request-file,
 execution-result, plugin, or adapter mode in v1.
 
 <!-- release-version-sync:start -->
-The 0.4.0 assistant archives bundle `references/compatibility.json` and require
-the exact output `release-gate 0.4.0` before `init`, `validate`, or `run`.
+The 0.5.0 assistant archives bundle `references/compatibility.json` and require
+the exact output `release-gate 0.5.0` before `init`, `validate`, `run`, or `repair`.
 A missing executable or different version is a safe stop. Install the CLI wheel
 and host archive as a separately verified, version-matched pair using the
 [adoption procedure](adoption.md).

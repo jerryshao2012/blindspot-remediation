@@ -333,3 +333,14 @@ without shell syntax. Platform overrides are explicit and limited to the three
 v1 operating-system families. Required verification covers Linux, macOS, and
 Windows, filenames with spaces and Unicode, binary patches, symlinks where Git
 supports them, timeouts, signals, and interrupted runs.
+
+## Bounded repair architecture
+
+The repair harness wraps the gate with a bounded, deterministic state machine:
+- **State machine**: Manages transitions between `stopped`, `awaiting_approval`, `repairing`, `awaiting_final_approval`, and `applied`.
+- **Isolated workspace**: Repairs occur in a temporary clone created outside the repository and evidence roots. Edits never affect the source worktree during repair attempts.
+- **Candidate export and deduplication**: Exported candidate trees and patch SHA-256 digests are tracked. Re-evaluating an identical or unchanged candidate triggers immediate stop.
+- **Strict eligibility matrix**: Only `FAIL` verdicts from deterministic test/assertion errors on blocking checks are repairable. Policy/launcher changes, scope violations, errors, skipped work, and `NEEDS_HUMAN` stop immediately.
+- **Base-trusted playbooks**: Optional repair playbooks located under `.release-gate/repair/` are read exclusively from the base commit.
+- **Safe apply**: Applies passing candidate patches to the source worktree transactionally only after verifying that the source worktree still matches candidate `C0`.
+- **Chained session evidence**: All attempts and approvals are persisted under `_repairs/<session-id>/` with SHA-256 manifest validation.

@@ -46,7 +46,10 @@ def main() -> int:
                 "installed command failed:\n"
                 f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
             )
-        if "{init,validate,run}" not in result.stdout:
+        if not all(
+            cmd in result.stdout
+            for cmd in ("init", "validate", "run", "repair-start", "repair-apply")
+        ):
             raise SystemExit("installed command did not expose the expected CLI")
         version = subprocess.run(
             [str(command), "--version"],
@@ -55,7 +58,7 @@ def main() -> int:
             env=process_environment,
             check=False,
         )
-        if version.returncode != 0 or version.stdout != "release-gate 0.4.0\n":
+        if version.returncode != 0 or version.stdout != "release-gate 0.5.0\n":
             raise SystemExit(
                 "installed command reported the wrong version:\n"
                 f"stdout:\n{version.stdout}stderr:\n{version.stderr}"

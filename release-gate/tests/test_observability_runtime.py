@@ -28,8 +28,11 @@ def _summary(run_id: str) -> dict[str, object]:
         "patch_sha256": "c" * 64,
         "config_sha256": "d" * 64,
         "scope": {
-            "status": "PASS", "reason_codes": [], "changed_paths": [],
-            "outside_allowed_paths": [], "forbidden_paths": [],
+            "status": "PASS",
+            "reason_codes": [],
+            "changed_paths": [],
+            "outside_allowed_paths": [],
+            "forbidden_paths": [],
             "review_required_paths": [],
         },
         "checks": [],
@@ -172,9 +175,8 @@ def test_publish_rejects_casefold_stage_alias_without_mutation(
 
     assert ObservabilityWarning.PATH_UNSAFE in result.warnings
     assert alias.read_bytes() == b"alias-owned"
-    assert ".release-gate-abc123" not in {
-        entry.name for entry in namespace.iterdir()
-    }
+    assert ".release-gate-abc123" not in {entry.name for entry in namespace.iterdir()}
+
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX record-lock behavior")
 def test_refresh_lock_busy_is_a_non_gating_outcome(tmp_path: Path) -> None:
@@ -363,9 +365,11 @@ def test_target_lstat_error_is_unsafe_and_never_replaced(
         monkeypatch.setattr(
             runtime,
             "_safe_target_snapshot_path",
-            lambda path, directory_fd=None: None
-            if path.name == "gate-decisions-v1.json"
-            else original_path_snapshot(path, directory_fd),
+            lambda path, directory_fd=None: (
+                None
+                if path.name == "gate-decisions-v1.json"
+                else original_path_snapshot(path, directory_fd)
+            ),
         )
     else:
         monkeypatch.setattr(runtime.os, "stat", denied)
@@ -482,6 +486,7 @@ def test_held_lock_case_alias_blocks_snapshot_and_publish(
     alias = session.namespace / ".REFRESH.LOCK"
     lock.rename(alias)
     try:
+
         class _NoSnapshotWrite:
             def try_write_optional_artifact(self, *_: object, **__: object) -> Path:
                 raise AssertionError("unsafe lock must stop snapshot generation")
@@ -491,9 +496,7 @@ def test_held_lock_case_alias_blocks_snapshot_and_publish(
         result = session.publish()
         assert ObservabilityWarning.PATH_UNSAFE in result.warnings
         assert not (session.namespace / "index.html").exists()
-        assert not (
-            session.namespace / "gate-decisions-v1.json"
-        ).exists()
+        assert not (session.namespace / "gate-decisions-v1.json").exists()
         assert alias.exists()
     finally:
         session.close()
@@ -554,9 +557,7 @@ def test_stage_swapped_after_validation_never_remains_at_stable_target(
         monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
         original_same = runtime._same_staged_path
 
-        def swap_path(
-            session: RefreshSession, staged: runtime._StagedPath
-        ) -> bool:
+        def swap_path(session: RefreshSession, staged: runtime._StagedPath) -> bool:
             nonlocal swapped
             valid = original_same(session, staged)
             if valid and not swapped:
@@ -569,9 +570,7 @@ def test_stage_swapped_after_validation_never_remains_at_stable_target(
     else:
         original_same_at = runtime._same_staged_file_at
 
-        def swap_at(
-            directory_fd: int, staged: runtime._StagedFile
-        ) -> bool:
+        def swap_at(directory_fd: int, staged: runtime._StagedFile) -> bool:
             nonlocal swapped
             valid = original_same_at(directory_fd, staged)
             if valid and not swapped:
@@ -620,9 +619,7 @@ def test_same_length_stage_rewrite_is_repaired_before_success(
         monkeypatch.setattr(observability, "_uses_dir_fd", lambda: False)
         original_same = runtime._same_staged_path
 
-        def rewrite_path(
-            session: RefreshSession, staged: runtime._StagedPath
-        ) -> bool:
+        def rewrite_path(session: RefreshSession, staged: runtime._StagedPath) -> bool:
             valid = original_same(session, staged)
             if valid:
                 rewrite(staged)
@@ -632,9 +629,7 @@ def test_same_length_stage_rewrite_is_repaired_before_success(
     else:
         original_same_at = runtime._same_staged_file_at
 
-        def rewrite_at(
-            directory_fd: int, staged: runtime._StagedFile
-        ) -> bool:
+        def rewrite_at(directory_fd: int, staged: runtime._StagedFile) -> bool:
             valid = original_same_at(directory_fd, staged)
             if valid:
                 rewrite(staged)
@@ -829,9 +824,7 @@ def test_unsafe_cleanup_never_deletes_stage_name_swapped_after_validation(
         original_stage_at = runtime._stage_at
         original_snapshot_at = runtime._safe_target_snapshot_at
 
-        def capture_stage_at(
-            directory_fd: int, payload: bytes
-        ) -> runtime._StagedFile:
+        def capture_stage_at(directory_fd: int, payload: bytes) -> runtime._StagedFile:
             nonlocal staged_path
             staged = original_stage_at(directory_fd, payload)
             if staged_path is None:
@@ -991,9 +984,7 @@ def test_posix_static_ancestor_symlink_never_touches_outside_lock(
     linked_parent = tmp_path / "linked-parent"
     linked_parent.symlink_to(outside_parent, target_is_directory=True)
 
-    session = RefreshSession.acquire(
-        linked_parent / "evidence", _summary("run-one")
-    )
+    session = RefreshSession.acquire(linked_parent / "evidence", _summary("run-one"))
 
     assert not session.locked
     assert session.warnings == (ObservabilityWarning.PATH_UNSAFE,)
@@ -1305,10 +1296,9 @@ def test_native_windows_child_open_is_handle_relative(
     monkeypatch.setattr(
         runtime,
         "_open_windows_relative_native",
-        lambda directory_fd, name, flags, *, delete_access=False: calls.append(
-            (directory_fd, name, flags, delete_access)
-        )
-        or 91,
+        lambda directory_fd, name, flags, *, delete_access=False: (
+            calls.append((directory_fd, name, flags, delete_access)) or 91
+        ),
         raising=False,
     )
     monkeypatch.setattr(
@@ -1377,7 +1367,8 @@ def test_native_windows_casefold_scan_uses_pinned_directory_handle(
 
 
 def test_native_windows_replace_is_handle_relative(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import release_gate.observability_runtime as runtime
 
@@ -1657,9 +1648,7 @@ def test_windows_staged_handle_denies_post_validation_name_swap(
     original_same = runtime._same_staged_path
     attempted = False
 
-    def attempt_swap(
-        session: RefreshSession, staged: runtime._StagedPath
-    ) -> bool:
+    def attempt_swap(session: RefreshSession, staged: runtime._StagedPath) -> bool:
         nonlocal attempted
         valid = original_same(session, staged)
         if valid and not attempted:

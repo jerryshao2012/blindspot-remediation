@@ -662,3 +662,22 @@ def test_gate_decisions_schema_validates_report() -> None:
         )
         == []
     )
+
+
+def test_scanner_skips_repairs_namespace(tmp_path: Path) -> None:
+    from release_gate.observability import collect_history
+
+    root = tmp_path / "runs"
+    root.mkdir()
+    write_valid_run(root, "run-valid")
+
+    repairs = root / "_repairs"
+    repairs.mkdir()
+    (repairs / "session-1").mkdir()
+    (repairs / "session-1" / "repair-session-v1.json").write_text("{}")
+
+    collected = collect_history(root)
+    assert len(collected.source_runs) == 1
+    assert collected.source_runs[0].run_id == "run-valid"
+    assert collected.skipped_runs == 0
+    assert collected.warnings == ()

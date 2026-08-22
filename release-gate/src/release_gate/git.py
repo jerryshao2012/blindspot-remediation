@@ -35,7 +35,7 @@ class CandidateCapture:
 
 
 def capture_candidate(
-    repository: str | Path, *, base: str = "HEAD"
+    repository: str | Path, *, base: str = "HEAD", allow_empty: bool = False
 ) -> CandidateCapture:
     """Capture the complete current worktree against a peeled base commit."""
 
@@ -97,7 +97,7 @@ def capture_candidate(
         candidate_tree = (
             _capture_git(root, environment, "write-tree").decode("ascii").strip()
         )
-        if candidate_tree == base_tree:
+        if candidate_tree == base_tree and not allow_empty:
             raise CaptureError("empty candidate: working tree matches the base commit")
         patch = _capture_git(
             root,

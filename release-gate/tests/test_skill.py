@@ -20,15 +20,15 @@ def test_portable_skill_has_discoverable_minimal_contract() -> None:
     assert metadata["description"].startswith("Use only when explicitly invoked")
     assert "report its version" in metadata["description"]
     assert "Do not invoke implicitly" in metadata["description"]
-    assert len(text.splitlines()) < 180
+    assert len(text.splitlines()) < 200
     assert max(map(len, text.splitlines())) <= 130
 
 
-def test_skill_dispatches_only_three_explicit_operations() -> None:
+def test_skill_dispatches_only_explicit_operations() -> None:
     text = SKILL.read_text(encoding="utf-8")
     required = [
         "Explicit invocation guard",
-        "init | validate | run",
+        "init | validate | run | repair",
         "Missing or unknown subcommand",
         "no operational tool call",
         "release-gate --version",
@@ -36,6 +36,8 @@ def test_skill_dispatches_only_three_explicit_operations() -> None:
         "release-gate init --repo <repo> --from-config <temporary-approved-config>",
         "release-gate validate --repo <repo>",
         "release-gate run",
+        "release-gate repair-start",
+        "references/repair.md",
         ".release-gate.yaml",
         "result.json",
         "PASS",
@@ -287,3 +289,19 @@ def test_skill_ui_metadata_is_host_neutral() -> None:
     assert "explicit" in metadata["interface"]["default_prompt"].lower()
     assert metadata["policy"] == {"allow_implicit_invocation": False}
     assert "dependencies" not in metadata
+
+
+def test_repair_reference_is_present_and_well_formed() -> None:
+    text = (SKILL.parent / "references" / "repair.md").read_text(encoding="utf-8")
+    for phrase in (
+        "release-gate repair-start",
+        "release-gate repair-approve",
+        "release-gate repair-request",
+        "release-gate repair-evaluate",
+        "release-gate repair-apply",
+        "release-gate repair-cancel",
+        "REPAIR_SESSION:",
+        "REPAIR_STATE:",
+        "NEXT_ACTION:",
+    ):
+        assert phrase in text

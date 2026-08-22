@@ -83,6 +83,12 @@ def main() -> int:
         or "byte-for-byte" not in assurance
     ):
         raise ValueError("assurance reference is incomplete")
+    repair_ref = (skill_root / "references" / "repair.md").read_text(encoding="utf-8")
+    if (
+        "release-gate repair-start" not in repair_ref
+        or "release-gate repair-apply" not in repair_ref
+    ):
+        raise ValueError("repair reference is incomplete")
 
     agent_metadata = yaml.safe_load(
         (skill_root / "agents" / "openai.yaml").read_text(encoding="utf-8")

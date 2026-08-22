@@ -179,7 +179,10 @@ def collect_history(
     try:
         with os.scandir(root_fd) as entries:
             for entry in entries:
-                if entry.name == "_observability" or entry.name == exclude_run_id:
+                if (
+                    entry.name in {"_observability", "_repairs"}
+                    or entry.name == exclude_run_id
+                ):
                     continue
                 try:
                     metadata = _path_lstat(entry.name, dir_fd=root_fd)
@@ -456,7 +459,10 @@ def _collect_path_fallback(
     try:
         with os.scandir(evidence_root) as entries:
             for entry in entries:
-                if entry.name == "_observability" or entry.name == exclude_run_id:
+                if (
+                    entry.name in {"_observability", "_repairs"}
+                    or entry.name == exclude_run_id
+                ):
                     continue
                 path = evidence_root / entry.name
                 try:

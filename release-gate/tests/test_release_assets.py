@@ -133,6 +133,7 @@ def test_skill_archive_rejects_extra_and_special_members(tmp_path: Path) -> None
                 ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
             ).read_bytes(),
             (ROOT / "skills/release-gate/references/assurance.md").read_bytes(),
+            (ROOT / "skills/release-gate/references/repair.md").read_bytes(),
         )
 
 
@@ -169,6 +170,7 @@ def test_skill_archive_rejects_exact_names_with_swapped_path_types(
             ),
             ("release-gate/references/initialization.md", b"reference"),
             ("release-gate/references/assurance.md", b"assurance reference"),
+            ("release-gate/references/repair.md", b"repair reference"),
         ):
             info = tarfile.TarInfo(name)
             info.mode = 0o644
@@ -184,6 +186,7 @@ def test_skill_archive_rejects_exact_names_with_swapped_path_types(
                 ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
             ).read_bytes(),
             (ROOT / "skills/release-gate/references/assurance.md").read_bytes(),
+            (ROOT / "skills/release-gate/references/repair.md").read_bytes(),
         )
 
 
@@ -209,6 +212,7 @@ def test_skill_archive_rejects_observability_schema_mismatch(tmp_path: Path) -> 
             (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
             b"not the canonical observability schema",
             (ROOT / "skills/release-gate/references/assurance.md").read_bytes(),
+            (ROOT / "skills/release-gate/references/repair.md").read_bytes(),
         )
 
 
@@ -236,6 +240,35 @@ def test_skill_archive_rejects_assurance_reference_mismatch(tmp_path: Path) -> N
                 ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
             ).read_bytes(),
             b"not the canonical assurance reference",
+            (ROOT / "skills/release-gate/references/repair.md").read_bytes(),
+        )
+
+
+def test_skill_archive_rejects_repair_reference_mismatch(tmp_path: Path) -> None:
+    verifier = _load_verifier()
+    output = tmp_path / "assets"
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/build_skill_archives.py"),
+            "--output-dir",
+            str(output),
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+    archive_path = output / f"release-gate-skill-copilot-{__version__}.tar.gz"
+    with pytest.raises(ValueError, match="repair reference"):
+        verifier._verify_skill_archive(
+            archive_path,
+            "copilot",
+            __version__,
+            (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
+            (
+                ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
+            ).read_bytes(),
+            (ROOT / "skills/release-gate/references/assurance.md").read_bytes(),
+            b"not the canonical repair reference",
         )
 
 

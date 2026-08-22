@@ -2,43 +2,43 @@
 name: release-gate
 description: >-
   Use only when explicitly invoked by the user to report its version,
-  initialize, validate, or run Release Gate. Do not invoke implicitly.
+  initialize, validate, run, or repair with Release Gate. Do not invoke implicitly.
 ---
 
 # Release Gate
 
 Use the installed `release-gate` CLI as the sole policy validator and verdict
-engine. This skill dispatches informational `--version` or the three explicit
-operations `init | validate | run`.
+engine. This skill dispatches informational `--version` or the explicit
+operations `init | validate | run | repair`.
 
 ## Explicit invocation guard
 
 Proceed only when the user explicitly invoked Release Gate and supplied
-`--version` or one of the three supported subcommands. A host may load this
+`--version` or one of the supported subcommands. A host may load this
 skill implicitly; loading is not authorization for operational effects.
 Missing or unknown subcommand or input: show
-`release-gate <--version|init|validate|run> [options]` usage and make no operational tool call.
+`release-gate <--version|init|validate|run|repair> [options]` usage and make no operational tool call.
 Do not infer a subcommand from repository context.
 
 <!-- release-version-sync:start -->
 ## Informational `--version`
 
 For explicit `/release-gate --version` (or `$release-gate --version` in Codex),
-read `references/compatibility.json`. Report exactly `release-gate 0.4.0` and
+read `references/compatibility.json`. Report exactly `release-gate 0.5.0` and
 stop. Do not call the CLI, do not run compatibility preflight, do not consider
 Graphify, and do not perform an `init`, `validate`, or `run` operation or any
 repository operation.
 
 ## Compatibility preflight
 
-For each of `init`, `validate`, and `run`, the first operational call is exactly:
+For each of `init`, `validate`, `run`, and `repair`, the first operational call is exactly:
 
 ```text
 release-gate --version
 ```
 
 Read `references/compatibility.json` and require exact output
-`release-gate 0.4.0`. If the executable is missing, the reference is unreadable,
+`release-gate 0.5.0`. If the executable is missing, the reference is unreadable,
 or the output differs, stop safely. Do not install, upgrade, retry, or continue.
 <!-- release-version-sync:end -->
 
@@ -144,10 +144,22 @@ After preflight:
    a clearly separate, non-gating Graphify advisory; never mix it into the
    result or report.
 
+## repair
+
+After preflight, for explicit `repair --base <ref>`:
+
+1. Read `references/repair.md` and start repair via `release-gate repair-start --repo <repo> --base <ref>`.
+2. If stopped immediately, report the stop reason and summary without repository edits.
+3. If awaiting approval, present failed checks, approved paths, and attempt cap (2) for user approval.
+4. On approval, call `release-gate repair-approve` and inspect workspace via `release-gate repair-request`.
+5. Edit strictly within the isolated workspace and approved paths. Never edit the source repository directly.
+6. Call `release-gate repair-evaluate`. If passing, present final diff and evidence for apply approval.
+7. On final approval, call `release-gate repair-apply` to safely apply the verified patch.
+
 ## Integrity rules
 
 - Never edit policy or evidence to change an outcome.
-- Do not edit repository code or launchers as part of any operation.
+- Do not edit repository code or launchers as part of any operation outside approved repair sessions.
 - Do not retry automatically after a command or completed verdict.
 - Never retry, merge, or deploy, and never suppress or change `NEEDS_HUMAN`.
 - Do not claim sandboxing, security review, merge approval, or deployment authority.

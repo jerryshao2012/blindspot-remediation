@@ -2,6 +2,17 @@
 
 All notable changes to the standalone Release Gate are recorded here.
 
+## Unreleased
+
+## 0.5.0
+
+- Add bounded repair workflow orchestrated via `/release-gate repair --base <ref>`.
+- Add private deterministic controller protocol commands (`repair-start`, `repair-approve`, `repair-request`, `repair-evaluate`, `repair-finalize`, `repair-apply`, `repair-cancel`).
+- Isolate repair workspace in temporary clones outside repository and evidence roots.
+- Support optional base-trusted repair playbooks under `.release-gate/repair/`.
+- Enforce strict 2-attempt budget, repeated candidate detection, and transactional apply safety.
+- Preserve unchanged gate verdict contracts, result schemas, and non-repairing `release-gate run` behavior.
+
 ## 0.4.0
 
 - Add assurance-aware initialization with user-approved failure-mode mapping,

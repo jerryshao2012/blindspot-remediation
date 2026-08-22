@@ -48,6 +48,7 @@ def _minimal_builder_checkout(destination: Path, *, crlf: bool) -> None:
         Path("skills/release-gate/references/gate-decisions-v1.schema.json"),
         Path("skills/release-gate/references/initialization.md"),
         Path("skills/release-gate/references/assurance.md"),
+        Path("skills/release-gate/references/repair.md"),
     )
     for relative in sources:
         target = destination / relative
@@ -210,6 +211,9 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
     canonical_assurance = _lf(
         (ROOT / "skills" / "release-gate" / "references" / "assurance.md").read_bytes()
     )
+    canonical_repair = _lf(
+        (ROOT / "skills" / "release-gate" / "references" / "repair.md").read_bytes()
+    )
     for host in HOSTS:
         name = f"release-gate-skill-{host}-{VERSION}.tar.gz"
         archive, members = _archive_members(archives[name])
@@ -223,6 +227,7 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
             "release-gate/references/gate-decisions-v1.schema.json",
             "release-gate/references/initialization.md",
             "release-gate/references/assurance.md",
+            "release-gate/references/repair.md",
         }
         if host == "codex":
             expected |= {"release-gate/agents", "release-gate/agents/openai.yaml"}
@@ -259,6 +264,9 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
         assurance = archive.extractfile(members["release-gate/references/assurance.md"])
         assert assurance is not None
         assert assurance.read() == canonical_assurance
+        repair = archive.extractfile(members["release-gate/references/repair.md"])
+        assert repair is not None
+        assert repair.read() == canonical_repair
         archive.close()
 
 
@@ -267,7 +275,8 @@ def test_adapter_metadata_and_body_are_exact(tmp_path: Path) -> None:
     bodies: dict[str, bytes] = {}
     expected_description = (
         "Use only when explicitly invoked by the user to report its version, "
-        "initialize, validate, or run Release Gate. Do not invoke implicitly."
+        "initialize, validate, run, or repair with Release Gate. "
+        "Do not invoke implicitly."
     )
     for host in HOSTS:
         archive, members = _archive_members(
@@ -285,7 +294,7 @@ def test_adapter_metadata_and_body_are_exact(tmp_path: Path) -> None:
                 "disable-model-invocation",
             }
             assert metadata["argument-hint"] == (
-                "<--version|init|validate|run> [options]"
+                "<--version|init|validate|run|repair> [options]"
             )
             assert metadata["user-invocable"] is True
             assert metadata["disable-model-invocation"] is True

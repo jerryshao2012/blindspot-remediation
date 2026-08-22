@@ -114,12 +114,22 @@ def test_run_publishes_verified_snapshot_and_stable_dashboard(
     repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
     output = tmp_path / "custom-evidence"
 
-    assert main(
-        [
-            "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
-            "--run-id", "observed",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "observed",
+            ]
+        )
+        == 0
+    )
     captured = capsys.readouterr()
     snapshot = output / "observed/observability/gate-decisions.html"
     dashboard = output / "_observability/index.html"
@@ -150,9 +160,10 @@ def test_finalization_failure_never_publishes_stable_observability(
         raise EvidenceError("finalization failed")
 
     monkeypatch.setattr(EvidenceRun, "finalize", fail_finalize)
-    assert main(
-        ["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)]
-    ) == 4
+    assert (
+        main(["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)])
+        == 4
+    )
     assert not (output / "_observability/gate-decisions-v1.json").exists()
     assert not (output / "_observability/index.html").exists()
 
@@ -170,20 +181,34 @@ def test_shared_custom_root_rolls_up_all_three_gate_verdicts(
         case_root = tmp_path / f"case-{index}"
         case_root.mkdir()
         repo = repository(case_root, command, severity=severity)
-        assert main(
-            [
-                "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
-                "--run-id", f"verdict-{index}",
-            ]
-        ) == index
+        assert (
+            main(
+                [
+                    "run",
+                    "--repo",
+                    str(repo),
+                    "--base",
+                    "HEAD",
+                    "--output",
+                    str(output),
+                    "--run-id",
+                    f"verdict-{index}",
+                ]
+            )
+            == index
+        )
         captured = capsys.readouterr()
         assert captured.out.startswith(f"VERDICT: {verdict}\n")
     report = json.loads((output / "_observability/gate-decisions-v1.json").read_bytes())
     assert [item["verdict"] for item in report["source_runs"]] == [
-        "PASS", "FAIL", "NEEDS_HUMAN"
+        "PASS",
+        "FAIL",
+        "NEEDS_HUMAN",
     ]
     assert report["series"][-1]["windows"]["10"]["counts"] == {
-        "releasing": 1, "failing": 1, "human_review": 1
+        "releasing": 1,
+        "failing": 1,
+        "human_review": 1,
     }
     assert report["series"][-1]["windows"]["100"]["sample_size"] == 3
 
@@ -210,7 +235,9 @@ def test_shared_custom_root_rolls_up_all_three_gate_verdicts(
     ),
 )
 def test_observability_runtime_exceptions_do_not_change_a_valid_gate(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
     operation: str,
     command: list[str],
     severity: str,
@@ -243,12 +270,22 @@ def test_observability_runtime_exceptions_do_not_change_a_valid_gate(
         monkeypatch.setattr(engine.RefreshSession, "acquire", fail)
     else:
         monkeypatch.setattr(RefreshSession, operation, fail)
-    assert main(
-        [
-            "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
-            "--run-id", "runtime-error",
-        ]
-    ) == exit_code
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "runtime-error",
+            ]
+        )
+        == exit_code
+    )
     captured = capsys.readouterr()
     result = output / "runtime-error/result.json"
     assert captured.out == f"VERDICT: {verdict}\nRESULT: {result}\n"
@@ -286,12 +323,22 @@ def test_history_diagnostics_are_bounded_and_never_change_the_verdict(
     if budget:
         monkeypatch.setattr(observability, "MAX_AGGREGATE_READ_BYTES", 1)
 
-    assert main(
-        [
-            "run", "--repo", str(repo), "--base", "HEAD", "--output", str(output),
-            "--run-id", "bounded-warning",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "bounded-warning",
+            ]
+        )
+        == 0
+    )
 
     captured = capsys.readouterr()
     result = output / "bounded-warning/result.json"
@@ -332,8 +379,18 @@ def test_concurrent_cli_finalizers_publish_both_completed_runs(tmp_path: Path) -
     processes = [
         subprocess.Popen(
             [
-                sys.executable, "-m", "release_gate", "run", "--repo", str(repo),
-                "--base", "HEAD", "--output", str(output), "--run-id", run_id,
+                sys.executable,
+                "-m",
+                "release_gate",
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                run_id,
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -349,9 +406,7 @@ def test_concurrent_cli_finalizers_publish_both_completed_runs(tmp_path: Path) -
         verify_run(output / run_id)
     data = json.loads((output / "_observability/gate-decisions-v1.json").read_bytes())
     source_runs = data["source_runs"]
-    assert {item["run_id"] for item in source_runs} == {
-        "concurrent-a", "concurrent-b"
-    }
+    assert {item["run_id"] for item in source_runs} == {"concurrent-a", "concurrent-b"}
     identities = [(item["finished_at"], item["run_id"]) for item in source_runs]
     assert identities == sorted(identities)
     html = (output / "_observability/index.html").read_bytes()
@@ -391,8 +446,15 @@ def test_same_process_threaded_finalizers_serialize_refresh_and_publish(
     def run(index: int) -> None:
         results[index] = main(
             [
-                "run", "--repo", str(repositories[index]), "--base", "HEAD",
-                "--output", str(output), "--run-id", f"threaded-{index}",
+                "run",
+                "--repo",
+                str(repositories[index]),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                f"threaded-{index}",
             ]
         )
 
@@ -408,14 +470,16 @@ def test_same_process_threaded_finalizers_serialize_refresh_and_publish(
         verify_run(output / run_id)
     data = json.loads((output / "_observability/gate-decisions-v1.json").read_bytes())
     assert {item["run_id"] for item in data["source_runs"]} == {
-        "threaded-0", "threaded-1"
+        "threaded-0",
+        "threaded-1",
     }
     assert data["source_runs"] == sorted(
         data["source_runs"], key=lambda item: (item["finished_at"], item["run_id"])
     )
-    assert data["generation_id"].encode() in (
-        output / "_observability/index.html"
-    ).read_bytes()
+    assert (
+        data["generation_id"].encode()
+        in (output / "_observability/index.html").read_bytes()
+    )
     assert not list((output / "_observability").glob(".release-gate-*"))
 
 
@@ -427,19 +491,22 @@ def test_policy_change_stops_commands_and_needs_human(
     policy.write_text(policy.read_text() + "\n# candidate edit\n", encoding="utf-8")
     output = tmp_path / "evidence"
 
-    assert main(
-        [
-            "run",
-            "--repo",
-            str(repo),
-            "--base",
-            "HEAD",
-            "--output",
-            str(output),
-            "--run-id",
-            "policy-edit",
-        ]
-    ) == 2
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "policy-edit",
+            ]
+        )
+        == 2
+    )
     capsys.readouterr()
     result = json.loads((output / "policy-edit/result.json").read_bytes())
     manifest = json.loads((output / "policy-edit/manifest.json").read_bytes())
@@ -457,9 +524,10 @@ def test_invalid_candidate_returns_exit_3_without_result(
     repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
     (repo / "tracked.txt").write_text("base\n", encoding="utf-8")
     output = tmp_path / "evidence"
-    assert main(
-        ["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)]
-    ) == 3
+    assert (
+        main(["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)])
+        == 3
+    )
     assert "empty candidate" in capsys.readouterr().err
     assert not output.exists()
 
@@ -470,9 +538,10 @@ def test_invalid_output_file_returns_exit_3(
     repo = repository(tmp_path, [sys.executable, "-c", "print('ok')"])
     output = tmp_path / "not-a-directory"
     output.write_text("owned\n", encoding="utf-8")
-    assert main(
-        ["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)]
-    ) == 3
+    assert (
+        main(["run", "--repo", str(repo), "--base", "HEAD", "--output", str(output)])
+        == 3
+    )
     assert "evidence root" in capsys.readouterr().err
     assert output.read_text(encoding="utf-8") == "owned\n"
 
@@ -511,19 +580,22 @@ checks:
     (repo / "tracked.txt").write_text("another candidate\n", encoding="utf-8")
     output = tmp_path / "evidence"
 
-    assert main(
-        [
-            "run",
-            "--repo",
-            str(repo),
-            "--base",
-            "HEAD",
-            "--output",
-            str(output),
-            "--run-id",
-            "prep",
-        ]
-    ) == 2
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "prep",
+            ]
+        )
+        == 2
+    )
     capsys.readouterr()
     result = json.loads((output / "prep/result.json").read_bytes())
     manifest = json.loads((output / "prep/manifest.json").read_bytes())
@@ -569,19 +641,22 @@ checks:
     (repo / "tracked.txt").write_text("metrics candidate\n", encoding="utf-8")
     output = tmp_path / "evidence"
 
-    assert main(
-        [
-            "run",
-            "--repo",
-            str(repo),
-            "--base",
-            "HEAD",
-            "--output",
-            str(output),
-            "--run-id",
-            "metrics",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "metrics",
+            ]
+        )
+        == 0
+    )
     capsys.readouterr()
     result = json.loads((output / "metrics/result.json").read_bytes())
     manifest = json.loads((output / "metrics/manifest.json").read_bytes())
@@ -600,8 +675,10 @@ def test_differential_check_runs_base_then_candidate(
         ".startswith('candidate') else 0)"
     )
     repo = repository(tmp_path, [sys.executable, "-c", code])
-    policy = (repo / ".release-gate.yaml").read_text().replace(
-        "mode: candidate", "mode: differential"
+    policy = (
+        (repo / ".release-gate.yaml")
+        .read_text()
+        .replace("mode: candidate", "mode: differential")
     )
     (repo / ".release-gate.yaml").write_text(policy, encoding="utf-8")
     git(repo, "add", ".release-gate.yaml")
@@ -609,19 +686,22 @@ def test_differential_check_runs_base_then_candidate(
     (repo / "tracked.txt").write_text("candidate\n", encoding="utf-8")
     output = tmp_path / "evidence"
 
-    assert main(
-        [
-            "run",
-            "--repo",
-            str(repo),
-            "--base",
-            "HEAD",
-            "--output",
-            str(output),
-            "--run-id",
-            "diff",
-        ]
-    ) == 1
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "diff",
+            ]
+        )
+        == 1
+    )
     capsys.readouterr()
     manifest = json.loads((output / "diff/manifest.json").read_bytes())
     assert [entry["side"] for entry in manifest["executions"]] == [
@@ -644,19 +724,22 @@ def test_node_repository_produces_verified_pass_evidence(
     repo = repository(tmp_path, [node, "-e", "console.log('ok')"])
     output = tmp_path / "evidence"
 
-    assert main(
-        [
-            "run",
-            "--repo",
-            str(repo),
-            "--base",
-            "HEAD",
-            "--output",
-            str(output),
-            "--run-id",
-            "node-pass",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "node-pass",
+            ]
+        )
+        == 0
+    )
     capsys.readouterr()
     result = json.loads((output / "node-pass/result.json").read_bytes())
     assert result["verdict"] == "PASS"
@@ -671,10 +754,7 @@ def test_runtime_evidence_budget_exhaustion_finalizes_needs_human(
     policy_path = repo / ".release-gate.yaml"
     policy = policy_path.read_text(encoding="utf-8").replace(
         "checks:\n",
-        "limits:\n"
-        "  stream_bytes: 10485760\n"
-        "  total_bytes: 16777216\n"
-        "checks:\n",
+        "limits:\n  stream_bytes: 10485760\n  total_bytes: 16777216\nchecks:\n",
     )
     policy_path.write_text(policy, encoding="utf-8")
     git(repo, "add", ".release-gate.yaml")
@@ -682,19 +762,22 @@ def test_runtime_evidence_budget_exhaustion_finalizes_needs_human(
     (repo / "tracked.txt").write_text("budget candidate\n", encoding="utf-8")
     output = tmp_path / "evidence"
 
-    assert main(
-        [
-            "run",
-            "--repo",
-            str(repo),
-            "--base",
-            "HEAD",
-            "--output",
-            str(output),
-            "--run-id",
-            "budget",
-        ]
-    ) == 2
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "budget",
+            ]
+        )
+        == 2
+    )
     capsys.readouterr()
     run = output / "budget"
     result = json.loads((run / "result.json").read_bytes())

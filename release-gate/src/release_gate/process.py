@@ -247,9 +247,7 @@ def _build_environment(
     return environment, missing
 
 
-def _resolve_argv_for_cwd(
-    argv: tuple[str, ...], cwd: Path
-) -> tuple[str, ...]:
+def _resolve_argv_for_cwd(argv: tuple[str, ...], cwd: Path) -> tuple[str, ...]:
     """Resolve a relative, path-separated executable against ``cwd``.
 
     On Windows, ``CreateProcess`` resolves a relative executable path

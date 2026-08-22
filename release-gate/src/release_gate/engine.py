@@ -120,13 +120,16 @@ def run_gate(
     base: str = "HEAD",
     output: Path | None = None,
     run_id: str | None = None,
+    allow_empty_candidate: bool = False,
 ) -> RunOutcome:
     """Capture, evaluate, and atomically finalize one gate run."""
 
     started_wall = datetime.now(UTC)
     started_clock = time.monotonic_ns()
     try:
-        capture = capture_candidate(repository, base=base)
+        capture = capture_candidate(
+            repository, base=base, allow_empty=allow_empty_candidate
+        )
     except CaptureError as error:
         raise GateInputError(str(error)) from error
     family = _platform_name()
@@ -383,9 +386,7 @@ def _run_checks(
                         family,
                     )
                 )
-                outcomes.append(
-                    skipped_check(check, ("EVIDENCE_BUDGET_EXHAUSTED",))
-                )
+                outcomes.append(skipped_check(check, ("EVIDENCE_BUDGET_EXHAUSTED",)))
                 _append_budget_skips(
                     config, family, check, outcomes, records, datetime.now(UTC)
                 )
@@ -533,9 +534,7 @@ def _execute_control(
                 diagnostics.update(outcome.reason_codes)
                 if outcome.artifact_path:
                     extension = (
-                        ".xml"
-                        if report.parser is ReportParser.JUNIT_XML
-                        else ".json"
+                        ".xml" if report.parser is ReportParser.JUNIT_XML else ".json"
                     )
                     try:
                         evidence.write_artifact(
@@ -646,9 +645,7 @@ def _skipped_schedule(
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     prepare_sides = (
-        ("base", "candidate")
-        if config.requires_base_workspace
-        else ("candidate",)
+        ("base", "candidate") if config.requires_base_workspace else ("candidate",)
     )
     for step in config.prepare:
         for side in prepare_sides:

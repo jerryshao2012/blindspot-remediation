@@ -125,15 +125,16 @@ def _verify_base(capture: CandidateCapture, base: Path) -> None:
 
 def _apply_candidate(capture: CandidateCapture, candidate: Path) -> None:
     try:
-        _run(
-            candidate,
-            "apply",
-            "--binary",
-            "--index",
-            "--whitespace=nowarn",
-            "-",
-            input_bytes=capture.patch,
-        )
+        if capture.patch:
+            _run(
+                candidate,
+                "apply",
+                "--binary",
+                "--index",
+                "--whitespace=nowarn",
+                "-",
+                input_bytes=capture.patch,
+            )
         actual = _run(candidate, "write-tree").decode("ascii").strip()
     except (subprocess.CalledProcessError, UnicodeDecodeError) as error:
         raise WorkspaceError("candidate patch could not be applied safely") from error

@@ -51,9 +51,7 @@ def test_timestamp_profile_rejects_invalid_values(value: str) -> None:
 
 
 def test_timestamp_emitter_is_utc_z() -> None:
-    assert utc_timestamp(datetime(2026, 8, 18, tzinfo=UTC)) == (
-        "2026-08-18T00:00:00Z"
-    )
+    assert utc_timestamp(datetime(2026, 8, 18, tzinfo=UTC)) == ("2026-08-18T00:00:00Z")
 
 
 def test_preflight_budget_reserves_finalization_space() -> None:

@@ -201,9 +201,7 @@ class RefreshSession:
                     session.close()
                     return session._warn(ObservabilityWarning.LOCK_BUSY)
                 wait(min(0.05, max(0.0, deadline - clock())))
-            if not _same_open_file_at(
-                descriptor, session._namespace_fd, _LOCK_NAME
-            ):
+            if not _same_open_file_at(descriptor, session._namespace_fd, _LOCK_NAME):
                 try:
                     _unlock(descriptor)
                 except Exception:
@@ -357,9 +355,7 @@ class RefreshSession:
                         or _read_staged_payload(temporary) != temporary.payload
                     ):
                         self._warn(ObservabilityWarning.PATH_UNSAFE)
-                        if _restore_staged_file_at(
-                            self._namespace_fd, name, temporary
-                        ):
+                        if _restore_staged_file_at(self._namespace_fd, name, temporary):
                             _fsync_directory_fd(self._namespace_fd)
                             paths[name] = self.namespace / name
                         else:
@@ -398,8 +394,7 @@ class RefreshSession:
             self.namespace is not None
             and self._namespace_fd is not None
             and self._namespace_identity is not None
-            and _directory_fd_identity(self._namespace_fd)
-            == self._namespace_identity
+            and _directory_fd_identity(self._namespace_fd) == self._namespace_identity
             and _directory_identity(self.namespace) == self._namespace_identity
         )
         if not namespace_is_safe:
@@ -429,9 +424,7 @@ class RefreshSession:
                 self.namespace / _LOCK_NAME,
                 self._namespace_fd,
             )
-        return _same_open_file_at(
-            self._lock_fd, self._namespace_fd, _LOCK_NAME
-        )
+        return _same_open_file_at(self._lock_fd, self._namespace_fd, _LOCK_NAME)
 
     def _warn(self, warning: ObservabilityWarning) -> Self:
         self._result = self._result.with_warning(warning)
@@ -478,17 +471,17 @@ def _prepare_namespace_path(
     return namespace, root_identity, namespace_identity
 
 
-def _record_report_warnings(
-    session: RefreshSession, report: Mapping[str, Any]
-) -> None:
+def _record_report_warnings(session: RefreshSession, report: Mapping[str, Any]) -> None:
     diagnostics = report.get("diagnostics")
     if not isinstance(diagnostics, Mapping):
         session._warn(ObservabilityWarning.HISTORY_INVALID)
         return
     raw_warnings = diagnostics.get("warnings")
-    warning_values = {
-        value for value in raw_warnings if isinstance(value, str)
-    } if isinstance(raw_warnings, list) else set()
+    warning_values = (
+        {value for value in raw_warnings if isinstance(value, str)}
+        if isinstance(raw_warnings, list)
+        else set()
+    )
     if warning_values & _BUDGET_DIAGNOSTICS:
         session._warn(ObservabilityWarning.BUDGET_EXHAUSTED)
     if warning_values - _BUDGET_DIAGNOSTICS:
@@ -598,9 +591,7 @@ def _open_posix_directory_chain(path: Path) -> int | None:
                 descriptor, component
             ):
                 return None
-            inspected = os.stat(
-                component, dir_fd=descriptor, follow_symlinks=False
-            )
+            inspected = os.stat(component, dir_fd=descriptor, follow_symlinks=False)
             if not _safe_directory(inspected):
                 return None
             child: int | None = None
@@ -613,9 +604,7 @@ def _open_posix_directory_chain(path: Path) -> int | None:
                     dir_fd=descriptor,
                 )
                 opened = os.fstat(child)
-                current = os.stat(
-                    component, dir_fd=descriptor, follow_symlinks=False
-                )
+                current = os.stat(component, dir_fd=descriptor, follow_symlinks=False)
             except OSError:
                 if child is not None:
                     _close_quietly(child)
@@ -625,8 +614,7 @@ def _open_posix_directory_chain(path: Path) -> int | None:
                 or not _safe_directory(current)
                 or (inspected.st_dev, inspected.st_ino)
                 != (opened.st_dev, opened.st_ino)
-                or (opened.st_dev, opened.st_ino)
-                != (current.st_dev, current.st_ino)
+                or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
             ):
                 assert child is not None
                 _close_quietly(child)
@@ -679,9 +667,7 @@ def _canonical_child_exact(directory_fd: int, name: str) -> bool:
     names = _directory_names(directory_fd)
     if names is None:
         return False
-    return [entry for entry in names if entry.casefold() == name.casefold()] == [
-        name
-    ]
+    return [entry for entry in names if entry.casefold() == name.casefold()] == [name]
 
 
 def _directory_names(directory_fd: int) -> list[str] | None:
@@ -753,16 +739,12 @@ def _windows_directory_names_native(  # pragma: no cover - Windows CI
         while True:
             address = ctypes.addressof(buffer) + offset
             next_offset = int.from_bytes(ctypes.string_at(address, 4), "little")
-            name_length = int.from_bytes(
-                ctypes.string_at(address + 8, 4), "little"
-            )
+            name_length = int.from_bytes(ctypes.string_at(address + 8, 4), "little")
             end = offset + 12 + name_length
             if end > len(buffer):
                 return None
             try:
-                name = ctypes.string_at(address + 12, name_length).decode(
-                    "utf-16-le"
-                )
+                name = ctypes.string_at(address + 12, name_length).decode("utf-16-le")
             except UnicodeDecodeError:
                 return None
             names.append(name)
@@ -845,9 +827,7 @@ def _unlock(descriptor: int) -> None:
     else:
         import fcntl
 
-        fcntl.lockf(
-            descriptor, fcntl.LOCK_UN, 1, _LOCK_OFFSET, os.SEEK_SET
-        )
+        fcntl.lockf(descriptor, fcntl.LOCK_UN, 1, _LOCK_OFFSET, os.SEEK_SET)
 
 
 def _try_lock_windows(descriptor: int) -> bool:  # pragma: no cover - Windows CI
@@ -911,16 +891,12 @@ def _windows_file_lock(  # pragma: no cover - Windows CI
             ctypes.POINTER(_Overlapped),
         )
         operation.restype = wintypes.BOOL
-        succeeded = operation(
-            handle, 0, 1, 0, ctypes.byref(overlapped)
-        )
+        succeeded = operation(handle, 0, 1, 0, ctypes.byref(overlapped))
     if not succeeded:
         raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
 
 
-def _safe_target_snapshot_at(
-    directory_fd: int, name: str
-) -> _TargetSnapshot | None:
+def _safe_target_snapshot_at(directory_fd: int, name: str) -> _TargetSnapshot | None:
     if not _canonical_child_safe(directory_fd, name):
         return None
     try:
@@ -1000,10 +976,7 @@ def _write_descriptor(descriptor: int, payload: bytes) -> None:
 def _read_staged_payload(staged: _StagedFile | _StagedPath) -> bytes | None:
     try:
         metadata = os.fstat(staged.descriptor)
-        if (
-            not _safe_file(metadata)
-            or _file_snapshot(metadata) != staged.file
-        ):
+        if not _safe_file(metadata) or _file_snapshot(metadata) != staged.file:
             return None
         os.lseek(staged.descriptor, 0, os.SEEK_SET)
         chunks: list[bytes] = []
@@ -1228,10 +1201,8 @@ def _open_windows_directory(path: Path) -> int | None:
             or not _safe_directory(current)
             or inspected is None
             or current is None
-            or (inspected.st_dev, inspected.st_ino)
-            != (opened.st_dev, opened.st_ino)
-            or (opened.st_dev, opened.st_ino)
-            != (current.st_dev, current.st_ino)
+            or (inspected.st_dev, inspected.st_ino) != (opened.st_dev, opened.st_ino)
+            or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
         ):
             return None
         result = descriptor
@@ -1349,9 +1320,7 @@ def _open_lock_path(
             before = None
         except OSError:
             return None
-        if before is not None and (
-            not _safe_file(before) or not _single_link(before)
-        ):
+        if before is not None and (not _safe_file(before) or not _single_link(before)):
             return None
         if not parent_is_safe():
             return None
@@ -1370,8 +1339,7 @@ def _open_lock_path(
             or _file_snapshot(opened).identity != _file_snapshot(at_path).identity
             or (
                 before is not None
-                and _file_snapshot(before).identity
-                != _file_snapshot(opened).identity
+                and _file_snapshot(before).identity != _file_snapshot(opened).identity
             )
             or not parent_is_safe()
         ):
@@ -1426,9 +1394,7 @@ def _open_windows_child(
     return os.open(path.name, flags, mode, dir_fd=directory_fd)
 
 
-def _windows_child_lstat(
-    directory_fd: int | None, path: Path
-) -> os.stat_result:
+def _windows_child_lstat(directory_fd: int | None, path: Path) -> os.stat_result:
     if _uses_native_windows_paths() and directory_fd is not None:
         return _stat_windows_relative_native(directory_fd, path.name)
     if directory_fd is None:
@@ -1436,9 +1402,7 @@ def _windows_child_lstat(
     return os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
 
 
-def _replace_windows_child(
-    directory_fd: int, staged: _StagedPath, target: str
-) -> None:
+def _replace_windows_child(directory_fd: int, staged: _StagedPath, target: str) -> None:
     if _uses_native_windows_paths():
         _replace_windows_relative_native(directory_fd, staged, target)
         return
@@ -1815,9 +1779,7 @@ def _stage_path(session: RefreshSession, payload: bytes) -> _StagedPath | None:
                     and opened_identity is not None
                     and _uses_native_windows_paths()
                 ):
-                    _discard_windows_staged_handle(
-                        descriptor, opened_identity
-                    )
+                    _discard_windows_staged_handle(descriptor, opened_identity)
             finally:
                 _close_quietly(descriptor)
 
@@ -1844,25 +1806,19 @@ def _same_staged_path(session: RefreshSession, staged: _StagedPath) -> bool:
     return (
         session._safe_namespace()
         and session._namespace_fd is not None
-        and _canonical_child_exact(
-            session._namespace_fd, staged.path.name
-        )
+        and _canonical_child_exact(session._namespace_fd, staged.path.name)
         and _safe_file(opened)
         and _single_link(opened)
         and _file_snapshot(opened) == staged.file
         and _read_staged_payload(staged) == staged.payload
-        and _path_has_identity(
-            staged.path, staged.file.identity, session._namespace_fd
-        )
+        and _path_has_identity(staged.path, staged.file.identity, session._namespace_fd)
     )
 
 
 def _close_staged_path(staged: _StagedPath, *, installed: bool) -> None:
     try:
         if not installed and _uses_native_windows_paths():
-            _discard_windows_staged_handle(
-                staged.descriptor, staged.file.identity
-            )
+            _discard_windows_staged_handle(staged.descriptor, staged.file.identity)
     finally:
         _close_quietly(staged.descriptor)
 
@@ -1880,8 +1836,7 @@ def _fsync_directory_path(session: RefreshSession) -> None:
         if (
             _safe_directory(opened)
             and session._safe_namespace()
-            and _directory_identity(session.namespace)
-            == session._namespace_identity
+            and _directory_identity(session.namespace) == session._namespace_identity
         ):
             os.fsync(descriptor)
     except OSError:
@@ -1921,9 +1876,7 @@ def _publish_windows(session: RefreshSession) -> ObservabilityResult:
                 ):
                     session._warn(ObservabilityWarning.PATH_UNSAFE)
                     continue
-                _replace_windows_child(
-                    session._namespace_fd, staged, target.name
-                )
+                _replace_windows_child(session._namespace_fd, staged, target.name)
                 renamed = True
                 after = _safe_target_snapshot_path(target, session._namespace_fd)
                 if (
@@ -1993,9 +1946,7 @@ def _canonical_child_safe_path(path: Path, directory_fd: int | None) -> bool:
         names = [entry.name for entry in path.parent.iterdir()]
     except OSError:
         return False
-    matches = [
-        entry for entry in names if entry.casefold() == path.name.casefold()
-    ]
+    matches = [entry for entry in names if entry.casefold() == path.name.casefold()]
     return matches in ([], [path.name])
 
 
@@ -2016,9 +1967,7 @@ def _restore_staged_path(
     if installed:
         after = _safe_target_snapshot_path(target, session._namespace_fd)
         installed_is_trusted = (
-            after is not None
-            and after.exists
-            and after.file == trusted.file
+            after is not None and after.exists and after.file == trusted.file
         )
         if installed_is_trusted:
             return (
@@ -2075,9 +2024,7 @@ def _restore_staged_path_by_replacement(
     try:
         if not _same_staged_path(session, recovery):
             return False
-        _replace_windows_child(
-            session._namespace_fd, recovery, target.name
-        )
+        _replace_windows_child(session._namespace_fd, recovery, target.name)
         renamed = True
         after = _safe_target_snapshot_path(target, session._namespace_fd)
         return (

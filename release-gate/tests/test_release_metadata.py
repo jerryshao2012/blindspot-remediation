@@ -50,7 +50,7 @@ def test_package_metadata_uses_the_license_file_and_authoritative_urls() -> None
 
 
 def test_version_agrees_across_release_metadata() -> None:
-    assert __version__ == "0.4.0"
+    assert __version__ == "0.5.0"
     compatibility = json.loads(
         _read("skills/release-gate/references/compatibility.json")
     )

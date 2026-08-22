@@ -254,11 +254,16 @@ preserve the reserve, and budget exhaustion becomes a complete
 makes every allowed 16-200 MiB total feasible rather than relying on disk
 exhaustion during finalization.
 
-## Operational guidance
-
-Pin and review the gate version, review base-policy changes like production
-code, keep dependency installation deterministic, and select an explicit base
-commit. In CI, use an ephemeral low-privilege runner without unrelated secrets.
 Archive evidence before deleting the workspace. A `PASS` is a policy result,
 not a guarantee of security or correctness; the gate neither performs nor
 authorizes a merge or deployment.
+
+## Repair security and isolation
+
+The bounded repair workflow operates under strict safety guarantees:
+- **Untrusted logs**: All logs from check failures are treated as untrusted data.
+- **No network/dependency installs**: Repair workers do not have network access and cannot install new dependencies or modify `.release-gate.yaml`, control launchers, or playbooks.
+- **Strict path boundaries**: Repair edits are confined strictly to approved paths computed from initial changed files and base playbooks.
+- **Source worktree immutability**: The source repository worktree and real index remain untouched during repair iterations.
+- **Pre-apply recapture verification**: Before applying any passing patch, the source worktree is recaptured and verified against candidate `C0`'s tree and patch digest. Any intervening edits cause an immediate abort.
+- **Transactional rollback**: If patch application fails, changes are cleanly rolled back to the base commit.

@@ -107,9 +107,7 @@ def test_campaign_uses_only_primary_oracle_valid_trials_for_safety_metrics() -> 
     campaign = load_campaign()
     records = [
         record("trial-good"),
-        record(
-            "trial-false-release", truth=False, classification="FALSE_RELEASE"
-        ),
+        record("trial-false-release", truth=False, classification="FALSE_RELEASE"),
         record(
             "trial-oracle-error",
             truth=None,
@@ -314,9 +312,7 @@ def test_refresh_fails_closed_on_malformed_record_and_preserves_aggregates(
 
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlinks unavailable")
 @pytest.mark.parametrize("target_name", ["records", "campaign-v1.json", "index.html"])
-def test_publication_refuses_symlink_targets(
-    tmp_path: Path, target_name: str
-) -> None:
+def test_publication_refuses_symlink_targets(tmp_path: Path, target_name: str) -> None:
     campaign = load_campaign()
     root = tmp_path / "campaign"
     root.mkdir()
