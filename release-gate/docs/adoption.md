@@ -228,6 +228,12 @@ run is disclosed as `N-A`, `UNAVAILABLE`, or `SUBSTITUTED`, never as passed.
 Custom checkers must fail closed, and aggregate checks require a reviewed fixed
 expected-layer manifest and omission/failure negative controls.
 
+### Repositories without Oracles
+
+Release Gate does not require or invoke external hidden oracles (perfect graders typically used in evaluation campaigns). If a repository normally does not have an oracle, you map the failure modes to the repository's existing imperfect checks (e.g., standard unit tests, static analysis, linters). 
+
+For absolute correctness checks that you cannot perfectly verify without an oracle, explicitly disclose them in the assurance map as `N-A`, `UNAVAILABLE`, or `SUBSTITUTED`. They must never be falsely recorded as passing. A `PASS` verdict from the gate therefore means the candidate met all requirements of the *recorded policy* using the repository's available checks; it is not a mathematical proof of correctness.
+
 After initialization:
 
 1. Review and commit `.release-gate.yaml` and every script it invokes.
@@ -407,26 +413,75 @@ plugins, cloud agents, hooks, MCP servers, managed service, or PyPI publication.
 The assistant archive is a standalone skill; the local Python executable
 remains the only verdict authority.
 
-## CI use
+## SDLC CI/CD Integration
 
-Check out enough history to resolve the trusted base commit, install the exact
-verified release wheel, and pass the commit ID explicitly as `--base`. Do not
-accept a candidate-controlled base ref or install the gate from candidate
-code. Store the complete evidence directory as one CI artifact and branch on
-exit 0, 1, or 2; treat 3 and 4 as pipeline failures rather than verdicts.
+Release Gate is designed to run in standard SDLC CI/CD pipelines (like GitHub Actions, GitLab CI, or Jenkins) to enforce the repository's `.release-gate.yaml` policy on candidate changes. It is particularly useful in pull request validation.
 
-Consumers must validate the schema and contract version before interpreting
-the closed v1 reason-code registry. Unknown or context-invalid codes are
-version or validation errors, not warnings to ignore. Root reason arrays are
-stable machine data containing ASCII-sorted atomic causes; log prose is not.
-Size `limits.total_bytes` using the exact patch/config feasibility rule and the
-fixed 7 MiB finalization reserve. A preflight-infeasible change is exit 3, not
-a candidate verdict.
+### Best Practices for CI/CD
 
-Linux, macOS, and Windows jobs should each run `validate`. Repositories
-claiming platform support must execute at least one real gate run on every
-claimed operating system because argv, executable names, path casing, signals,
-and process termination differ.
+1. **Use the Trusted Base:** Always pass the explicitly trusted target branch (e.g., `origin/main` or `HEAD^`) as `--base`. Never allow the candidate code to specify the base revision or alter the installation of Release Gate itself.
+2. **Immutable Install:** Install the exact, checksum-verified release wheel URL (never a floating `latest` tag).
+3. **Handle Pipeline Exits:** `release-gate run` exits 0 (PASS), 1 (FAIL), or 2 (NEEDS_HUMAN). Treat these as your business-logic verdicts. Exits 3 or 4 indicate operational pipeline failures (e.g., malformed configuration, missing dependencies) and should fail the pipeline directly.
+4. **Preserve Evidence:** Store the `.release-gate/runs/` evidence directory as a pipeline artifact. This provides a detailed, tamper-evident `result.json` explaining the verdict.
+5. **Matrix Testing:** Repositories claiming cross-platform support should run the gate on all claimed operating systems (Linux, macOS, Windows) because argv handling, executable names, and path casing differ natively.
+
+### Example: GitHub Actions Pull Request Check
+
+Below is a complete example of applying Release Gate on a pull request using GitHub Actions. It downloads the verified CLI wheel and evaluates the PR candidate against the target branch (`github.base_ref`).
+
+```yaml
+name: Release Gate Enforcement
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  gate:
+    name: Evaluate Candidate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch enough history for the gate to reconstruct the base commit
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.12.5"
+
+      - name: Install and verify Release Gate
+        run: |
+          # Download immutable manifest and wheel
+          curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/SHA256SUMS
+          curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release_gate-0.6.0-py3-none-any.whl
+          
+          # Verify checksum
+          grep '  release_gate-0.6.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+          
+          # Install CLI
+          uv tool install ./release_gate-0.6.0-py3-none-any.whl
+
+      - name: Run Release Gate Validate
+        run: release-gate validate --repo .
+
+      - name: Run Release Gate Evaluation
+        run: |
+          # Evaluate against the pull request's target branch
+          release-gate run --repo . --base "origin/${{ github.base_ref }}"
+        
+      - name: Archive Gate Evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-evidence
+          path: .release-gate/runs/
+          retention-days: 14
+```
+
+Consumers must validate the schema and contract version before interpreting the closed v1 reason-code registry in evidence files. Unknown or context-invalid codes are version or validation errors, not warnings to ignore. Size `limits.total_bytes` using the exact patch/config feasibility rule and the fixed 7 MiB finalization reserve. A preflight-infeasible change is exit 3, not a candidate verdict.
 
 ## Existing blindspot demo
 
