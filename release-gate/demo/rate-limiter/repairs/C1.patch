@@ -1,0 +1,12 @@
+diff --git a/src/ratelimiter/__init__.py b/src/ratelimiter/__init__.py
+--- a/src/ratelimiter/__init__.py
++++ b/src/ratelimiter/__init__.py
+@@ -41,7 +41,7 @@ class RateLimiter:
+     def _prune(self, key: str, now: float) -> deque[float]:
+         """Drop hits older than the window; forget keys with none left."""
+         hits = self._hits.get(key, deque())
+-        while hits and now - hits[0] >= self._window:
++        while hits and now - hits[0] <= self._window:
+             hits.popleft()
+         if not hits:
+             self._hits.pop(key, None)

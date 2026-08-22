@@ -54,8 +54,16 @@ def test_parser_exposes_rate_limiter_demo_commands() -> None:
     driver = load_driver()
     parser = driver.build_parser()
 
-    for command in ("doctor", "setup", "reset", "verify"):
+    for command in ("doctor", "setup", "reset", "verify", "verify-repair"):
         assert parser.parse_args([command]).command == command
+    parsed_repair = parser.parse_args(["prepare-repair"])
+    assert parsed_repair.command == "prepare-repair"
+    assert parsed_repair.graphify == "missing"
+    assert parser.parse_args(
+        ["prepare-repair", "--graphify", "stale"]
+    ).graphify == "stale"
+    with pytest.raises(SystemExit):
+        parser.parse_args(["prepare-repair", "--graphify", "fresh"])
     for command in ("inspect", "grade"):
         parsed = parser.parse_args([command, "--result", "result.json"])
         assert parsed.command == command
@@ -291,6 +299,176 @@ def test_control_patches_apply_to_clean_baseline(tmp_path: Path) -> None:
         subprocess.run(["git", "checkout", "--", "."], cwd=repository, check=True)
 
 
+def test_repair_patches_apply_sequentially_and_end_green(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    shutil.copytree(
+        DEMO,
+        repository,
+        ignore=shutil.ignore_patterns("workbench", ".venv", "__pycache__"),
+    )
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Demo Test"], cwd=repository, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "demo@example.invalid"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(["git", "add", "-A"], cwd=repository, check=True)
+    subprocess.run(["git", "commit", "-qm", "baseline"], cwd=repository, check=True)
+    base_tree = subprocess.run(
+        ["git", "rev-parse", "HEAD^{tree}"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    trees: list[str] = []
+    digests: list[str] = []
+
+    for patch_name in ("C0.patch", "C1.patch", "C2.patch"):
+        patch = DEMO / "repairs" / patch_name
+        subprocess.run(
+            ["git", "apply", "--check", str(patch)],
+            cwd=repository,
+            check=True,
+        )
+        subprocess.run(["git", "apply", str(patch)], cwd=repository, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=repository, check=True)
+        tree = subprocess.run(
+            ["git", "write-tree"],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        diff = subprocess.run(
+            [
+                "git",
+                "diff-tree",
+                "--no-commit-id",
+                "--binary",
+                "--full-index",
+                "--no-color",
+                "--no-ext-diff",
+                "--find-renames",
+                "-r",
+                "-p",
+                base_tree,
+                tree,
+            ],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+        ).stdout
+        trees.append(tree)
+        digests.append(__import__("hashlib").sha256(diff).hexdigest())
+
+    source = (repository / "src" / "ratelimiter" / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+    assert "now - hits[0] > self._window" in source
+    assert "A limiter should use an injected monotonic clock in production." in (
+        repository / "README.md"
+    ).read_text(encoding="utf-8")
+    assert len({*trees}) == 3
+    assert len({*digests}) == 3
+
+
+def test_generated_trusted_base_ignores_graphify_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    repository = tmp_path / "rate-limiter"
+    repository.mkdir()
+    monkeypatch.setattr(driver, "REPOSITORY", repository)
+
+    (repository / ".gitignore").write_text("/.release-gate/runs/\n", encoding="utf-8")
+
+    driver._ensure_gitignore_entry("/graphify-out/")
+
+    assert "/graphify-out/" in (repository / ".gitignore").read_text(encoding="utf-8")
+
+
+def test_prepare_graphify_modes_create_missing_or_stale_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    repository = tmp_path / "rate-limiter"
+    graph = repository / "graphify-out" / "graph.json"
+    repository.mkdir()
+    monkeypatch.setattr(driver, "REPOSITORY", repository)
+    monkeypatch.setattr(driver, "_git", lambda *args, capture=False: "a" * 40)
+
+    driver._prepare_graphify_fixture("missing")
+    assert not graph.exists()
+
+    driver._prepare_graphify_fixture("stale")
+    payload = json.loads(graph.read_text(encoding="utf-8"))
+    assert payload["built_at_commit"] == "0" * 40
+    assert payload["built_at_commit"] != "a" * 40
+
+
+def test_repair_preparation_refuses_leftover_approval_or_temp_dirs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench = tmp_path / "workbench"
+    approvals = workbench / "approvals"
+    repair_temp = workbench / "repair-temp"
+    workbench.mkdir()
+    approvals.mkdir()
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "APPROVALS", approvals)
+    monkeypatch.setattr(driver, "REPAIR_TEMP", repair_temp)
+
+    with pytest.raises(driver.DemoError, match=r"demo[.]py reset"):
+        driver._ensure_no_repair_leftovers()
+
+
+def test_repair_approval_files_bind_session_and_final_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    approvals = tmp_path / "approvals"
+    monkeypatch.setattr(driver, "APPROVALS", approvals)
+
+    start = driver._write_start_approval("rep-demo")
+    assert json.loads(start.read_text(encoding="utf-8"))["session_id"] == "rep-demo"
+
+    final = driver._write_final_approval(
+        "rep-demo",
+        final_candidate_tree="b" * 40,
+        final_patch_digest="c" * 64,
+    )
+    final_doc = json.loads(final.read_text(encoding="utf-8"))
+    assert final_doc["session_id"] == "rep-demo"
+    assert final_doc["final_candidate_tree"] == "b" * 40
+    assert final_doc["final_patch_digest"] == "c" * 64
+    assert final_doc["approved_at"].endswith("Z")
+
+
+def test_repair_protocol_output_parsing_and_state_assertions() -> None:
+    driver = load_driver()
+    output = "\n".join(
+        (
+            "REPAIR_SESSION: /tmp/session",
+            "REPAIR_STATE: awaiting_approval",
+            "NEXT_ACTION: approve_or_cancel",
+        )
+    )
+
+    assert driver._output_value(output, "REPAIR_SESSION") == "/tmp/session"
+    driver._assert_repair_state(
+        output, state="awaiting_approval", next_action="approve_or_cancel"
+    )
+    with pytest.raises(driver.DemoError, match="expected repair state"):
+        driver._assert_repair_state(
+            output, state="repairing", next_action="edit_workspace"
+        )
+
+
 def test_owned_directory_removal_refuses_paths_outside_workbench(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -314,6 +492,16 @@ def test_rate_limiter_readme_has_both_complete_operator_paths() -> None:
         "uv tool install --force .\\release-gate",
         "cd .\\release-gate\\demo\\rate-limiter",
         "uv run --python 3.12 --no-project python demo.py verify",
+        "uv run --python 3.12 --no-project python demo.py verify-repair",
+        "verify-repair: C0 FAIL -> C1 FAIL -> C2 PASS -> applied",
+        "demo.py prepare-repair --graphify stale",
+        "/release-gate repair --base release-gate-rate-limiter-base",
+        "awaiting_approval",
+        "awaiting_final_approval",
+        "workbench\\approvals",
+        "workbench/repair-temp",
+        "Graphify",
+        "successful live host observation remains pending until Copilot is available",
         "uv pip install",
         "demo.py verify",
         "/release-gate run --base release-gate-rate-limiter-base",

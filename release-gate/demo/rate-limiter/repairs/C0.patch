@@ -1,0 +1,24 @@
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,8 @@ This demo answers a concrete question: can Release Gate distinguish a safe
+ candidate, a behavioral regression, and a change to the policy that judges the
+ candidate?
+ 
++A limiter should use an injected monotonic clock in production.
++
+ The helper creates an isolated Git repository under `workbench/`. Release Gate
+ reconstructs separate base and candidate workspaces, records its verdict, and
+ only then runs an independent oracle. A complete automated run normally takes
+diff --git a/src/ratelimiter/__init__.py b/src/ratelimiter/__init__.py
+--- a/src/ratelimiter/__init__.py
++++ b/src/ratelimiter/__init__.py
+@@ -41,7 +41,7 @@ class RateLimiter:
+     def _prune(self, key: str, now: float) -> deque[float]:
+         """Drop hits older than the window; forget keys with none left."""
+         hits = self._hits.get(key, deque())
+-        while hits and now - hits[0] > self._window:
++        while hits and now - hits[0] >= self._window:
+             hits.popleft()
+         if not hits:
+             self._hits.pop(key, None)

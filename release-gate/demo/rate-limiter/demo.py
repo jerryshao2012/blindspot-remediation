@@ -11,20 +11,25 @@ import sys
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
 CONTROLS = ROOT / "controls"
+REPAIRS = ROOT / "repairs"
 ORACLE = ROOT / "oracle" / "test_ratelimiter_oracle.py"
 WORKBENCH = ROOT / "workbench"
 REPOSITORY = WORKBENCH / "rate-limiter"
 TASK_VENV = WORKBENCH / "task-venv"
 ORACLE_VENV = WORKBENCH / "oracle-venv"
 CONTROL_EVIDENCE = WORKBENCH / "control-evidence"
+APPROVALS = WORKBENCH / "approvals"
+REPAIR_TEMP = WORKBENCH / "repair-temp"
 BASE_REF = "release-gate-rate-limiter-base"
 EXPECTED_GATE_VERSION = "release-gate 0.6.0"
+EXPECTED_REPAIR_PATHS = ("README.md", "src/ratelimiter/__init__.py")
 SOURCE_ITEMS = (
     "README.md",
     "evidence.md",
@@ -65,8 +70,15 @@ class ResultSummary:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for command in ("doctor", "setup", "reset", "verify"):
+    for command in ("doctor", "setup", "reset", "verify", "verify-repair"):
         commands.add_parser(command)
+    prepare_repair = commands.add_parser("prepare-repair")
+    prepare_repair.add_argument(
+        "--graphify",
+        choices=("missing", "stale"),
+        default="missing",
+        help="prepare with no graph or an ignored stale graph fixture",
+    )
     control = commands.add_parser("control")
     control.add_argument("scenario", choices=("pass", "fail", "needs-human"))
     for command in ("inspect", "grade"):
@@ -161,6 +173,7 @@ def _run(
     cwd: Path | None = None,
     check: bool = True,
     capture: bool = False,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = tuple(os.fspath(argument) for argument in arguments)
     try:
@@ -170,6 +183,7 @@ def _run(
             check=check,
             capture_output=capture,
             text=True,
+            env=env,
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise DemoError(f"command failed: {' '.join(command)}") from error
@@ -234,6 +248,15 @@ def _copy_baseline() -> None:
             raise DemoError(f"baseline source is missing: {source}")
 
 
+def _ensure_gitignore_entry(entry: str) -> None:
+    ignore = REPOSITORY / ".gitignore"
+    existing = ignore.read_text(encoding="utf-8") if ignore.exists() else ""
+    lines = existing.splitlines()
+    if entry not in lines:
+        suffix = "" if not existing or existing.endswith("\n") else "\n"
+        ignore.write_text(f"{existing}{suffix}{entry}\n", encoding="utf-8")
+
+
 def _create_environment(venv: Path, *, oracle_only: bool = False) -> None:
     _run(("uv", "venv", "--python", "3.12", "--seed", venv))
     python = _venv_python(venv)
@@ -286,6 +309,7 @@ def setup() -> None:
                 ASSETS / ".release-gate.yaml",
             )
         )
+        _ensure_gitignore_entry("/graphify-out/")
         _git("add", "-A")
         _git("commit", "--quiet", "-m", "chore: establish rate-limiter demo baseline")
         _git("tag", BASE_REF)
@@ -330,6 +354,8 @@ def reset() -> None:
     _git("clean", "-fdx", "-e", ".release-gate/runs/")
     _remove_owned_directory(TASK_VENV)
     _remove_owned_directory(ORACLE_VENV)
+    _remove_owned_directory(APPROVALS)
+    _remove_owned_directory(REPAIR_TEMP)
     _create_environment(TASK_VENV)
     _verify_baseline()
     print(f"reset: {BASE_REF}")
@@ -347,6 +373,67 @@ def control(scenario: str) -> None:
         raise DemoError(f"control patch produced no candidate changes: {scenario}")
     print(changed)
     print(f"control ready: {scenario}")
+
+
+def _ensure_no_repair_leftovers() -> None:
+    leftovers = [path for path in (APPROVALS, REPAIR_TEMP) if path.exists()]
+    if leftovers:
+        names = ", ".join(str(path) for path in leftovers)
+        raise DemoError(f"repair leftovers exist ({names}); run demo.py reset")
+
+
+def _remove_repository_directory(path: Path) -> None:
+    if not path.exists() and not path.is_symlink():
+        return
+    if path.is_symlink() or path.resolve().parent != REPOSITORY.resolve():
+        raise DemoError(f"refusing to remove unsafe repository path: {path}")
+    shutil.rmtree(path)
+
+
+def _prepare_graphify_fixture(mode: str) -> None:
+    graphify_dir = REPOSITORY / "graphify-out"
+    if mode == "missing":
+        _remove_repository_directory(graphify_dir)
+        return
+    if mode != "stale":
+        raise DemoError(f"unsupported graphify mode: {mode}")
+    _remove_repository_directory(graphify_dir)
+    graphify_dir.mkdir(mode=0o700)
+    base_commit = _git("rev-parse", BASE_REF, capture=True)
+    stale_commit = "0" * 40 if base_commit != "0" * 40 else "1" * 40
+    graph = {
+        "version": 1,
+        "built_at_commit": stale_commit,
+        "nodes": [],
+        "edges": [],
+        "metadata": {
+            "purpose": "ignored stale graph fixture for rate-limiter repair demo"
+        },
+    }
+    (graphify_dir / "graph.json").write_text(
+        json.dumps(graph, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def prepare_repair(graphify: str = "missing") -> None:
+    _ensure_no_repair_leftovers()
+    if WORKBENCH.exists():
+        _verify_repository()
+        reset()
+    else:
+        setup()
+    _prepare_graphify_fixture(graphify)
+    patch = REPAIRS / "C0.patch"
+    if not patch.is_file():
+        raise DemoError(f"repair patch is missing: {patch}")
+    _git("apply", "--check", os.fspath(patch))
+    _git("apply", os.fspath(patch))
+    changed = tuple(_git("diff", "--name-only", BASE_REF, capture=True).splitlines())
+    if set(changed) != set(EXPECTED_REPAIR_PATHS):
+        raise DemoError(f"repair candidate changed unexpected paths: {changed}")
+    print(_git("status", "--short", capture=True))
+    print(f"repair candidate ready: C0 ({graphify} graphify)")
 
 
 def inspect_result(path: Path) -> ResultSummary:
@@ -422,6 +509,231 @@ def _result_path(stdout: str) -> Path:
     if len(paths) != 1:
         raise DemoError("gate output did not contain exactly one RESULT path")
     return Path(paths[0])
+
+
+def _output_value(stdout: str, key: str) -> str:
+    prefix = f"{key}: "
+    values = [
+        line.removeprefix(prefix)
+        for line in stdout.splitlines()
+        if line.startswith(prefix)
+    ]
+    if len(values) != 1:
+        raise DemoError(f"gate output did not contain exactly one {key} line")
+    return values[0]
+
+
+def _assert_repair_state(stdout: str, *, state: str, next_action: str) -> None:
+    actual_state = _output_value(stdout, "REPAIR_STATE")
+    actual_next_action = _output_value(stdout, "NEXT_ACTION")
+    if actual_state != state or actual_next_action != next_action:
+        raise DemoError(
+            "expected repair state "
+            f"{state}/{next_action}, got {actual_state}/{actual_next_action}"
+        )
+
+
+def _read_session(session_dir: Path) -> dict[str, Any]:
+    session_path = session_dir / "repair-session-v1.json"
+    value = json.loads(session_path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise DemoError("repair session JSON is invalid")
+    return value
+
+
+def _write_json(path: Path, value: dict[str, Any]) -> Path:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_start_approval(session_id: str) -> Path:
+    return _write_json(APPROVALS / "start-approval.json", {"session_id": session_id})
+
+
+def _write_final_approval(
+    session_id: str, *, final_candidate_tree: str, final_patch_digest: str
+) -> Path:
+    approved_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _write_json(
+        APPROVALS / "final-approval.json",
+        {
+            "session_id": session_id,
+            "final_candidate_tree": final_candidate_tree,
+            "final_patch_digest": final_patch_digest,
+            "approved_at": approved_at,
+        },
+    )
+
+
+def _source_manifest() -> str:
+    digest = __import__("hashlib").sha256()
+    raw = _git("ls-files", "-z", capture=True)
+    for name in sorted(item for item in raw.split("\0") if item):
+        path = REPOSITORY / name
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+        data = path.read_bytes()
+        digest.update(str(len(data)).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(data)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _repair_environment() -> dict[str, str]:
+    REPAIR_TEMP.mkdir(mode=0o700, parents=True, exist_ok=True)
+    env = os.environ.copy()
+    for key in ("TMPDIR", "TEMP", "TMP"):
+        env[key] = str(REPAIR_TEMP)
+    return env
+
+
+def _apply_repair_patch(workspace: Path, patch_name: str) -> None:
+    patch = REPAIRS / patch_name
+    if not patch.is_file():
+        raise DemoError(f"repair patch is missing: {patch}")
+    _run(("git", "apply", "--check", patch), cwd=workspace)
+    _run(("git", "apply", patch), cwd=workspace)
+
+
+def _assert_repair_session(
+    session: dict[str, Any], expected_verdicts: tuple[str, ...]
+) -> None:
+    attempts = session.get("attempts")
+    if not isinstance(attempts, list):
+        raise DemoError("repair session attempts are invalid")
+    if tuple(attempt.get("verdict") for attempt in attempts) != expected_verdicts:
+        raise DemoError(f"repair attempt verdicts did not match {expected_verdicts}")
+    if session.get("attempt_cap") != 2:
+        raise DemoError("repair attempt cap is not 2")
+    if set(session.get("approved_paths", ())) != set(EXPECTED_REPAIR_PATHS):
+        raise DemoError("repair approved paths changed")
+    trees = {str(attempt.get("candidate_tree")) for attempt in attempts}
+    digests = {str(attempt.get("patch_digest")) for attempt in attempts}
+    if len(trees) != len(attempts) or len(digests) != len(attempts):
+        raise DemoError("repair attempts are not distinct")
+
+
+def verify_repair() -> None:
+    _ensure_no_repair_leftovers()
+    prepare_repair("stale")
+    source_c0 = _source_manifest()
+    env = _repair_environment()
+    start = _run(
+        _gate_argv(
+            "repair-start",
+            "--repo",
+            REPOSITORY,
+            "--base",
+            BASE_REF,
+            "--session-id",
+            f"rep-demo-{uuid.uuid4().hex[:8]}",
+        ),
+        capture=True,
+        env=env,
+    )
+    print(start.stderr, end="", file=sys.stderr)
+    print(start.stdout, end="")
+    _assert_repair_state(
+        start.stdout, state="awaiting_approval", next_action="approve_or_cancel"
+    )
+    session_dir = Path(_output_value(start.stdout, "REPAIR_SESSION"))
+    request_path = Path(_output_value(start.stdout, "REPAIR_REQUEST"))
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    if set(request.get("approved_paths", ())) != set(EXPECTED_REPAIR_PATHS):
+        raise DemoError("approval request paths are not the expected repair paths")
+    if request.get("attempt_cap") != 2:
+        raise DemoError("approval request attempt cap is not 2")
+
+    approval = _write_start_approval(str(request["session_id"]))
+    approved = _run(
+        _gate_argv("repair-approve", "--session", session_dir, "--approval", approval),
+        capture=True,
+    )
+    print(approved.stdout, end="")
+    _assert_repair_state(
+        approved.stdout, state="repairing", next_action="edit_workspace"
+    )
+
+    requested = _run(
+        _gate_argv("repair-request", "--session", session_dir),
+        capture=True,
+    )
+    print(requested.stdout, end="")
+    _assert_repair_state(
+        requested.stdout, state="repairing", next_action="edit_workspace"
+    )
+    workspace = Path(_output_value(requested.stdout, "WORKSPACE"))
+    _apply_repair_patch(workspace, "C1.patch")
+    evaluated_c1 = _run(
+        _gate_argv("repair-evaluate", "--session", session_dir),
+        capture=True,
+        env=env,
+    )
+    print(evaluated_c1.stdout, end="")
+    _assert_repair_state(
+        evaluated_c1.stdout, state="repairing", next_action="edit_workspace"
+    )
+    if _source_manifest() != source_c0:
+        raise DemoError("source changed while C1 was evaluated in repair workspace")
+    _assert_repair_session(_read_session(session_dir), ("FAIL", "FAIL"))
+
+    requested_again = _run(
+        _gate_argv("repair-request", "--session", session_dir),
+        capture=True,
+    )
+    print(requested_again.stdout, end="")
+    _assert_repair_state(
+        requested_again.stdout, state="repairing", next_action="edit_workspace"
+    )
+    workspace = Path(_output_value(requested_again.stdout, "WORKSPACE"))
+    _apply_repair_patch(workspace, "C2.patch")
+    evaluated_c2 = _run(
+        _gate_argv("repair-evaluate", "--session", session_dir),
+        capture=True,
+        env=env,
+    )
+    print(evaluated_c2.stdout, end="")
+    _assert_repair_state(
+        evaluated_c2.stdout,
+        state="awaiting_final_approval",
+        next_action="final_approval_and_apply",
+    )
+    if _source_manifest() != source_c0:
+        raise DemoError("source changed while C2 was evaluated in repair workspace")
+    session = _read_session(session_dir)
+    _assert_repair_session(session, ("FAIL", "FAIL", "PASS"))
+    final_attempt = session["attempts"][-1]
+    final_approval = _write_final_approval(
+        str(session["session_id"]),
+        final_candidate_tree=str(final_attempt["candidate_tree"]),
+        final_patch_digest=str(final_attempt["patch_digest"]),
+    )
+    applied = _run(
+        _gate_argv(
+            "repair-apply", "--session", session_dir, "--approval", final_approval
+        ),
+        capture=True,
+    )
+    print(applied.stdout, end="")
+    _assert_repair_state(applied.stdout, state="applied", next_action="none")
+    source = (REPOSITORY / "src" / "ratelimiter" / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+    readme = (REPOSITORY / "README.md").read_text(encoding="utf-8")
+    if "now - hits[0] > self._window" not in source:
+        raise DemoError("final source does not contain the repaired boundary")
+    if "A limiter should use an injected monotonic clock in production." not in readme:
+        raise DemoError("final source does not retain the approved README change")
+    if _oracle_truth() is not True:
+        raise DemoError("independent oracle did not pass after repair apply")
+    _remove_owned_directory(APPROVALS)
+    _remove_owned_directory(REPAIR_TEMP)
+    print("verify-repair: C0 FAIL -> C1 FAIL -> C2 PASS -> applied")
 
 
 def _verify_oracle_mutants() -> None:
@@ -500,6 +812,8 @@ def _dispatch(arguments: argparse.Namespace) -> None:
         "setup": setup,
         "reset": reset,
         "verify": verify,
+        "verify-repair": verify_repair,
+        "prepare-repair": lambda: prepare_repair(arguments.graphify),
         "inspect": lambda: inspect_result(arguments.result),
         "grade": lambda: grade(arguments.result),
         "control": lambda: control(arguments.scenario),

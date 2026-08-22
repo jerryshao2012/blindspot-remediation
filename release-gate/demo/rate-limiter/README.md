@@ -14,6 +14,7 @@ only then runs an independent oracle. A complete automated run normally takes
 | Goal | Path |
 |---|---|
 | Verify the complete demo without Copilot | Follow [automated verification](#automated-verification). |
+| Verify the 0.6 repair loop without Copilot | Follow [automated repair verification](#automated-repair-verification). |
 | See the assistant skill operate the gate | Follow [interactive Copilot CLI walkthrough](#interactive-copilot-cli-walkthrough). |
 | Copilot CLI is blocked on your network | Use [VS Code Copilot Chat](#vs-code-copilot-chat). |
 
@@ -83,6 +84,62 @@ verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations
 
 Do not treat an earlier green line as completion. `verify` fails if setup, the
 oracle, any gate result, or the final reset fails.
+
+## Automated repair verification
+
+Release Gate 0.6.0 also includes a bounded repair workflow. The rate-limiter
+demo keeps the existing PASS, FAIL, and NEEDS_HUMAN controls unchanged, and adds
+a separate repair candidate:
+
+```text
+C0 FAIL -> approval -> C1 FAIL -> C2 PASS -> final approval -> applied
+```
+
+Run it from `release-gate/demo/rate-limiter`:
+
+```powershell
+uv run --python 3.12 --no-project python demo.py verify-repair
+```
+
+```zsh
+uv run --python 3.12 --no-project python demo.py verify-repair
+```
+
+The final line must be:
+
+```text
+verify-repair: C0 FAIL -> C1 FAIL -> C2 PASS -> applied
+```
+
+`verify-repair` prepares C0 with:
+
+```text
+demo.py prepare-repair --graphify stale
+```
+
+C0 changes only `README.md` and `src/ratelimiter/__init__.py`, and introduces
+the exact-boundary defect. The simulated approval permits exactly those two
+paths and caps repair at two attempts. C1 is evaluated in an isolated repair
+workspace and still fails. C2 restores the correct boundary while keeping the
+README change, passes the gate, and is applied only after a final approval bound
+to the session ID, final candidate tree, patch digest, and approval time.
+
+The helper writes simulated approvals under `workbench\approvals` on Windows
+and `workbench/approvals` on macOS. Temporary repair clones are directed under
+`workbench/repair-temp`. Both directories are outside the source repository and
+outside gate evidence. They are removed only after successful apply and all
+assertions pass; if the command fails, they remain for diagnosis. Run
+`demo.py reset` before retrying.
+
+The automated repair check also proves source isolation: while C1 and C2 are
+evaluated, the source worktree remains byte-for-byte at C0. After final apply,
+the source equals the C2 candidate and the independent oracle passes.
+
+Graphify is optional and non-blocking in this workflow. `--graphify missing`
+prepares no graph at all. `--graphify stale` creates an ignored
+`graphify-out/graph.json` whose top-level `built_at_commit` intentionally does
+not match the trusted base, so an assistant must skip it as advisory context and
+continue the repair routing unchanged.
 
 ## Interactive Copilot CLI walkthrough
 
@@ -242,7 +299,55 @@ control. The FAIL control is caught by the deterministic exact-boundary test.
 The NEEDS_HUMAN control produces `POLICY_FILE_CHANGED` and skips configured
 checks because a candidate cannot change the policy that judges it.
 
-## 7. Reset
+## 7. Live repair walkthrough
+
+The successful live host observation remains pending until Copilot is available on
+this machine. When `demo.py doctor` can find an authenticated `copilot`
+executable, use this walkthrough to observe the 0.6 repair behavior in an
+assistant session.
+
+Prepare the repair candidate from the demo directory:
+
+```powershell
+uv run --python 3.12 --no-project python demo.py prepare-repair --graphify stale
+cd workbench\rate-limiter
+copilot
+```
+
+```zsh
+uv run --python 3.12 --no-project python demo.py prepare-repair --graphify stale
+cd workbench/rate-limiter
+copilot
+```
+
+In Copilot, start the repair flow:
+
+```text
+/release-gate repair --base release-gate-rate-limiter-base
+```
+
+The assistant must first run the gate for C0. Because C0 is an eligible FAIL, it
+must request start approval before editing. The expected state is
+`awaiting_approval` with next action `approve_or_cancel`; approval is limited to
+`README.md` and `src/ratelimiter/__init__.py`, with attempt cap `2`.
+
+After you approve, the assistant edits only the isolated repair workspace. It
+must not edit the source repository while candidates are being evaluated. A
+stale or missing Graphify graph is skipped as non-gating advisory context; it
+must not cause retries, graph rebuilds, or a different verdict.
+
+The first repaired attempt should remain in state `repairing` with next action
+`edit_workspace`. The second should reach `awaiting_final_approval` with next
+action `final_approval_and_apply`. Final approval must bind the session ID, the
+passing candidate tree, and the passing patch digest. Only then may the
+assistant apply the passing patch to the source and reach `applied` with next
+action `none`.
+
+Repair evidence remains under
+`workbench/rate-limiter/.release-gate/runs/_repairs/`. If you cancel or the
+flow fails, preserve the evidence and run `demo.py reset` before starting over.
+
+## 8. Reset
 
 ```powershell
 uv run --python 3.12 --no-project python demo.py reset
