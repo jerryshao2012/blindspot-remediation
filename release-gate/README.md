@@ -47,14 +47,14 @@ All fenced `bash` download commands require a POSIX shell. On Windows, run
 them in Git Bash; do not paste the `curl` lines into PowerShell.
 
 For example, download `SHA256SUMS` and
-`release_gate-0.5.0-py3-none-any.whl` from the immutable
-`release-gate-v0.5.0` release, verify the wheel entry, and then install it:
+`release_gate-0.6.0-py3-none-any.whl` from the immutable
+`release-gate-v0.6.0` release, verify the wheel entry, and then install it:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.5.0/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.5.0/release_gate-0.5.0-py3-none-any.whl
-grep '  release_gate-0.5.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-uv tool install ./release_gate-0.5.0-py3-none-any.whl
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release_gate-0.6.0-py3-none-any.whl
+grep '  release_gate-0.6.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+uv tool install ./release_gate-0.6.0-py3-none-any.whl
 release-gate --version
 ```
 
@@ -72,7 +72,7 @@ the immutable release asset URL directly, after the separate download and
 checksum review described in [Adoption](docs/adoption.md):
 
 ```bash
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.5.0/release-gate-skill-codex-0.5.0.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-codex-0.6.0.tar.gz --global --copy --agent codex
 ```
 
 ## Updating an existing installation
@@ -89,35 +89,35 @@ matching host block:
 ```bash
 # GitHub Copilot CLI
 npx --yes skills@1.5.23 remove release-gate --global --agent github-copilot --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.5.0/release-gate-skill-copilot-0.5.0.tar.gz --global --copy --agent github-copilot
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-copilot-0.6.0.tar.gz --global --copy --agent github-copilot
 npx --yes skills@1.5.23 list --global --agent github-copilot
 ```
 
 ```bash
 # Codex CLI and IDE
 npx --yes skills@1.5.23 remove release-gate --global --agent codex --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.5.0/release-gate-skill-codex-0.5.0.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-codex-0.6.0.tar.gz --global --copy --agent codex
 npx --yes skills@1.5.23 list --global --agent codex
 ```
 
 ```bash
 # Claude Code
 npx --yes skills@1.5.23 remove release-gate --global --agent claude-code --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.5.0/release-gate-skill-claude-code-0.5.0.tar.gz --global --copy --agent claude-code
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-claude-code-0.6.0.tar.gz --global --copy --agent claude-code
 npx --yes skills@1.5.23 list --global --agent claude-code
 ```
 
 ```bash
 # Antigravity IDE
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.5.0/release-gate-skill-antigravity-0.5.0.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz --global --copy --agent antigravity
 npx --yes skills@1.5.23 list --global --agent antigravity
 ```
 
 ```bash
 # Antigravity CLI
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity-cli --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.5.0/release-gate-skill-antigravity-0.5.0.tar.gz --global --copy --agent antigravity-cli
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz --global --copy --agent antigravity-cli
 npx --yes skills@1.5.23 list --global --agent antigravity-cli
 ```
 
@@ -127,9 +127,9 @@ local wheel and confirm the exact executable version:
 
 ```bash
 uv tool uninstall release-gate
-uv tool install ./release_gate-0.5.0-py3-none-any.whl
+uv tool install ./release_gate-0.6.0-py3-none-any.whl
 release-gate --version
-# required output: release-gate 0.5.0
+# required output: release-gate 0.6.0
 ```
 
 For Copilot, Claude Code, and Antigravity, run `/release-gate --version`; for
@@ -140,7 +140,7 @@ Invoke the skill explicitly: `/release-gate init` in Copilot and Claude Code,
 `$release-gate init` in Codex, and `/release-gate init` in Antigravity. Codex
 does not support arbitrary custom slash commands; `/skills` can select the
 installed skill. `/release-gate --version` (or `$release-gate --version` in
-Codex) reports exactly `release-gate 0.5.0` from the bundled skill version; it
+Codex) reports exactly `release-gate 0.6.0` from the bundled skill version; it
 does not call the CLI or inspect the repository. The only operational
 subcommands are `init`, `validate`, and `run`.
 <!-- release-version-sync:end -->

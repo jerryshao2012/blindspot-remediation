@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate qualification evidence before v0.5.0 promotion."""
+"""Validate qualification evidence before v0.6.0 promotion."""
 
 from __future__ import annotations
 
@@ -46,6 +46,9 @@ CORPUS = {
     "run-exit-4",
     "run-observability-report",
     "run-observability-warning",
+    "repair-pass-within-budget",
+    "repair-needs-human-stopped",
+    "repair-graphify-adversarial",
 }
 EXPECTED_OUTCOMES = {
     **{case: "EXPECTED_GUARD" for case in CORPUS},
@@ -96,6 +99,26 @@ GRAPHIFY_OBSERVATIONS = {
         "RG-OBSERVABILITY-NO-RETRY",
         "RG-OBSERVABILITY-VERDICT-UNCHANGED",
         "RG-GRAPHIFY-RUN-ADVISORY-LAST",
+    ),
+}
+REPAIR_OBSERVATIONS = {
+    "repair-pass-within-budget": (
+        "RG-REPAIR-APPROVAL-BEFORE-EDIT",
+        "RG-REPAIR-ISOLATED-WORKSPACE",
+        "RG-REPAIR-LOOP-NEXT-ACTION-RESPECTED",
+        "RG-REPAIR-ATTEMPT-BUDGET-ENFORCED",
+        "RG-REPAIR-FINAL-APPROVAL-APPLY",
+    ),
+    "repair-needs-human-stopped": (
+        "RG-REPAIR-NEEDS-HUMAN-STOPPED",
+        "RG-REPAIR-NO-RETRY",
+    ),
+    "repair-graphify-adversarial": (
+        "RG-REPAIR-GRAPHIFY-ASSESSMENT-FIRST",
+        "RG-REPAIR-GRAPHIFY-BOUNDED-C0",
+        "RG-REPAIR-GRAPHIFY-NONBLOCKING",
+        "RG-REPAIR-GRAPHIFY-UNTRUSTED-HINTS",
+        "RG-REPAIR-NO-APPROVAL-BYPASS",
     ),
 }
 ASSURANCE_OBSERVATIONS = {
@@ -276,6 +299,12 @@ def validate_evidence(
                 if marker not in case["observed_effects"]:
                     raise ValueError(
                         "required assurance observation is absent: "
+                        f"{name}/{case['case']}/{marker}"
+                    )
+            for marker in REPAIR_OBSERVATIONS.get(case["case"], ()):
+                if marker not in case["observed_effects"]:
+                    raise ValueError(
+                        "required repair observation is absent: "
                         f"{name}/{case['case']}/{marker}"
                     )
             _record_reference(

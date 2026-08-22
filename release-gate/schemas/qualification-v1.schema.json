@@ -121,7 +121,7 @@
         "case_results": {
           "type": "array",
           "minItems": 0,
-          "maxItems": 18,
+          "maxItems": 21,
           "items": {"$ref": "#/$defs/case_result"}
         }
       }
@@ -158,7 +158,10 @@
             "run-exit-3",
             "run-exit-4",
             "run-observability-report",
-            "run-observability-warning"
+            "run-observability-warning",
+            "repair-pass-within-budget",
+            "repair-needs-human-stopped",
+            "repair-graphify-adversarial"
           ]
         },
         "exact_prompt": {"type": "string", "minLength": 1},

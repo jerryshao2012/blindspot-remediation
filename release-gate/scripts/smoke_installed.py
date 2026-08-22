@@ -58,7 +58,7 @@ def main() -> int:
             env=process_environment,
             check=False,
         )
-        if version.returncode != 0 or version.stdout != "release-gate 0.5.0\n":
+        if version.returncode != 0 or version.stdout != "release-gate 0.6.0\n":
             raise SystemExit(
                 "installed command reported the wrong version:\n"
                 f"stdout:\n{version.stdout}stderr:\n{version.stderr}"

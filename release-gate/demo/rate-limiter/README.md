@@ -20,7 +20,7 @@ only then runs an independent oracle. A complete automated run normally takes
 ## 1. Prerequisites and one-time installation
 
 <!-- release-version-sync:start -->
-You need Git, Python 3.12, `uv`, and Release Gate 0.5.0. The interactive
+You need Git, Python 3.12, `uv`, and Release Gate 0.6.0. The interactive
 paths also require an authenticated GitHub Copilot CLI or VS Code Copilot Chat.
 
 Run all installation commands from the root of `blindspot-remediation`. The
@@ -48,7 +48,7 @@ cd release-gate/demo/rate-limiter
 The required version is:
 
 ```text
-release-gate 0.5.0
+release-gate 0.6.0
 ```
 <!-- release-version-sync:end -->
 

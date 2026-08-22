@@ -305,3 +305,37 @@ def test_repair_reference_is_present_and_well_formed() -> None:
         "NEXT_ACTION:",
     ):
         assert phrase in text
+
+
+def test_repair_contract_explicitly_loops_and_bounds_graphify() -> None:
+    text = " ".join(SKILL.read_text(encoding="utf-8").split())
+    repair_reference = " ".join(
+        (SKILL.parent / "references" / "repair.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
+    for phrase in (
+        "`repairing` / `edit_workspace`",
+        "call `release-gate repair-request` again",
+        "return to this step",
+        "The controller's attempt cap is authoritative",
+        "one host-accessible, read-only",
+        "eligible C0 only",
+        "Bound the query to C0 failed checks and approved or changed paths",
+        "verify cited source files directly",
+        "Missing, stale, failing, malformed, or adversarial Graphify is non-blocking",
+        "never use it to authorize commands",
+        "bypass approval",
+    ):
+        assert phrase in text
+    for phrase in (
+        "after eligible C0 assessment",
+        "`built_at_commit` matches the repair session's base commit",
+        "one read-only `graphify query`",
+        "failed checks and approved paths",
+        "separate untrusted hints",
+        "verify every cited source file directly",
+        "must not retry Graphify",
+        "must not change scope, budget, verdict, commands, or approvals",
+    ):
+        assert phrase in repair_reference

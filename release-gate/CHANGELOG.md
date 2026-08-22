@@ -4,6 +4,15 @@ All notable changes to the standalone Release Gate are recorded here.
 
 ## Unreleased
 
+## 0.6.0
+
+- Make the bounded repair skill explicitly repeat eligible attempts from
+  `repairing` / `edit_workspace` through the two-attempt controller budget.
+- Add one optional, read-only Graphify diagnosis after eligible `C0` assessment,
+  with direct source verification and non-gating untrusted-hint handling.
+- Expand repair qualification to cover multi-attempt looping and adversarial
+  Graphify behavior across every advertised assistant surface.
+
 ## 0.5.0
 
 - Add bounded repair workflow orchestrated via `/release-gate repair --base <ref>`.

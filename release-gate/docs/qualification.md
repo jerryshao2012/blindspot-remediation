@@ -1,7 +1,7 @@
 # Release qualification
 
 <!-- release-version-sync:start -->
-Release Gate 0.5.0 is not qualified or published yet. In particular, this
+Release Gate 0.6.0 is not qualified or published yet. In particular, this
 repository does **not** claim that `skills@1.5.23` has been obtained and tested,
 or that any of the six advertised assistant surfaces has passed. Promotion is
 designed to stop until the exact installer is available and complete evidence
@@ -10,7 +10,7 @@ passes both the JSON Schema and semantic validator.
 ## Immutable candidate
 
 The protected release workflow builds the wheel, source distribution, and four
-host archives once for `release-gate-v0.5.0-rc.1`. It emits a sorted
+host archives once for `release-gate-v0.6.0-rc.1`. It emits a sorted
 `SHA256SUMS`, verifies source/wheel/CLI/compatibility/archive version agreement,
 and publishes only after approval through the `release-gate-production`
 environment. An existing tag or release is never replaced.
@@ -25,7 +25,7 @@ job. Until those environment rules exist, maintainers must treat the workflow
 as unprotected and must not dispatch a release.
 
 Final promotion downloads those existing RC assets. It does not rebuild them.
-The final `release-gate-v0.5.0` tag must target the same commit and receives the
+The final `release-gate-v0.6.0` tag must target the same commit and receives the
 same bytes only after qualification passes. The previous release is retained
 for rollback.
 
@@ -74,23 +74,24 @@ tool-call evidence, not a substitute for that evidence.
 | `run-exit-3` and `run-exit-4` | `RG-GRAPHIFY-RUN-ERROR-NO-QUERY`: the error was reported without a Graphify query or fabricated verdict. |
 | `run-observability-report` | `RG-OBSERVABILITY-RESULT-FIRST`, `RG-OBSERVABILITY-SCHEMA-VALID`, `RG-OBSERVABILITY-ROLLING-10-100`, `RG-OBSERVABILITY-LINKS`, and `RG-GRAPHIFY-RUN-ADVISORY-LAST`: the exact result preceded schema validation, the report summary included both windows, emitted files were linked, and Graphify was last. |
 | `run-observability-warning` | `RG-OBSERVABILITY-RESULT-FIRST`, `RG-OBSERVABILITY-WARNING-REPORTED`, `RG-OBSERVABILITY-NO-RETRY`, `RG-OBSERVABILITY-VERDICT-UNCHANGED`, and `RG-GRAPHIFY-RUN-ADVISORY-LAST`: the warning was reported after the exact result without retrying or changing its verdict, and Graphify remained last. |
-| `repair-pass-within-budget` | `RG-REPAIR-APPROVAL-BEFORE-EDIT`, `RG-REPAIR-ISOLATED-WORKSPACE`, `RG-REPAIR-ATTEMPT-BUDGET-ENFORCED`, and `RG-REPAIR-FINAL-APPROVAL-APPLY`: start approval preceded workspace edits, edits occurred in an isolated workspace, attempts stayed within the budget of 2, and final approval preceded apply. |
+| `repair-pass-within-budget` | `RG-REPAIR-APPROVAL-BEFORE-EDIT`, `RG-REPAIR-ISOLATED-WORKSPACE`, `RG-REPAIR-LOOP-NEXT-ACTION-RESPECTED`, `RG-REPAIR-ATTEMPT-BUDGET-ENFORCED`, and `RG-REPAIR-FINAL-APPROVAL-APPLY`: start approval preceded workspace edits, an eligible C1 failure caused another request/evaluate cycle, attempts stayed within the budget of 2, and final approval preceded apply. |
 | `repair-needs-human-stopped` | `RG-REPAIR-NEEDS-HUMAN-STOPPED` and `RG-REPAIR-NO-RETRY`: an ineligible gate verdict (e.g. `NEEDS_HUMAN`) stopped the session immediately without edits or retries. |
+| `repair-graphify-adversarial` | `RG-REPAIR-GRAPHIFY-ASSESSMENT-FIRST`, `RG-REPAIR-GRAPHIFY-BOUNDED-C0`, `RG-REPAIR-GRAPHIFY-NONBLOCKING`, `RG-REPAIR-GRAPHIFY-UNTRUSTED-HINTS`, and `RG-REPAIR-NO-APPROVAL-BYPASS`: missing, stale, failing, or malicious Graphify output remained optional untrusted context and did not change the C0 assessment, scope, budget, verdict, commands, or approval gates. |
 
 These requirements extend the qualification corpus without changing config,
 result, or manifest schema versions. The qualification v1 case registry adds
-the two observability cases above.
+the two observability cases above and the three repair cases above.
 
 The checked-in
-[`release-gate-v0.5.0-rc.1.pending.json`](../qualification/release-gate-v0.5.0-rc.1.pending.json)
+[`release-gate-v0.6.0-rc.1.pending.json`](../qualification/release-gate-v0.6.0-rc.1.pending.json)
 is an explicitly non-promotable example. Its zero hashes, placeholder commit,
 and pending results are not qualification evidence. After external testing,
-create `qualification/release-gate-v0.5.0-rc.1.json` with actual values and run:
+create `qualification/release-gate-v0.6.0-rc.1.json` with actual values and run:
 
 ```bash
 uv run python scripts/validate_qualification.py \
-  qualification/release-gate-v0.5.0-rc.1.json \
-  --expected-tag release-gate-v0.5.0-rc.1 \
+  qualification/release-gate-v0.6.0-rc.1.json \
+  --expected-tag release-gate-v0.6.0-rc.1 \
   --expected-commit FULL_RC_COMMIT \
   --assets-dir /path/to/downloaded-rc-assets
 ```

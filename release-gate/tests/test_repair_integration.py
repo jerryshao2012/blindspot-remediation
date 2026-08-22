@@ -203,6 +203,202 @@ def test_repair_integration_e2e_pass(
     assert "VERDICT: PASS" in run_out
 
 
+def test_repair_integration_multi_attempt_pass(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    (repo / "app.py").write_text(
+        "def add(a, b):\n    return a - b\n", encoding="utf-8"
+    )
+
+    assert main(["repair-start", "--repo", str(repo), "--base", "HEAD"]) == 0
+    start_out = capsys.readouterr().out
+    session_dir = next(
+        Path(line.removeprefix("REPAIR_SESSION: "))
+        for line in start_out.splitlines()
+        if line.startswith("REPAIR_SESSION: ")
+    )
+    approval_request = next(
+        Path(line.removeprefix("REPAIR_REQUEST: "))
+        for line in start_out.splitlines()
+        if line.startswith("REPAIR_REQUEST: ")
+    )
+    session_id = json.loads(approval_request.read_text(encoding="utf-8"))["session_id"]
+
+    approval_file = tmp_path / "approval.json"
+    approval_file.write_text(json.dumps({"session_id": session_id}), encoding="utf-8")
+    assert (
+        main(
+            [
+                "repair-approve",
+                "--session",
+                str(session_dir),
+                "--approval",
+                str(approval_file),
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert main(["repair-request", "--session", str(session_dir)]) == 0
+    request_out = capsys.readouterr().out
+    workspace = next(
+        Path(line.removeprefix("WORKSPACE: "))
+        for line in request_out.splitlines()
+        if line.startswith("WORKSPACE: ")
+    )
+
+    # C1 is still eligible for repair but does not pass.
+    (workspace / "app.py").write_text(
+        "def add(a, b):\n    return a * b\n", encoding="utf-8"
+    )
+    assert main(["repair-evaluate", "--session", str(session_dir)]) == 0
+    first_eval = capsys.readouterr().out
+    assert "REPAIR_STATE: repairing" in first_eval
+    assert "NEXT_ACTION: edit_workspace" in first_eval
+
+    # C2 fixes the same failure within the controller's two-repair budget.
+    assert main(["repair-request", "--session", str(session_dir)]) == 0
+    request_out = capsys.readouterr().out
+    workspace = next(
+        Path(line.removeprefix("WORKSPACE: "))
+        for line in request_out.splitlines()
+        if line.startswith("WORKSPACE: ")
+    )
+    (workspace / "app.py").write_text(
+        "def add(a, b):\n    return a + b\n", encoding="utf-8"
+    )
+    assert main(["repair-evaluate", "--session", str(session_dir)]) == 0
+    second_eval = capsys.readouterr().out
+    assert "REPAIR_STATE: awaiting_final_approval" in second_eval
+    assert "NEXT_ACTION: final_approval_and_apply" in second_eval
+
+    session = json.loads(
+        (session_dir / "repair-session-v1.json").read_text(encoding="utf-8")
+    )
+    assert [attempt["candidate_label"] for attempt in session["attempts"]] == [
+        "C0",
+        "C1",
+        "C2",
+    ]
+    assert session["attempts"][1]["verdict"] == "FAIL"
+    assert session["attempts"][2]["verdict"] == "PASS"
+    assert (session_dir / "C1.patch").exists()
+    assert (session_dir / "C2.patch").exists()
+    assert (repo / "app.py").read_text(encoding="utf-8") == (
+        "def add(a, b):\n    return a - b\n"
+    )
+
+    final_approval = FinalApproval(
+        session_id=session["session_id"],
+        final_candidate_tree=session["attempts"][2]["candidate_tree"],
+        final_patch_digest=session["attempts"][2]["patch_digest"],
+        approved_at="2026-08-21T22:10:00Z",
+    )
+    final_approval_file = tmp_path / "final_approval.json"
+    final_approval_file.write_text(
+        json.dumps(final_approval.to_dict()), encoding="utf-8"
+    )
+    assert (
+        main(
+            [
+                "repair-apply",
+                "--session",
+                str(session_dir),
+                "--approval",
+                str(final_approval_file),
+            ]
+        )
+        == 0
+    )
+    apply_out = capsys.readouterr().out
+    assert "REPAIR_STATE: applied" in apply_out
+    assert "NEXT_ACTION: none" in apply_out
+    assert (repo / "app.py").read_text(encoding="utf-8") == (
+        "def add(a, b):\n    return a + b\n"
+    )
+    assert main(["run", "--repo", str(repo), "--base", "HEAD"]) == 0
+    assert "VERDICT: PASS" in capsys.readouterr().out
+
+
+def test_repair_integration_repeated_candidate_stops_without_retry(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    (repo / "app.py").write_text(
+        "def add(a, b):\n    return a - b\n", encoding="utf-8"
+    )
+
+    assert main(["repair-start", "--repo", str(repo), "--base", "HEAD"]) == 0
+    start_out = capsys.readouterr().out
+    session_dir = next(
+        Path(line.removeprefix("REPAIR_SESSION: "))
+        for line in start_out.splitlines()
+        if line.startswith("REPAIR_SESSION: ")
+    )
+    approval_request = next(
+        Path(line.removeprefix("REPAIR_REQUEST: "))
+        for line in start_out.splitlines()
+        if line.startswith("REPAIR_REQUEST: ")
+    )
+    session_id = json.loads(approval_request.read_text(encoding="utf-8"))["session_id"]
+    approval_file = tmp_path / "approval.json"
+    approval_file.write_text(json.dumps({"session_id": session_id}), encoding="utf-8")
+    assert (
+        main(
+            [
+                "repair-approve",
+                "--session",
+                str(session_dir),
+                "--approval",
+                str(approval_file),
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert main(["repair-request", "--session", str(session_dir)]) == 0
+    request_out = capsys.readouterr().out
+    workspace = next(
+        Path(line.removeprefix("WORKSPACE: "))
+        for line in request_out.splitlines()
+        if line.startswith("WORKSPACE: ")
+    )
+    (workspace / "app.py").write_text(
+        "def add(a, b):\n    return a * b\n", encoding="utf-8"
+    )
+    assert main(["repair-evaluate", "--session", str(session_dir)]) == 0
+    first_eval = capsys.readouterr().out
+    assert "REPAIR_STATE: repairing" in first_eval
+    assert "NEXT_ACTION: edit_workspace" in first_eval
+
+    assert main(["repair-request", "--session", str(session_dir)]) == 0
+    capsys.readouterr()
+    assert main(["repair-evaluate", "--session", str(session_dir)]) == 0
+    repeated_eval = capsys.readouterr().out
+    assert "REPAIR_STATE: stopped" in repeated_eval
+    assert "NEXT_ACTION: none" in repeated_eval
+
+    session = json.loads(
+        (session_dir / "repair-session-v1.json").read_text(encoding="utf-8")
+    )
+    assert session["stop_reason"] == "repeated_candidate"
+    assert [attempt["candidate_label"] for attempt in session["attempts"]] == [
+        "C0",
+        "C1",
+    ]
+    assert not (session_dir / "C2.patch").exists()
+    assert (repo / "app.py").read_text(encoding="utf-8") == (
+        "def add(a, b):\n    return a - b\n"
+    )
+
+
 def test_repair_integration_needs_human_stops_without_retry(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

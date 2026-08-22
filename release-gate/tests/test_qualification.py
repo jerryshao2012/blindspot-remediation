@@ -41,6 +41,9 @@ CASES = {
     "run-exit-4",
     "run-observability-report",
     "run-observability-warning",
+    "repair-pass-within-budget",
+    "repair-needs-human-stopped",
+    "repair-graphify-adversarial",
 }
 OUTCOMES = {
     **{case: "EXPECTED_GUARD" for case in CASES},
@@ -91,6 +94,26 @@ GRAPHIFY_OBSERVATIONS = {
         "RG-OBSERVABILITY-NO-RETRY",
         "RG-OBSERVABILITY-VERDICT-UNCHANGED",
         "RG-GRAPHIFY-RUN-ADVISORY-LAST",
+    ),
+}
+REPAIR_OBSERVATIONS = {
+    "repair-pass-within-budget": (
+        "RG-REPAIR-APPROVAL-BEFORE-EDIT",
+        "RG-REPAIR-ISOLATED-WORKSPACE",
+        "RG-REPAIR-LOOP-NEXT-ACTION-RESPECTED",
+        "RG-REPAIR-ATTEMPT-BUDGET-ENFORCED",
+        "RG-REPAIR-FINAL-APPROVAL-APPLY",
+    ),
+    "repair-needs-human-stopped": (
+        "RG-REPAIR-NEEDS-HUMAN-STOPPED",
+        "RG-REPAIR-NO-RETRY",
+    ),
+    "repair-graphify-adversarial": (
+        "RG-REPAIR-GRAPHIFY-ASSESSMENT-FIRST",
+        "RG-REPAIR-GRAPHIFY-BOUNDED-C0",
+        "RG-REPAIR-GRAPHIFY-NONBLOCKING",
+        "RG-REPAIR-GRAPHIFY-UNTRUSTED-HINTS",
+        "RG-REPAIR-NO-APPROVAL-BYPASS",
     ),
 }
 
@@ -179,6 +202,7 @@ def _complete_evidence() -> dict[str, object]:
                                 f"Observed expected effects for {case}.",
                                 *GRAPHIFY_OBSERVATIONS.get(case, ()),
                                 *ASSURANCE_OBSERVATIONS.get(case, ()),
+                                *REPAIR_OBSERVATIONS.get(case, ()),
                             )
                         ),
                         "observed_outcome": OUTCOMES[case],
@@ -390,6 +414,31 @@ def test_complete_evidence_requires_each_assurance_observation(
     )
     target["observed_effects"] = target["observed_effects"].replace(marker, "")
     with pytest.raises(ValueError, match="assurance observation"):
+        validator.validate_evidence(
+            evidence, expected_tag=f"release-gate-v{__version__}-rc.1"
+        )
+
+
+@pytest.mark.parametrize(
+    ("case_name", "marker"),
+    [
+        (case_name, marker)
+        for case_name, markers in REPAIR_OBSERVATIONS.items()
+        for marker in markers
+    ],
+)
+def test_complete_evidence_requires_each_repair_observation(
+    case_name: str, marker: str
+) -> None:
+    validator = _load_validator()
+    evidence = _complete_evidence()
+    target = next(
+        case
+        for case in evidence["surfaces"][0]["case_results"]
+        if case["case"] == case_name
+    )
+    target["observed_effects"] = target["observed_effects"].replace(marker, "")
+    with pytest.raises(ValueError, match="repair observation"):
         validator.validate_evidence(
             evidence, expected_tag=f"release-gate-v{__version__}-rc.1"
         )

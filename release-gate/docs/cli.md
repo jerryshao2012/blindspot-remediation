@@ -264,8 +264,8 @@ commands and their 0/1/2 behavior remain intact. There is no A3 request-file,
 execution-result, plugin, or adapter mode in v1.
 
 <!-- release-version-sync:start -->
-The 0.5.0 assistant archives bundle `references/compatibility.json` and require
-the exact output `release-gate 0.5.0` before `init`, `validate`, `run`, or `repair`.
+The 0.6.0 assistant archives bundle `references/compatibility.json` and require
+the exact output `release-gate 0.6.0` before `init`, `validate`, `run`, or `repair`.
 A missing executable or different version is a safe stop. Install the CLI wheel
 and host archive as a separately verified, version-matched pair using the
 [adoption procedure](adoption.md).
