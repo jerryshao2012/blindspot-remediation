@@ -19,7 +19,7 @@ flowchart TD
     A[Agent Change Candidate] --> B[Epic 1: Diff & Blast Radius Budget]
     B -->|Pass Budget| C[Epic 3: Hard Sandbox Execution]
     B -->|Exceeds Budget| R1[FAIL: Diff Budget Exceeded]
-    C --> D[Deterministic Verification Engine]
+    C --> D[Epic 6: Code Mode Verification Engine]
     D --> E[Epic 2: Architectural Conformance & Intent Drift]
     E --> F[Epic 4: Cognitive-Load Evidence Summarization]
     F --> G[Epic 5: Release Policy & Error Budget Control Loop]
@@ -80,6 +80,19 @@ flowchart TD
 
 ---
 
+### Epic 6: Code Mode Engine for Multi-Step Verification & Tool Calling
+**Goal:** Transform tool calling from multi-round "request-response" dialogue (Function Calling / Waiter model) into high-performance, single-script execution (Code Mode / Chef model), eliminating context bloat and enabling native complex logic during evidence collection.
+
+> **Key Architectural Paradigm:** Instead of the model repeatedly querying tools over 8–16 round-trips via individual JSON payloads, Code Mode packages verification tools (git, test suites, coverage engines, AST parsers, artifact scanners) into a unified Python/TypeScript SDK. The model generates a complete script ("the recipe") executed inside an isolated sandbox in a single iteration (67%–88% speedup).
+
+| Item ID | Title | Priority | Description & Acceptance Criteria |
+| :--- | :--- | :---: | :--- |
+| **BG-601** | **Code Mode Verification SDK & Execution Runtime** | High | **Problem:** Multi-step verification (e.g. running tests, inspecting failures, filtering flaky tests, re-running focused sub-suites, parsing coverage) via traditional Function Calling causes high latency, token bloat, and fragile multi-turn loops.<br>**Implementation:** Expose release gate verification primitives as a typed local Python/TS SDK within a single sandboxed code-runner endpoint (`execute_verification_script`). Allow the agent to write scripts with native loops (`for`, `while`), branches (`if/else`), and data aggregations.<br>**Acceptance Criteria:** Complex verification tasks execute in a single round-trip, yielding a 70%+ reduction in latency and token consumption compared to multi-turn tool calling. |
+| **BG-602** | **Hybrid Tool Calling Router (Function Calling vs. Code Mode)** | Medium | **Problem:** Code Mode adds unnecessary overhead for simple 1-step queries, while Function Calling collapses on complex multi-step pipelines.<br>**Implementation:** Implement an intelligent orchestration router: route atomic 1–3 step checks (e.g., fetching a config or validating a single schema) to standard Function Calling; route multi-step diagnostic, bounded repair, and evidence aggregation workflows to Code Mode.<br>**Acceptance Criteria:** Automatic selection of execution mode based on task complexity; structured JSON schemas maintained for simple operations and batch execution scripts for multi-step tasks. |
+| **BG-603** | **Code Mode Sandbox Diagnostics & Error Classification** | High | **Problem:** Arbitrary script execution can fail due to syntax errors, runtime sandbox faults, or legitimate verification failures, making automated repair ambiguous.<br>**Implementation:** Build structured sandbox telemetry separating script compilation errors, sandbox permission violations, and actual underlying check failures. Inject sanitized tracebacks back to the agent for one-shot script self-correction.<br>**Acceptance Criteria:** Clear error taxonomy returned to the caller, preventing infinite retry loops and ensuring safe, deterministic failure recovery. |
+
+---
+
 ## Implementation Roadmap
 
 ```
@@ -88,12 +101,15 @@ Phase 1: Cognitive Load Reduction & Gating (Q1)
 ├── BG-401: System State Mutation Summaries
 └── BG-502: Multi-Tiered Three-Way Policy Engine
 
-Phase 2: Security & Isolation Hardening (Q2)
+Phase 2: Security, Isolation & Code Mode Foundations (Q2)
 ├── BG-301: Container/MicroVM Sandbox Integration
 ├── BG-302: Credential & Environment Leakage Scanner
-└── BG-102: Code Duplication & Bloat Detection
+├── BG-102: Code Duplication & Bloat Detection
+└── BG-601: Code Mode Verification SDK & Runtime
 
-Phase 3: Semantic Conformance & Operational Tuning (Q3)
+Phase 3: Advanced Tool Calling & Semantic Conformance (Q3)
+├── BG-602: Hybrid Tool Calling Router (Function vs Code Mode)
+├── BG-603: Code Mode Sandbox Diagnostics & Error Taxonomy
 ├── BG-201: ADR Conformance Evaluator
 ├── BG-202: LLM Judge Calibration & FP Tracking (<15% target)
 ├── BG-402: Decision Provenance & Confidence Ledger
