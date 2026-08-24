@@ -179,6 +179,41 @@ prepares no graph at all. `--graphify stale` creates an ignored
 not match the trusted base, so an assistant must skip it as advisory context and
 continue the repair routing unchanged.
 
+### Defects tested in the repair workflow
+
+The repair verification simulates a realistic developer/assistant iteration loop across three stages:
+
+1. **C0 (Seeded Candidate Defect — Exact Window Boundary Off-by-One):**
+   * **Location:** `_prune()` in [`src/ratelimiter/__init__.py`](file:///Users/jerryshao/Documents/projects/IBM/ai/blindspot-remediation/release-gate/demo/rate-limiter/src/ratelimiter/__init__.py)
+   * **Bug:** Uses `while hits and now - hits[0] >= self._window:` instead of `>`.
+   * **Impact:** Drops hits whose age is exactly equal to `window_seconds` (e.g. at $t = 60.0$ for a 60s window after a request at $t = 0.0$). A hit must stay active inside $[t, t + \text{window}]$ and only expire when $\text{age} > \text{window}$.
+   * **Result:** Fails the quality gauntlet (`C0 FAIL`) and opens a repair session awaiting approval.
+2. **C1 (First Attempt — Inverted Pruning Direction):**
+   * **Location:** `_prune()` in [`src/ratelimiter/__init__.py`](file:///Users/jerryshao/Documents/projects/IBM/ai/blindspot-remediation/release-gate/demo/rate-limiter/src/ratelimiter/__init__.py)
+   * **Bug:** Uses `while hits and now - hits[0] <= self._window:`.
+   * **Impact:** Inverts the condition, dropping active timestamps *inside* the window and retaining expired ones.
+   * **Result:** Evaluated in an isolated workspace and caught by Release Gate (`C1 FAIL`); source worktree remains untouched.
+3. **C2 (Second Attempt — Correct Boundary & Scope Preservation):**
+   * **Fix:** Restores `while hits and now - hits[0] > self._window:` while preserving the approved non-code usage note in `README.md`.
+   * **Result:** Passes the quality gauntlet (`C2 PASS`), requires human-bound final approval, and is transactionally applied to the source worktree, passing all 11 independent oracle tests.
+
+### Known limitations and unfixed bugs
+
+The demo rate-limiter is intentionally scoped as an in-process library and has several known architectural limitations and unfixed failure modes:
+
+1. **No Thread Safety (Concurrency Race Conditions):**
+   * **Issue:** `RateLimiter` does not use synchronization primitives (such as `threading.Lock`).
+   * **Impact:** Concurrent callers in multi-threaded or asynchronous environments will race on `self._hits` dictionary access and deque mutations, causing lost updates, incorrect prune states, or corrupted request histories. The limiter is safe for single-threaded usage only.
+2. **Runtime `NaN` Clock Injection:**
+   * **Issue:** While constructor validation rejects non-finite `window_seconds`, `allow()` does not validate the runtime return value of the injected `clock()` callable.
+   * **Impact:** If `clock()` returns `float("nan")`, `now - hits[0]` yields `NaN`. Because all numeric comparisons with `NaN` evaluate to `False`, hits never expire and the limiter silently fails closed without raising an error.
+3. **High-Cardinality Key Memory Footprint:**
+   * **Issue:** While denied requests store nothing and inactive keys are pruned when their hit queues empty, there is no maximum key capacity cap or LRU eviction for distinct keys.
+   * **Impact:** A distributed burst across millions of unique single-request keys within an active window will retain all keys in memory until their respective windows expire.
+4. **Substituted Mutation Coverage:**
+   * **Issue:** The test harness relies on 8 specific, human-reviewed manual mutants rather than an exhaustive automated AST mutation engine.
+   * **Impact:** Unforeseen syntactic or structural code variations outside the 8 planted mutants are not continuously audited.
+
 Go through [RUN-LOG-2026-08-24-repair-success](logs/RUN-LOG-2026-08-24-repair-success.md)
 
 ## Interactive Copilot CLI walkthrough
