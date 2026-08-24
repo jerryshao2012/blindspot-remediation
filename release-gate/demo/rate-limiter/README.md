@@ -382,8 +382,40 @@ a repository-owned demo oracle, not an external certification.
   setup stopped before creating a valid repository.
 - **Wrong Release Gate version:** reinstall `./release-gate` from the repository
   root. Do not install the unrelated PyPI project.
-- **Dependency preparation fails:** configure the approved package-index or
-  corporate proxy, then create a new gate run. A missing check is not a pass.
+- **Dependency preparation fails on Windows with `UnknownIssuer`:** `uv` could
+  not validate the certificate presented by PyPI or the corporate package
+  proxy. Verify the actual selected runtime and ask `uv` to use the Windows
+  certificate store before starting a new run:
+
+  ```powershell
+  $py = (uv python find 3.12 | Select-Object -Last 1).Trim()
+  & $py -c "import sys; print(sys.executable); print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+  uv run --python 3.12 --no-project python demo.py verify
+  ```
+
+  The version check must report Python 3.12.x; do not infer the version from
+  an interpreter directory name. The demo policy supplies `UV_SYSTEM_CERTS="true"`
+  directly to its Windows gate commands, so the setting does not depend on
+  outer-process environment propagation. If the error remains, configure the approved
+  corporate package index or CA certificate and start `verify` again. If the
+  package service returns `403 Forbidden`, set an approved mirror explicitly;
+  the demo forwards `UV_INDEX_URL` and `UV_EXTRA_INDEX_URL` to its Windows gate
+  commands:
+
+  ```powershell
+  $env:UV_INDEX_URL = "https://packages.example.corp/simple"
+  uv run --python 3.12 --no-project python demo.py verify
+  ```
+
+  Replace the example URL with the package index approved by your organization.
+  Do not
+  bypass TLS verification, remove the preparation step, or treat a skipped
+  check as a pass. A previous stopped run can be inspected under
+  `workbench\control-evidence`; run `demo.py reset` before retrying if the
+  workbench is left in a partial state.
+- **Dependency preparation fails for another reason:** configure the approved
+  package-index or corporate proxy, then create a new gate run. A missing
+  check is not a pass.
 - **Exit 3 or 4:** inspect stderr. A complete `result.json` is not guaranteed.
 - **Evidence contains `.incomplete`:** do not consume that evidence package.
 - **Copilot CLI cannot reach GitHub:** use VS Code Copilot Chat below. The direct

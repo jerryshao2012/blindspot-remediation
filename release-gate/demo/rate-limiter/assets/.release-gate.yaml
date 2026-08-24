@@ -28,7 +28,8 @@ prepare:
     platform:
       windows:
         argv: ["uv", "venv", "--python", "3.12", "--seed", ".release-gate-venv"]
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "UV_INDEX_URL", "UV_EXTRA_INDEX_URL"]
+        environment: {UV_SYSTEM_CERTS: "true"}
 
   - id: install-demo-dependencies
     argv:
@@ -57,7 +58,8 @@ prepare:
           - "--no-cache-dir"
           - "-r"
           - "requirements-dev.txt"
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "UV_INDEX_URL", "UV_EXTRA_INDEX_URL"]
+        environment: {UV_SYSTEM_CERTS: "true"}
 
 limits:
   stream_bytes: 1048576
@@ -76,4 +78,5 @@ checks:
     platform:
       windows:
         argv: [".release-gate-venv/Scripts/python.exe", "tools/gauntlet.py"]
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "UV_INDEX_URL", "UV_EXTRA_INDEX_URL"]
+        environment: {UV_SYSTEM_CERTS: "true"}
