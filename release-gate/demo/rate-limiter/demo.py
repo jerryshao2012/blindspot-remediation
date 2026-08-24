@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -177,7 +178,7 @@ def _run(
 ) -> subprocess.CompletedProcess[str]:
     command = tuple(os.fspath(argument) for argument in arguments)
     try:
-        return subprocess.run(
+        result = subprocess.run(
             command,
             cwd=cwd,
             check=check,
@@ -185,8 +186,14 @@ def _run(
             text=True,
             env=env,
         )
+        return result
     except (OSError, subprocess.CalledProcessError) as error:
-        raise DemoError(f"command failed: {' '.join(command)}") from error
+        detail = ""
+        if isinstance(error, subprocess.CalledProcessError):
+            detail = (error.stderr or error.stdout or "").strip()
+            if detail:
+                detail = f": {detail}"
+        raise DemoError(f"command failed: {' '.join(command)}{detail}") from error
 
 
 def _which(executable: str) -> str:
@@ -586,18 +593,17 @@ def _source_manifest() -> str:
 
 def _repair_environment() -> dict[str, str]:
     REPAIR_TEMP.mkdir(mode=0o700, parents=True, exist_ok=True)
-    env = os.environ.copy()
-    for key in ("TMPDIR", "TEMP", "TMP"):
-        env[key] = str(REPAIR_TEMP)
-    return env
+    return os.environ.copy()
 
 
 def _apply_repair_patch(workspace: Path, patch_name: str) -> None:
     patch = REPAIRS / patch_name
     if not patch.is_file():
         raise DemoError(f"repair patch is missing: {patch}")
-    _run(("git", "apply", "--check", patch), cwd=workspace)
-    _run(("git", "apply", patch), cwd=workspace)
+    _run(("git", "apply", "--check", "--ignore-whitespace", patch), cwd=workspace)
+    _run(("git", "apply", "--ignore-whitespace", patch), cwd=workspace)
+    source = workspace / "src" / "ratelimiter" / "__init__.py"
+    source.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
 
 
 def _assert_repair_session(
@@ -618,11 +624,34 @@ def _assert_repair_session(
         raise DemoError("repair attempts are not distinct")
 
 
+def _format_duration(seconds: float) -> str:
+    minutes, remainder = divmod(int(round(seconds)), 60)
+    return f"{minutes}m{remainder:02d}s"
+
+
+def _stage_timer() -> Callable[[str], None]:
+    started = time.monotonic()
+
+    def emit(label: str) -> None:
+        nonlocal started
+        elapsed = time.monotonic() - started
+        print(f"REPAIR_STAGE: {label} ({_format_duration(elapsed)})")
+        started = time.monotonic()
+
+    return emit
+
+
 def verify_repair() -> None:
+    overall_started = time.monotonic()
+    stage = _stage_timer()
     _ensure_no_repair_leftovers()
     prepare_repair("stale")
     source_c0 = _source_manifest()
     env = _repair_environment()
+    session_id = (
+        f"rep-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-"
+        f"{uuid.uuid4().hex[:8]}"
+    )
     start = _run(
         _gate_argv(
             "repair-start",
@@ -630,8 +659,10 @@ def verify_repair() -> None:
             REPOSITORY,
             "--base",
             BASE_REF,
+            "--output",
+            CONTROL_EVIDENCE,
             "--session-id",
-            f"rep-demo-{uuid.uuid4().hex[:8]}",
+            session_id,
         ),
         capture=True,
         env=env,
@@ -641,6 +672,7 @@ def verify_repair() -> None:
     _assert_repair_state(
         start.stdout, state="awaiting_approval", next_action="approve_or_cancel"
     )
+    stage("C0 FAIL -> approval requested")
     session_dir = Path(_output_value(start.stdout, "REPAIR_SESSION"))
     request_path = Path(_output_value(start.stdout, "REPAIR_REQUEST"))
     request = json.loads(request_path.read_text(encoding="utf-8"))
@@ -658,6 +690,7 @@ def verify_repair() -> None:
     _assert_repair_state(
         approved.stdout, state="repairing", next_action="edit_workspace"
     )
+    stage("approval granted")
 
     requested = _run(
         _gate_argv("repair-request", "--session", session_dir),
@@ -678,6 +711,7 @@ def verify_repair() -> None:
     _assert_repair_state(
         evaluated_c1.stdout, state="repairing", next_action="edit_workspace"
     )
+    stage("C1 FAIL")
     if _source_manifest() != source_c0:
         raise DemoError("source changed while C1 was evaluated in repair workspace")
     _assert_repair_session(_read_session(session_dir), ("FAIL", "FAIL"))
@@ -703,6 +737,7 @@ def verify_repair() -> None:
         state="awaiting_final_approval",
         next_action="final_approval_and_apply",
     )
+    stage("C2 PASS -> final approval requested")
     if _source_manifest() != source_c0:
         raise DemoError("source changed while C2 was evaluated in repair workspace")
     session = _read_session(session_dir)
@@ -721,6 +756,7 @@ def verify_repair() -> None:
     )
     print(applied.stdout, end="")
     _assert_repair_state(applied.stdout, state="applied", next_action="none")
+    stage("final approval granted -> applied")
     source = (REPOSITORY / "src" / "ratelimiter" / "__init__.py").read_text(
         encoding="utf-8"
     )
@@ -733,7 +769,8 @@ def verify_repair() -> None:
         raise DemoError("independent oracle did not pass after repair apply")
     _remove_owned_directory(APPROVALS)
     _remove_owned_directory(REPAIR_TEMP)
-    print("verify-repair: C0 FAIL -> C1 FAIL -> C2 PASS -> applied")
+    total = _format_duration(time.monotonic() - overall_started)
+    print(f"verify-repair: C0 FAIL -> C1 FAIL -> C2 PASS -> applied (total {total})")
 
 
 def _verify_oracle_mutants() -> None:

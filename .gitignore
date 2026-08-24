@@ -38,3 +38,7 @@ update.sh
 
 # Demo workbench: a clone + venv, rebuilt by demo/setup_workbench.sh
 demo/workbench/
+
+# Local demo proxy credentials
+release-gate/demo/env.ps1
+release-gate/demo/env.sh

@@ -6,3 +6,7 @@
 /.mypy_cache/
 /.ruff_cache/
 /src/*.egg-info/
+/env.local.ps1
+/env.local.sh
+/repair-start-direct.log
+/repair-run*.log

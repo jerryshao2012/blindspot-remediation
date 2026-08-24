@@ -53,10 +53,33 @@ release-gate 0.6.0
 ```
 <!-- release-version-sync:end -->
 
-Every helper command below uses `uv run --python 3.12`; Windows and macOS
-therefore select the same interpreter instead of relying on `py` or `python3`.
-The helper and Release Gate use `uv venv --python 3.12 --seed` and install the
-pinned package set with `uv pip install`.
+### Optional package-proxy configuration
+
+For a corporate package proxy, use the checked-in, credential-free template and
+edit the local copy with organization-specific values. The local copies are
+ignored and must never be committed:
+
+```powershell
+Copy-Item ..\env.example.ps1 ..\env.ps1
+notepad ..\env.ps1
+. ..\env.ps1
+```
+
+```sh
+cp ../env.example.sh ../env.sh
+$EDITOR ../env.sh
+. ../env.sh
+```
+
+The PowerShell template works in a GitHub Copilot PowerShell terminal. The
+POSIX template works in macOS, Linux, or Git Bash. Use the interpreter's
+reported version, not its directory name, when verifying Python 3.12.
+
+Most helper commands below use `uv run --python 3.12`. Windows proxy-enabled
+verification uses the resolved Python 3.12 executable directly so credentials
+and proxy variables remain available to Release Gate. The helper and Release
+Gate use `uv venv --python 3.12 --seed` and install the pinned package set with
+`uv pip install`.
 
 ## Automated verification
 
@@ -67,13 +90,13 @@ three Release Gate controls, grades their evidence, and resets the candidate.
 ### Windows PowerShell
 
 ```powershell
-uv run --python 3.12 --no-project python demo.py verify
+.\run.ps1 verify
 ```
 
 ### macOS zsh
 
 ```zsh
-uv run --python 3.12 --no-project python demo.py verify
+./run.sh verify
 ```
 
 The final line must be:
@@ -84,6 +107,8 @@ verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations
 
 Do not treat an earlier green line as completion. `verify` fails if setup, the
 oracle, any gate result, or the final reset fails.
+
+Go through [RUN-LOG-2026-08-24-automated-verification](logs/RUN-LOG-2026-08-24-automated-verification.md)
 
 ## Automated repair verification
 
@@ -98,17 +123,29 @@ C0 FAIL -> approval -> C1 FAIL -> C2 PASS -> final approval -> applied
 Run it from `release-gate/demo/rate-limiter`:
 
 ```powershell
-uv run --python 3.12 --no-project python demo.py verify-repair
+.\run.ps1 verify-repair
 ```
 
 ```zsh
-uv run --python 3.12 --no-project python demo.py verify-repair
+./run.sh verify-repair
 ```
 
 The final line must be:
 
 ```text
-verify-repair: C0 FAIL -> C1 FAIL -> C2 PASS -> applied
+verify-repair: C0 FAIL -> C1 FAIL -> C2 PASS -> applied (total 4m12s)
+```
+
+The repair command also prints explicit stage markers, each timed from the end
+of the previous stage, so the progression and duration are visible in the run
+log:
+
+```text
+REPAIR_STAGE: C0 FAIL -> approval requested (1m03s)
+REPAIR_STAGE: approval granted (0m01s)
+REPAIR_STAGE: C1 FAIL (1m42s)
+REPAIR_STAGE: C2 PASS -> final approval requested (1m24s)
+REPAIR_STAGE: final approval granted -> applied (0m02s)
 ```
 
 `verify-repair` prepares C0 with:
@@ -125,11 +162,12 @@ README change, passes the gate, and is applied only after a final approval bound
 to the session ID, final candidate tree, patch digest, and approval time.
 
 The helper writes simulated approvals under `workbench\approvals` on Windows
-and `workbench/approvals` on macOS. Temporary repair clones are directed under
-`workbench/repair-temp`. Both directories are outside the source repository and
-outside gate evidence. They are removed only after successful apply and all
-assertions pass; if the command fails, they remain for diagnosis. Run
-`demo.py reset` before retrying.
+and `workbench/approvals` on macOS. Repair workspaces and gate runtime files
+remain outside the source repository and outside gate evidence. The repair
+workflow leaves the host `TEMP`/`TMP` settings unchanged so `uv` can clean up
+its own cache safely on Windows. Generated repair state is removed only after
+successful apply and all assertions pass; if the command fails, it remains for
+diagnosis. Run `demo.py reset` before retrying.
 
 The automated repair check also proves source isolation: while C1 and C2 are
 evaluated, the source worktree remains byte-for-byte at C0. After final apply,
@@ -140,6 +178,8 @@ prepares no graph at all. `--graphify stale` creates an ignored
 `graphify-out/graph.json` whose top-level `built_at_commit` intentionally does
 not match the trusted base, so an assistant must skip it as advisory context and
 continue the repair routing unchanged.
+
+Go through [RUN-LOG-2026-08-24-repair-success](logs/RUN-LOG-2026-08-24-repair-success.md)
 
 ## Interactive Copilot CLI walkthrough
 
@@ -382,26 +422,51 @@ a repository-owned demo oracle, not an external certification.
   setup stopped before creating a valid repository.
 - **Wrong Release Gate version:** reinstall `./release-gate` from the repository
   root. Do not install the unrelated PyPI project.
+- **Load the local proxy environment:** prefer the checked-in `..\env.example.ps1`
+  and ignored `..\env.ps1`. The renamed `env.ps1` is PowerShell syntax; load it
+  into the current PowerShell session and do not run it through `cmd.exe`:
+
+  ```powershell
+  . ..\env.ps1
+  ```
+
+  Confirm only presence, never values, before a networked run:
+
+  ```powershell
+  foreach ($name in "HTTP_PROXY","HTTPS_PROXY","ALL_PROXY","NO_PROXY","UV_SYSTEM_CERTS") {
+      Write-Output "$name=$([bool][Environment]::GetEnvironmentVariable($name))"
+  }
+  ```
+
+  The reviewed Windows policy inherits all four proxy variables, so they must
+  be present when running through the corporate proxy. Keep this helper
+  outside the repository and never commit credentials.
 - **Dependency preparation fails on Windows with `UnknownIssuer`:** `uv` could
   not validate the certificate presented by PyPI or the corporate package
   proxy. Verify the actual selected runtime and ask `uv` to use the Windows
-  certificate store before starting a new run. The reviewed Windows gate
-  policy also forwards the standard proxy variables (`HTTP_PROXY`,
-  `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY`); because inherited variables are
-  mandatory, set all four when a proxy is required:
+  certificate store before starting a new run. `uv run` may omit
+  credential-bearing proxy variables when it launches Python. When a proxy is
+  required, resolve Python 3.12 and invoke the demo with that executable so
+  the proxy reaches Release Gate:
 
   ```powershell
   $py = (uv python find 3.12 | Select-Object -Last 1).Trim()
   & $py -c "import sys; print(sys.executable); print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
-  uv run --python 3.12 --no-project python demo.py verify
+  & $py demo.py verify
+  ```
+
+  Use the same `$py` invocation for repair verification:
+
+  ```powershell
+  & $py demo.py verify-repair
   ```
 
   The version check must report Python 3.12.x; do not infer the version from
   an interpreter directory name. The demo policy supplies `UV_SYSTEM_CERTS="true"`
-  directly to its Windows gate commands, so the setting does not depend on
-  outer-process environment propagation. If the package service returns
-  `403 Forbidden`, configure the approved corporate package index or CA
-  certificate and start `verify` again. Do not
+  directly to its Windows gate commands and inherits the proxy variables from
+  the current shell. If the package service returns `403 Forbidden`, configure the
+  approved corporate package index or CA certificate and start `verify` again.
+  Do not
   bypass TLS verification, remove the preparation step, or treat a skipped
   check as a pass. A previous stopped run can be inspected under
   `workbench\control-evidence`; run `demo.py reset` before retrying if the
