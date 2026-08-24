@@ -10,15 +10,15 @@ Release Gate reconstructs clean, independent evaluation workspaces, evaluates ca
 
 Release Gate includes two complementary benchmark demonstrations:
 
-| Feature / Dimension | `python-slugify` Demo (Task X1) | `rate-limiter` Demo |
-|---|---|---|
-| **Primary Focus** | **Packaging Migration & AI Agent Blindspots** | **Algorithmic Correctness & Bounded Repair** |
-| **Domain / Scenario** | Open-source library migrating transliteration backend (`text-unidecode` $\to$ `Unidecode`). | In-process sliding-window rate limiter with injected clock. |
-| **Workflow Tested** | Automated 3-verdict controls and **Interactive Copilot CLI / Chat walkthrough**. | Automated 3-verdict controls and **0.6 Bounded Repair Loop** ($C0 \to C1 \to C2$). |
-| **Defect Profile** | Ambient environment confusion, uninstalled declared dependencies, silent omission of `tox.ini`. | Exact-boundary off-by-one expiry ($t = \text{window}$), inverted pruning, non-finite window validation. |
+| Feature / Dimension | `python-slugify` Demo (Task X1) | `rate-limiter` Demo                                                                                                |
+|---|---|--------------------------------------------------------------------------------------------------------------------|
+| **Primary Focus** | **Packaging Migration & AI Agent Blindspots** | **Algorithmic Correctness & Bounded Repair**                                                                       |
+| **Domain / Scenario** | Open-source library migrating transliteration backend (`text-unidecode` $\to$ `Unidecode`). | In-process sliding-window rate limiter with injected clock.                                                        |
+| **Workflow Tested** | Automated 3-verdict controls and **Interactive Copilot CLI / Chat walkthrough**. | Automated 3-verdict controls and **0.6.0 Bounded Repair Loop** ($C0 \to C1 \to C2$).                               |
+| **Defect Profile** | Ambient environment confusion, uninstalled declared dependencies, silent omission of `tox.ini`. | Exact-boundary off-by-one expiry ($t = \text{window}$), inverted pruning, non-finite window validation.            |
 | **Assurance Layers** | Package build validation, unit test suites, linting, scope enforcement against test tampering. | 100% branch coverage, 8-mutant mutation gauntlet, cache-collision negative controls, strict types, must-not scans. |
-| **Independent Oracle** | Hidden transliteration oracle (15 checks) verifying symbol/currency divergence (`₹500`, `♥ love`). | Differential brute-force model (11 tests) verifying boundary, interleaving, and clock rollback. |
-| **Documentation** | [python-slugify/README.md](python-slugify/README.md) | [rate-limiter/README.md](rate-limiter/README.md) |
+| **Independent Oracle** | Hidden transliteration oracle (15 checks) verifying symbol/currency divergence (`₹500`, `♥ love`). | Differential brute-force model (11 tests) verifying boundary, interleaving, and clock rollback.                    |
+| **Documentation** | [python-slugify/README.md](python-slugify/README.md) | [rate-limiter/README.md](rate-limiter/README.md)                                                                   |
 
 ---
 
