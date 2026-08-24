@@ -381,7 +381,8 @@ never from a package index, and confirm the exact version:
 
 ```bash
 uv tool uninstall release-gate
-uv tool install ./release_gate-0.6.0-py3-none-any.whl
+python -m build --wheel --no-isolation
+uv tool install --offline .\dist\release_gate-0.6.0-py3-none-any.whl
 release-gate --version
 # required output: release-gate 0.6.0
 ```
