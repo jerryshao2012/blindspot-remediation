@@ -385,7 +385,10 @@ a repository-owned demo oracle, not an external certification.
 - **Dependency preparation fails on Windows with `UnknownIssuer`:** `uv` could
   not validate the certificate presented by PyPI or the corporate package
   proxy. Verify the actual selected runtime and ask `uv` to use the Windows
-  certificate store before starting a new run:
+  certificate store before starting a new run. The reviewed Windows gate
+  policy also forwards the standard proxy variables (`HTTP_PROXY`,
+  `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY`); because inherited variables are
+  mandatory, set all four when a proxy is required:
 
   ```powershell
   $py = (uv python find 3.12 | Select-Object -Last 1).Trim()
@@ -396,19 +399,9 @@ a repository-owned demo oracle, not an external certification.
   The version check must report Python 3.12.x; do not infer the version from
   an interpreter directory name. The demo policy supplies `UV_SYSTEM_CERTS="true"`
   directly to its Windows gate commands, so the setting does not depend on
-  outer-process environment propagation. If the error remains, configure the approved
-  corporate package index or CA certificate and start `verify` again. If the
-  package service returns `403 Forbidden`, set an approved mirror explicitly;
-  the demo forwards `UV_INDEX_URL` and `UV_EXTRA_INDEX_URL` to its Windows gate
-  commands:
-
-  ```powershell
-  $env:UV_INDEX_URL = "https://packages.example.corp/simple"
-  uv run --python 3.12 --no-project python demo.py verify
-  ```
-
-  Replace the example URL with the package index approved by your organization.
-  Do not
+  outer-process environment propagation. If the package service returns
+  `403 Forbidden`, configure the approved corporate package index or CA
+  certificate and start `verify` again. Do not
   bypass TLS verification, remove the preparation step, or treat a skipped
   check as a pass. A previous stopped run can be inspected under
   `workbench\control-evidence`; run `demo.py reset` before retrying if the
