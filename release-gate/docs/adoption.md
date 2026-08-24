@@ -58,14 +58,48 @@ one wheel, and reports `OK`. On systems that provide `sha256sum` instead of
 `shasum`, use the equivalent check against that single manifest line. Stop if
 the file is absent, duplicated, or mismatched.
 
-Install only the verified local wheel and confirm its exact version:
+Install only the verified local wheel, replacing any existing `uv` tool with
+the same name, and confirm both the wheel and the resolved executable:
 
 ```bash
-uv tool install ./release_gate-0.6.0-py3-none-any.whl
+uv tool install --force ./release_gate-0.6.0-py3-none-any.whl
 release-gate --version
 ```
 
-The required output is `release-gate 0.6.0`.
+The required output is `release-gate 0.6.0`. This is a `uv` tool installation;
+do not activate a project `.venv` to select it. The executable is normally
+under `$HOME/.local/bin` on Windows (`$HOME\.local\bin` in PowerShell).
+
+On Windows, if `release-gate --version` still reports an older version, first
+prove that the wheel itself is correct and then inspect every executable that
+PowerShell can resolve:
+
+```powershell
+uv tool run --from .\release_gate-0.6.0-py3-none-any.whl release-gate --version
+Get-Command release-gate -All
+uv tool list
+release-gate --version
+```
+
+The direct `uv tool run` check must report `release-gate 0.6.0`. The wheel
+filename does not control the reported version; the version is embedded in the
+wheel metadata and package. If the direct check reports `0.6.0` but the final
+command does not, PowerShell is resolving a stale launcher. Open a fresh
+PowerShell process after reinstalling the tool, or use the stale-launcher
+recovery below. Do not invoke the skill until the CLI and skill versions match.
+
+If you intentionally activate this repository's `.venv`, that environment's
+`Scripts` directory takes precedence over the user-level `uv` tool. Upgrade the
+CLI in that venv separately from the global tool:
+
+```powershell
+$venv = 'C:\path\to\release-gate\.venv\Scripts\python.exe'
+uv pip install --python $venv --reinstall --no-deps --offline 'C:\path\to\release-gate\dist\release_gate-0.6.0-py3-none-any.whl'
+release-gate --version
+```
+
+Alternatively, do not activate the repository `.venv` when using the global
+CLI. Use `Get-Command release-gate -All` to confirm which executable wins.
 
 The checksum covers the Release Gate wheel itself and proves nothing about
 transitive package bytes. `uv tool install` resolves the declared dependency
@@ -143,8 +177,15 @@ If the command resolves to `$HOME\.local\bin\release-gate.exe`, it is typically 
 
 ```powershell
 $root = 'C:\path\to\release-gate'
-uv tool install --force --editable $root
+uv tool uninstall release-gate
+uv tool install --offline (Join-Path $root 'dist\\release_gate-0.6.0-py3-none-any.whl')
+release-gate --version
 ```
+
+The wheel must be built from the checkout containing the desired source
+version. Installing a file named `release_gate-0.6.0-...whl` cannot correct a
+wheel whose embedded metadata still says `0.3.0`; inspect the wheel's direct
+version with `uv tool run --from` before diagnosing `PATH`.
 
 If `uv` cannot resolve dependencies because the package index is unavailable or returns an authorization error, first verify the checkout's isolated launcher:
 
