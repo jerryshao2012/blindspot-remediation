@@ -1,8 +1,9 @@
 # Rate-Limiter Repair Verification
 
-**Date:** 2026-08-24
-**Host:** Windows
-**Command:** `.\run.ps1 verify-repair`
+**Date:** 2026-08-24  
+**Host:** Windows  
+**Demo:** `release-gate/demo/rate-limiter`   
+**Command:** `.\run.ps1 verify-repair`  
 **Session ID:** `rep-20260824203527-f0cfe322`
 
 ## Purpose
