@@ -1,0 +1,2264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0c0e">
+  <title>Release Gate — Independent Proof Before Release</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230f62fe'/%3E%3Cpath d='M8 8h16v5H13v6h11v5H8z' fill='white'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===========================================
+       THEME — IBM-INSPIRED PROOF PIPELINE
+       Edit these variables to retheme the deck.
+       =========================================== */
+    :root {
+      --ink: #0b0c0e;
+      --ink-soft: #16181d;
+      --panel: #1f2229;
+      --panel-2: #282c34;
+      --paper: #f4f4f4;
+      --white: #ffffff;
+      --muted: #a7a9b0;
+      --muted-dark: #52565e;
+      --blue: #0f62fe;
+      --blue-bright: #78a9ff;
+      --cyan: #3ddbd9;
+      --green: #42be65;
+      --amber: #f1c21b;
+      --red: #fa4d56;
+      --purple: #be95ff;
+      --grid-line: rgba(255, 255, 255, 0.065);
+      --font-display: "IBM Plex Sans", sans-serif;
+      --font-mono: "IBM Plex Mono", monospace;
+      --title-size: clamp(2.4rem, 6.8vw, 6.6rem);
+      --h2-size: clamp(1.7rem, 4vw, 4.4rem);
+      --h3-size: clamp(0.95rem, 1.7vw, 1.45rem);
+      --body-size: clamp(0.76rem, 1.15vw, 1.08rem);
+      --small-size: clamp(0.62rem, 0.86vw, 0.82rem);
+      --micro-size: clamp(0.54rem, 0.72vw, 0.7rem);
+      --slide-padding: clamp(1.1rem, 4vw, 4.8rem);
+      --content-gap: clamp(0.75rem, 2vw, 2rem);
+      --element-gap: clamp(0.4rem, 1vw, 1rem);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+      --duration: 620ms;
+    }
+
+    /* ===========================================
+       RESET AND GLOBAL SURFACE
+       =========================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      margin: 0;
+      background: var(--ink);
+      color: var(--white);
+      font-family: var(--font-display);
+      font-size: var(--body-size);
+      line-height: 1.45;
+      overscroll-behavior-y: none;
+    }
+
+    button,
+    [contenteditable="true"] {
+      font: inherit;
+    }
+
+    button:focus-visible,
+    [contenteditable="true"]:focus-visible {
+      outline: clamp(0.12rem, 0.2vw, 0.18rem) solid var(--cyan);
+      outline-offset: clamp(0.14rem, 0.3vw, 0.3rem);
+    }
+
+    ::selection {
+      background: var(--cyan);
+      color: var(--ink);
+    }
+
+    /* ===========================================
+       VIEWPORT FITTING: MANDATORY BASE STYLES
+       Included in full from viewport-base.css.
+       =========================================== */
+    html, body {
+      height: 100%;
+      overflow-x: hidden;
+    }
+
+    html {
+      scroll-snap-type: y mandatory;
+      scroll-behavior: smooth;
+    }
+
+    .slide {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      max-height: 100%;
+      overflow: hidden;
+      padding: var(--slide-padding);
+    }
+
+    :root {
+      --title-size: clamp(1.5rem, 5vw, 4rem);
+      --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+      --h3-size: clamp(1rem, 2.5vw, 1.75rem);
+      --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+      --small-size: clamp(0.65rem, 1vw, 0.875rem);
+      --slide-padding: clamp(1rem, 4vw, 4rem);
+      --content-gap: clamp(0.5rem, 2vw, 2rem);
+      --element-gap: clamp(0.25rem, 1vw, 1rem);
+    }
+
+    .card, .container, .content-box {
+      max-width: min(90vw, 1000px);
+      max-height: min(80vh, 700px);
+    }
+
+    .feature-list, .bullet-list {
+      gap: clamp(0.4rem, 1vh, 1rem);
+    }
+
+    .feature-list li, .bullet-list li {
+      font-size: var(--body-size);
+      line-height: 1.4;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+      gap: clamp(0.5rem, 1.5vw, 1rem);
+    }
+
+    img, .image-container {
+      max-width: 100%;
+      max-height: min(50vh, 400px);
+      object-fit: contain;
+    }
+
+    @media (max-height: 700px) {
+      :root {
+        --slide-padding: clamp(0.75rem, 3vw, 2rem);
+        --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+        --title-size: clamp(1.25rem, 4.5vw, 2.5rem);
+        --h2-size: clamp(1rem, 3vw, 1.75rem);
+      }
+    }
+
+    @media (max-height: 600px) {
+      :root {
+        --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+        --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+        --title-size: clamp(1.1rem, 4vw, 2rem);
+        --body-size: clamp(0.7rem, 1.2vw, 0.95rem);
+      }
+
+      .nav-dots, .keyboard-hint, .decorative {
+        display: none;
+      }
+    }
+
+    @media (max-height: 500px) {
+      :root {
+        --slide-padding: clamp(0.4rem, 2vw, 1rem);
+        --title-size: clamp(1rem, 3.5vw, 1.5rem);
+        --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+        --body-size: clamp(0.65rem, 1vw, 0.85rem);
+      }
+    }
+
+    @media (max-width: 600px) {
+      :root {
+        --title-size: clamp(1.25rem, 7vw, 2.5rem);
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+      }
+
+      html {
+        scroll-behavior: auto;
+      }
+    }
+
+    /* ===========================================
+       SHARED SLIDE COMPOSITION
+       =========================================== */
+    .slide {
+      isolation: isolate;
+      background:
+        linear-gradient(var(--grid-line) clamp(0.04rem, 0.08vw, 0.07rem), transparent clamp(0.04rem, 0.08vw, 0.07rem)),
+        linear-gradient(90deg, var(--grid-line) clamp(0.04rem, 0.08vw, 0.07rem), transparent clamp(0.04rem, 0.08vw, 0.07rem)),
+        var(--ink);
+      background-size: clamp(2.5rem, 5vw, 5rem) clamp(2.5rem, 5vw, 5rem);
+    }
+
+    .slide::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(11, 12, 14, 0.15), rgba(11, 12, 14, 0.82));
+    }
+
+    .slide.light {
+      background:
+        linear-gradient(rgba(11, 12, 14, 0.07) clamp(0.04rem, 0.08vw, 0.07rem), transparent clamp(0.04rem, 0.08vw, 0.07rem)),
+        linear-gradient(90deg, rgba(11, 12, 14, 0.07) clamp(0.04rem, 0.08vw, 0.07rem), transparent clamp(0.04rem, 0.08vw, 0.07rem)),
+        var(--paper);
+      background-size: clamp(2.5rem, 5vw, 5rem) clamp(2.5rem, 5vw, 5rem);
+      color: var(--ink);
+    }
+
+    .slide.light::after {
+      background: linear-gradient(90deg, rgba(244, 244, 244, 0.15), rgba(244, 244, 244, 0.88));
+    }
+
+    .slide-content {
+      width: min(100%, 96rem);
+      margin-inline: auto;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: clamp(0.45rem, 0.8vw, 0.8rem);
+      margin-bottom: clamp(0.5rem, 1.3vh, 1rem);
+      color: var(--cyan);
+      font-family: var(--font-mono);
+      font-size: var(--small-size);
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .light .eyebrow {
+      color: #0043ce;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: clamp(1.4rem, 3vw, 3rem);
+      height: clamp(0.12rem, 0.2vw, 0.18rem);
+      background: currentColor;
+    }
+
+    h1 {
+      max-width: min(15ch, 90vw);
+      font-size: var(--title-size);
+      font-weight: 300;
+      letter-spacing: -0.055em;
+      line-height: 0.94;
+    }
+
+    h2 {
+      max-width: 20ch;
+      font-size: var(--h2-size);
+      font-weight: 400;
+      letter-spacing: -0.045em;
+      line-height: 1;
+    }
+
+    h3 {
+      font-size: var(--h3-size);
+      font-weight: 500;
+      line-height: 1.1;
+    }
+
+    p {
+      font-size: var(--body-size);
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+    }
+
+    .accent {
+      color: var(--cyan);
+    }
+
+    .blue {
+      color: var(--blue-bright);
+    }
+
+    .red {
+      color: var(--red);
+    }
+
+    .amber {
+      color: var(--amber);
+    }
+
+    .green {
+      color: var(--green);
+    }
+
+    .lead {
+      max-width: 42ch;
+      color: var(--muted);
+      font-size: clamp(0.9rem, 1.6vw, 1.35rem);
+      line-height: 1.45;
+    }
+
+    .light .lead {
+      color: var(--muted-dark);
+    }
+
+    .chapter-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: var(--content-gap);
+      margin-bottom: clamp(0.8rem, 2.6vh, 2.2rem);
+    }
+
+    .chapter-index {
+      color: rgba(255, 255, 255, 0.2);
+      font-family: var(--font-mono);
+      font-size: clamp(2.6rem, 8vw, 8rem);
+      font-weight: 300;
+      line-height: 0.72;
+    }
+
+    .light .chapter-index {
+      color: rgba(11, 12, 14, 0.12);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+      align-items: center;
+      gap: clamp(1rem, 4vw, 4rem);
+      min-height: 0;
+    }
+
+    .panel {
+      min-width: 0;
+      background: rgba(31, 34, 41, 0.92);
+      border-top: clamp(0.16rem, 0.28vw, 0.25rem) solid var(--blue);
+      padding: clamp(0.85rem, 2vw, 1.8rem);
+    }
+
+    .light .panel {
+      background: rgba(255, 255, 255, 0.92);
+      border-color: var(--blue);
+      box-shadow: 0 clamp(0.8rem, 2vw, 2rem) clamp(1.6rem, 4vw, 4rem) rgba(11, 12, 14, 0.1);
+    }
+
+    .label {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--micro-size);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .light .label {
+      color: var(--muted-dark);
+    }
+
+    .rule {
+      width: 100%;
+      height: clamp(0.04rem, 0.08vw, 0.07rem);
+      margin-block: clamp(0.5rem, 1.3vh, 1rem);
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .light .rule {
+      background: rgba(11, 12, 14, 0.15);
+    }
+
+    /* ===========================================
+       ENTRANCE AND DIAGRAM ANIMATIONS
+       Removing .visible resets each slide.
+       =========================================== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(clamp(0.7rem, 2vw, 1.7rem));
+      transition:
+        opacity var(--duration) var(--ease-out),
+        transform var(--duration) var(--ease-out);
+      transition-delay: var(--delay, 0ms);
+    }
+
+    .reveal-left {
+      opacity: 0;
+      transform: translateX(calc(-1 * clamp(1rem, 3vw, 3rem)));
+      transition:
+        opacity var(--duration) var(--ease-out),
+        transform var(--duration) var(--ease-out);
+      transition-delay: var(--delay, 0ms);
+    }
+
+    .slide.visible .reveal,
+    .slide.visible .reveal-left {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+
+    .draw-line {
+      transform: scaleX(0);
+      transform-origin: left center;
+      transition: transform 900ms var(--ease-out) var(--delay, 0ms);
+    }
+
+    .slide.visible .draw-line {
+      transform: scaleX(1);
+    }
+
+    .pulse {
+      animation: none;
+    }
+
+    .slide.visible .pulse {
+      animation: evidence-pulse 2.6s var(--ease-standard) infinite;
+      animation-delay: var(--delay, 0ms);
+    }
+
+    @keyframes evidence-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(61, 219, 217, 0); }
+      45% { box-shadow: 0 0 0 clamp(0.35rem, 0.8vw, 0.8rem) rgba(61, 219, 217, 0.14); }
+    }
+
+    /* ===========================================
+       FIXED PRESENTATION CHROME
+       =========================================== */
+    .progress-track {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: clamp(0.16rem, 0.3vw, 0.28rem);
+      z-index: 9000;
+      background: rgba(120, 169, 255, 0.13);
+    }
+
+    .progress-bar {
+      width: 0;
+      height: 100%;
+      background: var(--cyan);
+      transition: width 300ms var(--ease-standard);
+    }
+
+    .nav-dots {
+      position: fixed;
+      top: 50%;
+      right: clamp(0.45rem, 1.3vw, 1.25rem);
+      z-index: 8500;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(0.3rem, 0.7vh, 0.55rem);
+      transform: translateY(-50%);
+    }
+
+    .nav-dot {
+      width: clamp(0.42rem, 0.65vw, 0.62rem);
+      height: clamp(0.42rem, 0.65vw, 0.62rem);
+      border: clamp(0.06rem, 0.1vw, 0.1rem) solid rgba(255, 255, 255, 0.55);
+      border-radius: 0;
+      background: transparent;
+      cursor: pointer;
+      transition: transform 220ms ease, background 220ms ease;
+    }
+
+    .nav-dot[aria-current="true"] {
+      background: var(--cyan);
+      border-color: var(--cyan);
+      transform: rotate(45deg) scale(1.15);
+    }
+
+    .slide-counter {
+      position: fixed;
+      right: clamp(0.6rem, 1.7vw, 1.6rem);
+      bottom: clamp(0.55rem, 1.5vh, 1.2rem);
+      z-index: 8500;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--small-size);
+      pointer-events: none;
+    }
+
+    .keyboard-hint {
+      position: fixed;
+      left: clamp(0.6rem, 1.7vw, 1.6rem);
+      bottom: clamp(0.55rem, 1.5vh, 1.2rem);
+      z-index: 8500;
+      color: rgba(255, 255, 255, 0.45);
+      font-family: var(--font-mono);
+      font-size: var(--micro-size);
+      pointer-events: none;
+    }
+
+    /* ===========================================
+       INLINE EDITING CONTROLS
+       Visibility uses JavaScript with a grace delay.
+       =========================================== */
+    .edit-hotzone {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: clamp(3.5rem, 7vw, 5rem);
+      height: clamp(3.5rem, 7vw, 5rem);
+      z-index: 10000;
+      cursor: pointer;
+    }
+
+    .edit-toggle {
+      position: fixed;
+      top: clamp(0.55rem, 1.3vw, 1rem);
+      left: clamp(0.55rem, 1.3vw, 1rem);
+      z-index: 10001;
+      min-width: clamp(2.6rem, 5vw, 4rem);
+      padding: clamp(0.35rem, 0.7vw, 0.55rem) clamp(0.5rem, 1vw, 0.8rem);
+      border: clamp(0.06rem, 0.1vw, 0.1rem) solid var(--cyan);
+      background: var(--ink);
+      color: var(--cyan);
+      font-family: var(--font-mono);
+      font-size: var(--micro-size);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 250ms ease, background 250ms ease, color 250ms ease;
+    }
+
+    .edit-toggle.show,
+    .edit-toggle.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .edit-toggle.active {
+      background: var(--cyan);
+      color: var(--ink);
+    }
+
+    .edit-banner {
+      position: fixed;
+      top: clamp(0.55rem, 1.3vw, 1rem);
+      left: 50%;
+      z-index: 10001;
+      padding: clamp(0.35rem, 0.7vw, 0.55rem) clamp(0.65rem, 1.2vw, 1rem);
+      background: var(--cyan);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: var(--micro-size);
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, calc(-1 * clamp(2.8rem, 5vw, 4rem)));
+      transition: opacity 250ms ease, transform 250ms var(--ease-out);
+    }
+
+    .edit-banner.active {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    body.edit-active [data-editable="true"] {
+      outline: clamp(0.05rem, 0.08vw, 0.08rem) dashed rgba(61, 219, 217, 0.7);
+      outline-offset: clamp(0.12rem, 0.25vw, 0.22rem);
+      cursor: text;
+    }
+
+    /* ===========================================
+       SLIDE 01 — OPENING
+       =========================================== */
+    .title-slide::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: clamp(5rem, 22vw, 22rem);
+      height: 100%;
+      z-index: -1;
+      background: var(--blue);
+      transform: scaleY(0);
+      transform-origin: bottom;
+      transition: transform 900ms var(--ease-out) 180ms;
+    }
+
+    .title-slide.visible::before {
+      transform: scaleY(1);
+    }
+
+    .title-slide .slide-content {
+      justify-content: space-between;
+      padding-right: clamp(3.8rem, 25vw, 25rem);
+    }
+
+    .title-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--content-gap);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--small-size);
+      text-transform: uppercase;
+    }
+
+    .title-subtitle {
+      max-width: 38ch;
+      color: var(--muted);
+      font-size: clamp(0.9rem, 1.6vw, 1.4rem);
+    }
+
+    .title-mark {
+      position: absolute;
+      right: clamp(1rem, 4vw, 4rem);
+      bottom: clamp(2.2rem, 6vh, 5rem);
+      color: var(--white);
+      font-family: var(--font-mono);
+      font-size: clamp(2rem, 8vw, 8rem);
+      font-weight: 300;
+      line-height: 0.75;
+      writing-mode: vertical-rl;
+      opacity: 0.3;
+    }
+
+    /* ===========================================
+       SLIDE 02 — THE BLINDSPOT
+       =========================================== */
+    .blindspot-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: clamp(0.55rem, 1.5vw, 1.2rem);
+      margin-top: clamp(0.9rem, 3vh, 2.3rem);
+    }
+
+    .blindspot-card {
+      position: relative;
+      min-height: clamp(7.6rem, 20vh, 12rem);
+      padding: clamp(0.75rem, 1.6vw, 1.4rem);
+      background: var(--white);
+      color: var(--ink);
+      border-top: clamp(0.22rem, 0.38vw, 0.35rem) solid var(--blue);
+    }
+
+    .blindspot-card:nth-child(2) {
+      border-color: var(--amber);
+    }
+
+    .blindspot-card:nth-child(3) {
+      border-color: var(--red);
+    }
+
+    .blindspot-card .number {
+      margin-bottom: clamp(0.45rem, 1vh, 0.8rem);
+      color: var(--muted-dark);
+      font-family: var(--font-mono);
+      font-size: var(--small-size);
+    }
+
+    .blindspot-card p {
+      margin-top: clamp(0.35rem, 0.8vh, 0.65rem);
+      color: var(--muted-dark);
+      font-size: var(--small-size);
+    }
+
+    .blindspot-caption {
+      margin-top: clamp(0.8rem, 2.2vh, 1.7rem);
+      padding-left: clamp(0.6rem, 1.2vw, 1rem);
+      border-left: clamp(0.16rem, 0.28vw, 0.24rem) solid var(--cyan);
+      color: var(--muted);
+    }
+
+    /* ===========================================
+       SLIDE 03 — RELEASE GATE PIPELINE
+       =========================================== */
+    .pipeline {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      align-items: center;
+      gap: clamp(0.35rem, 1vw, 0.8rem);
+      margin-top: clamp(1rem, 4vh, 3.2rem);
+    }
+
+    .pipeline::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 5%;
+      width: 90%;
+      height: clamp(0.12rem, 0.22vw, 0.2rem);
+      z-index: -1;
+      background: linear-gradient(90deg, var(--blue), var(--cyan), var(--green));
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 1.5s var(--ease-out) 300ms;
+    }
+
+    .pipeline-slide.visible .pipeline::before {
+      transform: scaleX(1);
+    }
+
+    .pipeline-node {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: clamp(7rem, 19vh, 11rem);
+      padding: clamp(0.6rem, 1.3vw, 1rem);
+      background: var(--panel);
+      border-bottom: clamp(0.16rem, 0.28vw, 0.24rem) solid var(--blue-bright);
+      opacity: 0;
+      transform: translateY(clamp(0.7rem, 1.7vw, 1.4rem));
+      transition: opacity 450ms ease, transform 450ms var(--ease-out);
+      transition-delay: var(--delay);
+    }
+
+    .pipeline-slide.visible .pipeline-node {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .pipeline-node:nth-child(4) {
+      border-color: var(--amber);
+    }
+
+    .pipeline-node:nth-child(5) {
+      border-color: var(--cyan);
+    }
+
+    .pipeline-node:nth-child(6) {
+      border-color: var(--green);
+    }
+
+    .pipeline-node .node-index {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--micro-size);
+    }
+
+    .pipeline-node p {
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    .pipeline-footnote {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--content-gap);
+      margin-top: clamp(0.8rem, 2.4vh, 1.8rem);
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    /* ===========================================
+       SLIDE 04 — PYTHON-SLUGIFY SCENARIO
+       =========================================== */
+    .task-card {
+      position: relative;
+      padding: clamp(0.9rem, 2.2vw, 1.8rem);
+      background: var(--white);
+      color: var(--ink);
+      box-shadow: clamp(0.6rem, 1.5vw, 1.4rem) clamp(0.6rem, 1.5vw, 1.4rem) 0 var(--blue);
+    }
+
+    .task-card::before {
+      content: "X1";
+      position: absolute;
+      top: clamp(0.6rem, 1.2vw, 1rem);
+      right: clamp(0.7rem, 1.4vw, 1.1rem);
+      color: var(--blue);
+      font-family: var(--font-mono);
+      font-size: clamp(1.5rem, 4vw, 3.5rem);
+      font-weight: 600;
+    }
+
+    .task-card h3 {
+      max-width: 16ch;
+      font-size: clamp(1.2rem, 2.7vw, 2.4rem);
+      line-height: 1.05;
+    }
+
+    .task-card p {
+      max-width: 35ch;
+      margin-top: clamp(0.65rem, 1.5vh, 1rem);
+      color: var(--muted-dark);
+    }
+
+    .blindspot-list {
+      display: grid;
+      gap: clamp(0.5rem, 1.2vh, 0.9rem);
+    }
+
+    .blindspot-row {
+      display: grid;
+      grid-template-columns: clamp(2rem, 4vw, 3.5rem) 1fr;
+      gap: clamp(0.55rem, 1.2vw, 1rem);
+      align-items: center;
+      padding: clamp(0.6rem, 1.2vw, 1rem);
+      border-bottom: clamp(0.06rem, 0.1vw, 0.1rem) solid rgba(255, 255, 255, 0.16);
+    }
+
+    .blindspot-row .signal {
+      color: var(--cyan);
+      font-family: var(--font-mono);
+      font-size: clamp(1.1rem, 2.5vw, 2rem);
+    }
+
+    .blindspot-row p {
+      margin-top: clamp(0.2rem, 0.45vh, 0.35rem);
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    /* ===========================================
+       SLIDE 05 — CODE DIFF
+       =========================================== */
+    .diff-shell {
+      min-height: 0;
+      background: #111318;
+      border-top: clamp(0.18rem, 0.3vw, 0.28rem) solid var(--blue);
+      box-shadow: 0 clamp(0.8rem, 2vw, 1.8rem) clamp(2rem, 5vw, 5rem) rgba(0, 0, 0, 0.32);
+    }
+
+    .diff-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: clamp(0.45rem, 0.85vw, 0.7rem) clamp(0.65rem, 1.3vw, 1rem);
+      background: #24272e;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--micro-size);
+    }
+
+    .diff-code {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0 clamp(0.7rem, 1.2vw, 1rem);
+      padding: clamp(0.6rem, 1.3vw, 1.05rem);
+      font-family: var(--font-mono);
+      font-size: clamp(0.56rem, 0.95vw, 0.84rem);
+      line-height: 1.45;
+    }
+
+    .diff-code .file {
+      grid-column: 1 / -1;
+      margin-block: clamp(0.2rem, 0.55vh, 0.4rem);
+      color: var(--blue-bright);
+      font-weight: 600;
+    }
+
+    .diff-code .minus,
+    .diff-code .plus {
+      display: contents;
+    }
+
+    .diff-code .minus > * {
+      color: #ffb3b8;
+      background: rgba(250, 77, 86, 0.1);
+    }
+
+    .diff-code .plus > * {
+      color: #a7f0ba;
+      background: rgba(66, 190, 101, 0.1);
+    }
+
+    .diff-code .sign {
+      padding-inline: clamp(0.2rem, 0.45vw, 0.35rem);
+      text-align: center;
+    }
+
+    .diff-code .code-line {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .diff-callout {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--content-gap);
+      margin-top: clamp(0.65rem, 1.8vh, 1.3rem);
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    .diff-callout strong {
+      color: var(--cyan);
+      font-weight: 500;
+    }
+
+    /* ===========================================
+       SLIDE 06 — THREE VERDICTS
+       =========================================== */
+    .verdict-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+      gap: clamp(0.8rem, 2.4vw, 2.4rem);
+      align-items: stretch;
+      min-height: 0;
+    }
+
+    .verdict-stack {
+      display: grid;
+      gap: clamp(0.45rem, 1vh, 0.8rem);
+    }
+
+    .verdict-card {
+      display: grid;
+      grid-template-columns: clamp(4.6rem, 9vw, 7rem) 1fr;
+      align-items: center;
+      gap: clamp(0.55rem, 1.2vw, 1rem);
+      padding: clamp(0.55rem, 1.2vw, 0.9rem);
+      background: var(--panel);
+      border-left: clamp(0.2rem, 0.35vw, 0.32rem) solid currentColor;
+    }
+
+    .verdict-card.pass { color: var(--green); }
+    .verdict-card.fail { color: var(--red); }
+    .verdict-card.human { color: var(--amber); }
+
+    .verdict-card .verdict-name {
+      font-family: var(--font-mono);
+      font-size: var(--small-size);
+      font-weight: 600;
+    }
+
+    .verdict-card p {
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    .terminal {
+      min-height: 0;
+      overflow: hidden;
+      background: #08090b;
+      border: clamp(0.05rem, 0.09vw, 0.08rem) solid #35383f;
+      box-shadow: 0 clamp(0.8rem, 2vw, 1.8rem) clamp(2rem, 5vw, 5rem) rgba(0, 0, 0, 0.32);
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: clamp(0.42rem, 0.85vw, 0.68rem) clamp(0.6rem, 1.2vw, 0.95rem);
+      background: #24272e;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--micro-size);
+    }
+
+    .terminal-lights {
+      display: flex;
+      gap: clamp(0.25rem, 0.5vw, 0.4rem);
+    }
+
+    .terminal-lights span {
+      width: clamp(0.42rem, 0.7vw, 0.62rem);
+      height: clamp(0.42rem, 0.7vw, 0.62rem);
+      background: var(--muted-dark);
+    }
+
+    .terminal-body {
+      padding: clamp(0.65rem, 1.4vw, 1.1rem);
+      font-family: var(--font-mono);
+      font-size: clamp(0.55rem, 0.88vw, 0.78rem);
+      line-height: 1.62;
+    }
+
+    .terminal-line {
+      display: block;
+      opacity: 0;
+      transform: translateX(calc(-1 * clamp(0.4rem, 0.8vw, 0.7rem)));
+      transition: opacity 320ms ease, transform 320ms var(--ease-out);
+      transition-delay: var(--delay);
+      white-space: nowrap;
+    }
+
+    .slide.visible .terminal-line {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .prompt { color: var(--blue-bright); }
+    .dim { color: #777b84; }
+
+    /* ===========================================
+       SLIDE 07 — PYTHON-SLUGIFY TAKEAWAYS
+       =========================================== */
+    .takeaway-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: clamp(0.45rem, 1.2vw, 1rem);
+      margin-top: clamp(0.8rem, 2.5vh, 2rem);
+    }
+
+    .takeaway {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: clamp(9rem, 25vh, 15rem);
+      padding: clamp(0.7rem, 1.5vw, 1.2rem);
+      background: var(--white);
+      color: var(--ink);
+      border-bottom: clamp(0.22rem, 0.38vw, 0.35rem) solid var(--blue);
+    }
+
+    .takeaway:nth-child(2) { border-color: var(--cyan); }
+    .takeaway:nth-child(3) { border-color: var(--red); }
+    .takeaway:nth-child(4) { border-color: var(--amber); }
+
+    .takeaway .icon {
+      font-family: var(--font-mono);
+      font-size: clamp(1.4rem, 3.5vw, 3rem);
+      font-weight: 300;
+    }
+
+    .takeaway p {
+      margin-top: clamp(0.4rem, 0.9vh, 0.7rem);
+      color: var(--muted-dark);
+      font-size: var(--small-size);
+    }
+
+    /* ===========================================
+       SLIDE 08 — BOUNDARY TIMELINE
+       =========================================== */
+    .timeline-shell {
+      position: relative;
+      margin-top: clamp(0.7rem, 2.4vh, 1.8rem);
+      padding: clamp(1rem, 2.3vw, 2rem);
+      background: rgba(31, 34, 41, 0.94);
+      border-top: clamp(0.18rem, 0.3vw, 0.28rem) solid var(--purple);
+    }
+
+    .timeline-axis {
+      position: relative;
+      height: clamp(5.4rem, 16vh, 8rem);
+      margin-inline: clamp(1rem, 4vw, 4rem);
+    }
+
+    .timeline-axis::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: clamp(0.11rem, 0.2vw, 0.18rem);
+      background: var(--muted-dark);
+    }
+
+    .window-range {
+      position: absolute;
+      top: calc(50% - clamp(0.3rem, 0.6vw, 0.55rem));
+      left: 8%;
+      width: 72%;
+      height: clamp(0.6rem, 1.2vw, 1.1rem);
+      background: linear-gradient(90deg, rgba(15, 98, 254, 0.28), rgba(61, 219, 217, 0.55));
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 1.2s var(--ease-out) 300ms;
+    }
+
+    .timeline-slide.visible .window-range {
+      transform: scaleX(1);
+    }
+
+    .time-point {
+      position: absolute;
+      top: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(0.35rem, 0.7vh, 0.55rem);
+      transform: translate(-50%, -50%);
+    }
+
+    .time-point:nth-child(2) { left: 8%; }
+    .time-point:nth-child(3) { left: 80%; }
+    .time-point:nth-child(4) { left: 94%; }
+
+    .time-dot {
+      width: clamp(0.9rem, 1.8vw, 1.5rem);
+      height: clamp(0.9rem, 1.8vw, 1.5rem);
+      border: clamp(0.16rem, 0.28vw, 0.24rem) solid var(--cyan);
+      background: var(--ink);
+    }
+
+    .time-point:nth-child(3) .time-dot { border-color: var(--amber); }
+    .time-point:nth-child(4) .time-dot { border-color: var(--red); }
+
+    .time-label {
+      position: absolute;
+      top: clamp(1rem, 3vh, 2rem);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--small-size);
+      white-space: nowrap;
+    }
+
+    .operator-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: clamp(0.45rem, 1.2vw, 1rem);
+    }
+
+    .operator-card {
+      display: flex;
+      align-items: center;
+      gap: clamp(0.55rem, 1.2vw, 1rem);
+      padding: clamp(0.55rem, 1.2vw, 0.9rem);
+      background: #111318;
+      border-left: clamp(0.18rem, 0.3vw, 0.28rem) solid var(--red);
+    }
+
+    .operator-card:nth-child(2) { border-color: var(--amber); }
+    .operator-card:nth-child(3) { border-color: var(--green); }
+
+    .operator {
+      min-width: clamp(2.2rem, 4.5vw, 3.8rem);
+      color: var(--white);
+      font-family: var(--font-mono);
+      font-size: clamp(1.1rem, 2.5vw, 2.1rem);
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .operator-card p {
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    /* ===========================================
+       SLIDE 09 — QUALITY GAUNTLET
+       =========================================== */
+    .gauntlet-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+      gap: clamp(0.8rem, 3vw, 3rem);
+      align-items: center;
+    }
+
+    .gauntlet-core {
+      position: relative;
+      display: grid;
+      place-items: center;
+      aspect-ratio: 1;
+      max-height: min(46vh, 26rem);
+      background:
+        radial-gradient(circle, rgba(15, 98, 254, 0.42) 0 22%, transparent 23%),
+        radial-gradient(circle, transparent 0 42%, rgba(61, 219, 217, 0.25) 43% 45%, transparent 46%),
+        radial-gradient(circle, transparent 0 65%, rgba(120, 169, 255, 0.18) 66% 68%, transparent 69%);
+    }
+
+    .gauntlet-core::before,
+    .gauntlet-core::after {
+      content: "";
+      position: absolute;
+      width: 84%;
+      height: clamp(0.07rem, 0.12vw, 0.11rem);
+      background: rgba(61, 219, 217, 0.4);
+      animation: none;
+    }
+
+    .gauntlet-core::after {
+      transform: rotate(90deg);
+    }
+
+    .gauntlet-slide.visible .gauntlet-core::before,
+    .gauntlet-slide.visible .gauntlet-core::after {
+      animation: rotate-scan 7s linear infinite;
+    }
+
+    @keyframes rotate-scan {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .gauntlet-core strong {
+      z-index: 1;
+      max-width: 7ch;
+      font-size: clamp(1.3rem, 3.5vw, 3.1rem);
+      font-weight: 300;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: clamp(0.45rem, 1.2vw, 0.95rem);
+    }
+
+    .metric {
+      min-height: clamp(5.2rem, 14vh, 8rem);
+      padding: clamp(0.55rem, 1.2vw, 0.95rem);
+      background: var(--white);
+      color: var(--ink);
+      border-top: clamp(0.16rem, 0.28vw, 0.24rem) solid var(--blue);
+    }
+
+    .metric:nth-child(2), .metric:nth-child(5) { border-color: var(--cyan); }
+    .metric:nth-child(3), .metric:nth-child(6) { border-color: var(--purple); }
+
+    .metric-value {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: clamp(1.05rem, 2.5vw, 2rem);
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .metric-label {
+      display: block;
+      margin-top: clamp(0.35rem, 0.8vh, 0.65rem);
+      color: var(--muted-dark);
+      font-size: var(--small-size);
+    }
+
+    /* ===========================================
+       SLIDE 10 — BOUNDED REPAIR
+       =========================================== */
+    .repair-flow {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      align-items: center;
+      gap: clamp(0.35rem, 0.9vw, 0.75rem);
+      margin-top: clamp(0.9rem, 4vh, 3rem);
+    }
+
+    .repair-flow::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 5%;
+      width: 90%;
+      height: clamp(0.11rem, 0.2vw, 0.18rem);
+      z-index: -1;
+      background: linear-gradient(90deg, var(--red), var(--amber), var(--red), var(--green), var(--amber), var(--cyan));
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 1.7s var(--ease-out) 200ms;
+    }
+
+    .repair-slide.visible .repair-flow::before {
+      transform: scaleX(1);
+    }
+
+    .repair-node {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: clamp(7rem, 20vh, 11rem);
+      padding: clamp(0.55rem, 1.15vw, 0.9rem);
+      background: var(--panel);
+      border-top: clamp(0.18rem, 0.3vw, 0.28rem) solid var(--red);
+      opacity: 0;
+      transform: scale(0.85);
+      transition: opacity 380ms ease, transform 500ms var(--ease-out);
+      transition-delay: var(--delay);
+    }
+
+    .repair-slide.visible .repair-node {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .repair-node.approval { border-color: var(--amber); }
+    .repair-node.pass { border-color: var(--green); }
+    .repair-node.applied { border-color: var(--cyan); }
+
+    .repair-state {
+      font-family: var(--font-mono);
+      font-size: clamp(1rem, 2.3vw, 1.9rem);
+      font-weight: 600;
+    }
+
+    .repair-node p {
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    .repair-note {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: clamp(0.45rem, 1.2vw, 1rem);
+      margin-top: clamp(0.8rem, 2.2vh, 1.6rem);
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    .repair-note span {
+      padding-left: clamp(0.45rem, 1vw, 0.8rem);
+      border-left: clamp(0.14rem, 0.24vw, 0.21rem) solid var(--blue);
+    }
+
+    /* ===========================================
+       SLIDE 11 — REPAIR LOG EVIDENCE
+       =========================================== */
+    .evidence-list {
+      display: grid;
+      gap: clamp(0.55rem, 1.4vh, 1rem);
+    }
+
+    .evidence-item {
+      display: grid;
+      grid-template-columns: clamp(1.8rem, 3.5vw, 3rem) 1fr;
+      gap: clamp(0.55rem, 1.2vw, 1rem);
+      align-items: start;
+    }
+
+    .evidence-item .check {
+      display: grid;
+      place-items: center;
+      width: clamp(1.5rem, 2.7vw, 2.2rem);
+      aspect-ratio: 1;
+      background: var(--cyan);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: var(--small-size);
+      font-weight: 600;
+    }
+
+    .evidence-item p {
+      margin-top: clamp(0.2rem, 0.45vh, 0.35rem);
+      color: var(--muted);
+      font-size: var(--small-size);
+    }
+
+    /* ===========================================
+       SLIDE 12 — CLOSE
+       =========================================== */
+    .comparison {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: clamp(0.7rem, 2vw, 1.6rem);
+      margin-top: clamp(0.8rem, 2.6vh, 2rem);
+    }
+
+    .comparison-card {
+      padding: clamp(0.8rem, 1.8vw, 1.5rem);
+      background: var(--white);
+      color: var(--ink);
+      border-top: clamp(0.2rem, 0.35vw, 0.32rem) solid var(--blue);
+    }
+
+    .comparison-card:nth-child(2) {
+      border-color: var(--purple);
+    }
+
+    .comparison-card ul {
+      display: grid;
+      gap: clamp(0.35rem, 0.8vh, 0.65rem);
+      margin-top: clamp(0.55rem, 1.2vh, 0.9rem);
+      padding-left: clamp(1rem, 2vw, 1.5rem);
+      color: var(--muted-dark);
+      font-size: var(--small-size);
+    }
+
+    .closing-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--content-gap);
+      margin-top: clamp(0.8rem, 2.4vh, 1.8rem);
+      padding-top: clamp(0.65rem, 1.6vh, 1.2rem);
+      border-top: clamp(0.06rem, 0.1vw, 0.1rem) solid rgba(255, 255, 255, 0.18);
+    }
+
+    .closing-line strong {
+      max-width: 28ch;
+      color: var(--cyan);
+      font-size: clamp(0.92rem, 1.6vw, 1.35rem);
+      font-weight: 500;
+    }
+
+    /* ===========================================
+       RESPONSIVE COMPOSITION OVERRIDES
+       =========================================== */
+    @media (max-width: 760px) {
+      .split,
+      .verdict-layout,
+      .gauntlet-layout {
+        grid-template-columns: 1fr;
+        gap: clamp(0.65rem, 1.5vh, 1rem);
+      }
+
+      .blindspot-grid,
+      .operator-grid,
+      .repair-note {
+        grid-template-columns: 1fr;
+      }
+
+      .blindspot-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .takeaway-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .pipeline,
+      .repair-flow {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .pipeline::before,
+      .repair-flow::before {
+        display: none;
+      }
+
+      .gauntlet-core {
+        display: none;
+      }
+
+      .title-slide .slide-content {
+        padding-right: clamp(4.3rem, 22vw, 6rem);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .chapter-index,
+      .title-mark {
+        display: none;
+      }
+
+      .chapter-header {
+        align-items: flex-start;
+      }
+
+      .blindspot-card {
+        min-height: clamp(6.4rem, 15vh, 8rem);
+      }
+
+      .blindspot-card p {
+        display: none;
+      }
+
+      .pipeline-node,
+      .repair-node {
+        min-height: clamp(5.3rem, 11vh, 7rem);
+      }
+
+      .pipeline-node p,
+      .repair-node p {
+        font-size: var(--micro-size);
+      }
+
+      .comparison {
+        grid-template-columns: 1fr;
+      }
+
+      .closing-line {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (max-height: 700px) {
+      .chapter-header {
+        margin-bottom: clamp(0.45rem, 1.2vh, 0.8rem);
+      }
+
+      .blindspot-card,
+      .takeaway,
+      .pipeline-node,
+      .repair-node {
+        min-height: 0;
+      }
+
+      .timeline-axis {
+        height: clamp(4rem, 14vh, 6rem);
+      }
+    }
+
+    @media (max-height: 600px) {
+      .lead,
+      .title-subtitle {
+        font-size: var(--body-size);
+      }
+
+      .blindspot-caption,
+      .pipeline-footnote,
+      .diff-callout,
+      .repair-note {
+        margin-top: clamp(0.35rem, 0.8vh, 0.55rem);
+      }
+
+      .blindspot-card p,
+      .task-card p,
+      .takeaway p,
+      .evidence-item p {
+        font-size: var(--micro-size);
+      }
+
+      .metric {
+        min-height: clamp(4rem, 12vh, 5rem);
+      }
+    }
+
+    @media (max-height: 500px) {
+      .eyebrow {
+        margin-bottom: clamp(0.2rem, 0.5vh, 0.35rem);
+      }
+
+      .blindspot-caption,
+      .pipeline-footnote,
+      .diff-callout,
+      .repair-note,
+      .closing-line p {
+        display: none;
+      }
+
+      .blindspot-grid,
+      .takeaway-grid,
+      .comparison,
+      .operator-grid,
+      .metric-grid {
+        margin-top: clamp(0.3rem, 0.8vh, 0.5rem);
+      }
+
+      .terminal-body,
+      .diff-code {
+        line-height: 1.28;
+      }
+
+      .pipeline-node,
+      .repair-node {
+        min-height: clamp(4.2rem, 18vh, 5rem);
+      }
+
+      .pipeline-node p,
+      .repair-node p,
+      .takeaway p,
+      .comparison-card li:nth-child(n+3) {
+        display: none;
+      }
+
+      .timeline-shell {
+        margin-top: clamp(0.25rem, 0.6vh, 0.4rem);
+        padding: clamp(0.45rem, 1vw, 0.7rem);
+      }
+
+      .timeline-axis {
+        height: clamp(3rem, 12vh, 4rem);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- === PRESENTATION CHROME === -->
+  <div class="progress-track" aria-hidden="true"><div class="progress-bar" id="progressBar"></div></div>
+  <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
+  <div class="slide-counter" id="slideCounter" aria-live="polite">01 / 12</div>
+  <div class="keyboard-hint">← → navigate · E edit · F fullscreen</div>
+
+  <!-- === INLINE EDITING CONTROLS === -->
+  <div class="edit-hotzone" id="editHotzone" aria-hidden="true"></div>
+  <button class="edit-toggle" id="editToggle" type="button" aria-pressed="false" title="Toggle edit mode (E)">EDIT</button>
+  <div class="edit-banner" role="status">EDIT MODE · Ctrl/Cmd+S exports</div>
+
+  <main>
+    <!-- === SLIDE 01: TITLE === -->
+    <section class="slide title-slide" id="slide-1" aria-labelledby="title-1">
+      <div class="slide-content">
+        <div class="title-meta reveal" style="--delay: 80ms">
+          <span data-editable="true">Release Gate · 0.6.0</span>
+          <span data-editable="true">Engineering demo</span>
+        </div>
+        <div>
+          <p class="eyebrow reveal" style="--delay: 160ms" data-editable="true">Independent release evidence</p>
+          <h1 id="title-1" class="reveal" style="--delay: 230ms" data-editable="true">Proof before release.</h1>
+        </div>
+        <p class="title-subtitle reveal" style="--delay: 360ms" data-editable="true">
+          A policy-driven gate between AI-generated code and the production repository.
+        </p>
+      </div>
+      <div class="title-mark decorative" aria-hidden="true">RG</div>
+    </section>
+
+    <!-- === SLIDE 02: THE BLINDSPOT === -->
+    <section class="slide" id="slide-2" aria-labelledby="title-2">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 60ms" data-editable="true">The blindspot</p>
+            <h2 id="title-2" class="reveal" style="--delay: 130ms" data-editable="true">Green tests are not a release decision.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">01</span>
+        </div>
+        <div class="blindspot-grid">
+          <article class="blindspot-card reveal" style="--delay: 220ms">
+            <div class="number">01 / CONTEXT</div>
+            <h3 data-editable="true">The assistant sees its workspace.</h3>
+            <p data-editable="true">Ambient packages and cached state can make incomplete work appear healthy.</p>
+          </article>
+          <article class="blindspot-card reveal" style="--delay: 310ms">
+            <div class="number">02 / COVERAGE</div>
+            <h3 data-editable="true">The task spans more than code.</h3>
+            <p data-editable="true">Packaging, configuration, policy, and scope can fail outside the happy path.</p>
+          </article>
+          <article class="blindspot-card reveal" style="--delay: 400ms">
+            <div class="number">03 / AUTHORITY</div>
+            <h3 data-editable="true">The candidate cannot grade itself.</h3>
+            <p data-editable="true">Tests and policy inside the change need an independent trust boundary.</p>
+          </article>
+        </div>
+        <p class="blindspot-caption reveal" style="--delay: 500ms" data-editable="true">
+          Release Gate reconstructs the decision from a reviewed base, not from the assistant’s confidence.
+        </p>
+      </div>
+    </section>
+
+    <!-- === SLIDE 03: RELEASE GATE PIPELINE === -->
+    <section class="slide pipeline-slide" id="slide-3" aria-labelledby="title-3">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Proof pipeline</p>
+            <h2 id="title-3" class="reveal" style="--delay: 120ms" data-editable="true">One candidate. Independent evidence.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">02</span>
+        </div>
+        <div class="pipeline" aria-label="Candidate flows through workspace reconstruction, reviewed policy, checks, evidence, verdict, and oracle">
+          <article class="pipeline-node" style="--delay: 220ms">
+            <span class="node-index">01</span>
+            <h3 data-editable="true">Candidate</h3>
+            <p data-editable="true">Patch + trusted base</p>
+          </article>
+          <article class="pipeline-node" style="--delay: 330ms">
+            <span class="node-index">02</span>
+            <h3 data-editable="true">Clean workspace</h3>
+            <p data-editable="true">Base and candidate rebuilt</p>
+          </article>
+          <article class="pipeline-node" style="--delay: 440ms">
+            <span class="node-index">03</span>
+            <h3 data-editable="true">Reviewed policy</h3>
+            <p data-editable="true">Scope + checks + limits</p>
+          </article>
+          <article class="pipeline-node" style="--delay: 550ms">
+            <span class="node-index">04</span>
+            <h3 data-editable="true">Evidence</h3>
+            <p data-editable="true">Recorded and bounded</p>
+          </article>
+          <article class="pipeline-node pulse" style="--delay: 660ms">
+            <span class="node-index">05</span>
+            <h3 data-editable="true">Verdict</h3>
+            <p data-editable="true">PASS · FAIL · HUMAN</p>
+          </article>
+          <article class="pipeline-node" style="--delay: 770ms">
+            <span class="node-index">06</span>
+            <h3 data-editable="true">Oracle</h3>
+            <p data-editable="true">Truth after verdict</p>
+          </article>
+        </div>
+        <div class="pipeline-footnote reveal" style="--delay: 900ms">
+          <span data-editable="true">The gate records the verdict before the external oracle runs.</span>
+          <span class="mono accent" data-editable="true">evidence ≠ self-attestation</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- === SLIDE 04: PYTHON-SLUGIFY SCENARIO === -->
+    <section class="slide" id="slide-4" aria-labelledby="title-4">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Demo 01 · python-slugify</p>
+            <h2 id="title-4" class="reveal" style="--delay: 120ms" data-editable="true">A small migration with a wide blast radius.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">03</span>
+        </div>
+        <div class="split">
+          <article class="task-card reveal-left" style="--delay: 220ms">
+            <span class="label">Task card</span>
+            <h3 data-editable="true">Switch the transliteration backend.</h3>
+            <p data-editable="true">
+              Make <span class="mono">Unidecode</span> required, remove <span class="mono">text-unidecode</span>, preserve the API, and keep the change small.
+            </p>
+          </article>
+          <div class="blindspot-list">
+            <article class="blindspot-row reveal" style="--delay: 300ms">
+              <span class="signal">A</span>
+              <div><h3 data-editable="true">Ambient environment</h3><p data-editable="true">A host package can hide a missing clean-environment dependency.</p></div>
+            </article>
+            <article class="blindspot-row reveal" style="--delay: 390ms">
+              <span class="signal">B</span>
+              <div><h3 data-editable="true">Selective completion</h3><p data-editable="true">Code changes land; peripheral <span class="mono">tox.ini</span> coverage is easy to omit.</p></div>
+            </article>
+            <article class="blindspot-row reveal" style="--delay: 480ms">
+              <span class="signal">C</span>
+              <div><h3 data-editable="true">Trust boundary</h3><p data-editable="true">Edits to <span class="mono">test.py</span> or gate policy cannot silently pass.</p></div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- === SLIDE 05: PYTHON-SLUGIFY CODE DIFF === -->
+    <section class="slide" id="slide-5" aria-labelledby="title-5">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Code evidence</p>
+            <h2 id="title-5" class="reveal" style="--delay: 120ms" data-editable="true">The migration is more than one import.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">04</span>
+        </div>
+        <div class="diff-shell reveal" style="--delay: 220ms">
+          <div class="diff-toolbar"><span>python-slugify · X1</span><span>4 files changed</span></div>
+          <div class="diff-code" aria-label="Before and after code excerpt">
+            <div class="file">setup.py</div>
+            <div class="minus"><span class="sign">−</span><span class="code-line">install_requires = ['text-unidecode&gt;=1.3']</span></div>
+            <div class="plus"><span class="sign">+</span><span class="code-line">install_requires = ['Unidecode&gt;=1.1.1']</span></div>
+            <div class="file">slugify/slugify.py</div>
+            <div class="minus"><span class="sign">−</span><span class="code-line">try: import unidecode</span></div>
+            <div class="minus"><span class="sign">−</span><span class="code-line">except ImportError: import text_unidecode as unidecode</span></div>
+            <div class="plus"><span class="sign">+</span><span class="code-line">import unidecode</span></div>
+            <div class="file">tox.ini</div>
+            <div class="minus"><span class="sign">−</span><span class="code-line">py{3.10,3.11,3.12,3.13,3.14}-{unidecode,text_unidecode}</span></div>
+            <div class="plus"><span class="sign">+</span><span class="code-line">py{3.10,3.11,3.12,3.13,3.14}-unidecode</span></div>
+          </div>
+        </div>
+        <div class="diff-callout reveal" style="--delay: 520ms">
+          <span data-editable="true"><strong>Gate check:</strong> no legacy dependency names remain across packaging, docs, code, or tox.</span>
+          <span class="mono" data-editable="true">README.md · setup.py · slugify.py · tox.ini</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- === SLIDE 06: PYTHON-SLUGIFY VERDICTS === -->
+    <section class="slide" id="slide-6" aria-labelledby="title-6">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Recorded decisions</p>
+            <h2 id="title-6" class="reveal" style="--delay: 120ms" data-editable="true">Three candidates. Three distinct outcomes.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">05</span>
+        </div>
+        <div class="verdict-layout">
+          <div class="verdict-stack">
+            <article class="verdict-card pass reveal-left" style="--delay: 220ms">
+              <strong class="verdict-name">PASS</strong>
+              <p data-editable="true">Reviewed X1 paths only · <span class="green mono">good_pass</span></p>
+            </article>
+            <article class="verdict-card fail reveal-left" style="--delay: 310ms">
+              <strong class="verdict-name">FAIL</strong>
+              <p data-editable="true"><span class="mono">test.py</span> is forbidden · <span class="red mono">good_catch</span></p>
+            </article>
+            <article class="verdict-card human reveal-left" style="--delay: 400ms">
+              <strong class="verdict-name">NEEDS_<br>HUMAN</strong>
+              <p data-editable="true">Policy changed · configured checks skipped · <span class="amber mono">escalated</span></p>
+            </article>
+          </div>
+          <div class="terminal reveal" style="--delay: 260ms" aria-label="Verified python-slugify demo output">
+            <div class="terminal-bar"><span>verified controls</span><span class="terminal-lights"><span></span><span></span><span></span></span></div>
+            <div class="terminal-body">
+              <span class="terminal-line" style="--delay: 400ms"><span class="prompt">$</span> demo.py control pass</span>
+              <span class="terminal-line green" style="--delay: 480ms">verdict: PASS · reason codes: none</span>
+              <span class="terminal-line dim" style="--delay: 560ms">changed paths: README.md, setup.py, slugify/slugify.py, tox.ini</span>
+              <span class="terminal-line" style="--delay: 680ms"><span class="prompt">$</span> demo.py control fail</span>
+              <span class="terminal-line red" style="--delay: 760ms">verdict: FAIL · forbidden: test.py</span>
+              <span class="terminal-line" style="--delay: 880ms"><span class="prompt">$</span> demo.py control needs-human</span>
+              <span class="terminal-line amber" style="--delay: 960ms">verdict: NEEDS_HUMAN · POLICY_FILE_CHANGED</span>
+              <span class="terminal-line dim" style="--delay: 1040ms">verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- === SLIDE 07: PYTHON-SLUGIFY TAKEAWAYS === -->
+    <section class="slide light" id="slide-7" aria-labelledby="title-7">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">What demo 01 proves</p>
+            <h2 id="title-7" class="reveal" style="--delay: 120ms" data-editable="true">Release confidence comes from controlled context.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">06</span>
+        </div>
+        <div class="takeaway-grid">
+          <article class="takeaway reveal" style="--delay: 220ms">
+            <span class="icon">ENV</span>
+            <div><h3 data-editable="true">Clean environments</h3><p data-editable="true">Declared dependencies must work without ambient host state.</p></div>
+          </article>
+          <article class="takeaway reveal" style="--delay: 310ms">
+            <span class="icon">ALL</span>
+            <div><h3 data-editable="true">Task consistency</h3><p data-editable="true">Configuration and documentation remain part of the change contract.</p></div>
+          </article>
+          <article class="takeaway reveal" style="--delay: 400ms">
+            <span class="icon">SCP</span>
+            <div><h3 data-editable="true">Scope enforcement</h3><p data-editable="true">A candidate cannot weaken trusted tests to manufacture green.</p></div>
+          </article>
+          <article class="takeaway reveal" style="--delay: 490ms">
+            <span class="icon">POL</span>
+            <div><h3 data-editable="true">Policy integrity</h3><p data-editable="true">Changing the judge triggers review before configured checks run.</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- === SLIDE 08: RATE-LIMITER BOUNDARY === -->
+    <section class="slide timeline-slide" id="slide-8" aria-labelledby="title-8">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Demo 02 · rate-limiter</p>
+            <h2 id="title-8" class="reveal" style="--delay: 120ms" data-editable="true">One operator changes the window contract.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">07</span>
+        </div>
+        <div class="timeline-shell reveal" style="--delay: 220ms">
+          <div class="timeline-axis" aria-label="A hit at time zero stays active through time sixty and expires only after sixty">
+            <div class="window-range"></div>
+            <div class="time-point"><span class="time-label">t = 0 · hit</span><span class="time-dot pulse"></span></div>
+            <div class="time-point"><span class="time-label">t = 60 · still active</span><span class="time-dot"></span></div>
+            <div class="time-point"><span class="time-label">t &gt; 60 · expires</span><span class="time-dot"></span></div>
+          </div>
+          <div class="operator-grid">
+            <article class="operator-card reveal" style="--delay: 400ms">
+              <span class="operator red">&gt;=</span>
+              <p data-editable="true"><strong>C0:</strong> drops the hit at the exact boundary.</p>
+            </article>
+            <article class="operator-card reveal" style="--delay: 500ms">
+              <span class="operator amber">&lt;=</span>
+              <p data-editable="true"><strong>C1:</strong> drops active hits and retains expired ones.</p>
+            </article>
+            <article class="operator-card reveal" style="--delay: 600ms">
+              <span class="operator green">&gt;</span>
+              <p data-editable="true"><strong>C2:</strong> expires only when age exceeds the window.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- === SLIDE 09: QUALITY GAUNTLET === -->
+    <section class="slide light gauntlet-slide" id="slide-9" aria-labelledby="title-9">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Deep assurance</p>
+            <h2 id="title-9" class="reveal" style="--delay: 120ms" data-editable="true">The gauntlet tests behavior, not confidence.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">08</span>
+        </div>
+        <div class="gauntlet-layout">
+          <div class="gauntlet-core reveal" style="--delay: 240ms" aria-hidden="true"><strong>QUALITY<br>GAUNTLET</strong></div>
+          <div class="metric-grid">
+            <article class="metric reveal" style="--delay: 260ms"><span class="metric-value" data-editable="true">17 passed</span><span class="metric-label" data-editable="true">tests + coverage suite</span></article>
+            <article class="metric reveal" style="--delay: 340ms"><span class="metric-value" data-editable="true">100%</span><span class="metric-label" data-editable="true">statement + branch coverage</span></article>
+            <article class="metric reveal" style="--delay: 420ms"><span class="metric-value" data-editable="true">8 / 8</span><span class="metric-label" data-editable="true">production mutants killed</span></article>
+            <article class="metric reveal" style="--delay: 500ms"><span class="metric-value" data-editable="true">5 / 5</span><span class="metric-label" data-editable="true">orchestration controls</span></article>
+            <article class="metric reveal" style="--delay: 580ms"><span class="metric-value" data-editable="true">0 issues</span><span class="metric-label" data-editable="true">strict types across 8 files</span></article>
+            <article class="metric reveal" style="--delay: 660ms"><span class="metric-value" data-editable="true">11 passed</span><span class="metric-label" data-editable="true">independent oracle after apply</span></article>
+          </div>
+        </div>
+        <p class="diff-callout reveal" style="--delay: 760ms" data-editable="true">
+          Recorded run: <strong class="mono">8/8 mutants killed</strong> · supply-chain scan clean · real burst behavior verified.
+        </p>
+      </div>
+    </section>
+
+    <!-- === SLIDE 10: BOUNDED REPAIR FLOW === -->
+    <section class="slide repair-slide" id="slide-10" aria-labelledby="title-10">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Bounded repair</p>
+            <h2 id="title-10" class="reveal" style="--delay: 120ms" data-editable="true">Automation can repair—inside explicit authority.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">09</span>
+        </div>
+        <div class="repair-flow" aria-label="C0 fails, human approves repair, C1 fails, C2 passes, human gives final approval, and the repair is applied">
+          <article class="repair-node" style="--delay: 220ms"><span class="label">Seeded candidate</span><strong class="repair-state red">C0 FAIL</strong><p data-editable="true"><span class="mono">&gt;=</span> boundary defect</p></article>
+          <article class="repair-node approval" style="--delay: 350ms"><span class="label">Human gate</span><strong class="repair-state amber">APPROVE</strong><p data-editable="true">2 paths · 2 attempts</p></article>
+          <article class="repair-node" style="--delay: 480ms"><span class="label">Attempt 01</span><strong class="repair-state red">C1 FAIL</strong><p data-editable="true"><span class="mono">&lt;=</span> inverted prune</p></article>
+          <article class="repair-node pass" style="--delay: 610ms"><span class="label">Attempt 02</span><strong class="repair-state green">C2 PASS</strong><p data-editable="true"><span class="mono">&gt;</span> restores contract</p></article>
+          <article class="repair-node approval" style="--delay: 740ms"><span class="label">Human gate</span><strong class="repair-state amber">FINAL</strong><p data-editable="true">Digest-bound approval</p></article>
+          <article class="repair-node applied pulse" style="--delay: 870ms"><span class="label">Transaction</span><strong class="repair-state accent">APPLIED</strong><p data-editable="true">Source updated once</p></article>
+        </div>
+        <div class="repair-note reveal" style="--delay: 980ms">
+          <span data-editable="true">Repair edits stay in a disposable workspace.</span>
+          <span data-editable="true">The source remains byte-for-byte at C0 until final apply.</span>
+          <span data-editable="true">Final approval binds session, tree, patch digest, and time.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- === SLIDE 11: REPAIR LOG EVIDENCE === -->
+    <section class="slide" id="slide-11" aria-labelledby="title-11">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Recorded repair evidence</p>
+            <h2 id="title-11" class="reveal" style="--delay: 120ms" data-editable="true">Every transition is visible and attributable.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">10</span>
+        </div>
+        <div class="verdict-layout">
+          <div class="terminal reveal" style="--delay: 220ms" aria-label="Rate limiter repair run log">
+            <div class="terminal-bar"><span>RUN-LOG-2026-08-24-repair-success</span><span>Windows</span></div>
+            <div class="terminal-body">
+              <span class="terminal-line red" style="--delay: 360ms">REPAIR_STAGE: C0 FAIL -&gt; approval requested</span>
+              <span class="terminal-line amber" style="--delay: 450ms">REPAIR_STATE: awaiting_approval</span>
+              <span class="terminal-line" style="--delay: 540ms">REPAIR_STAGE: approval granted</span>
+              <span class="terminal-line red" style="--delay: 630ms">REPAIR_STAGE: C1 FAIL</span>
+              <span class="terminal-line green" style="--delay: 720ms">REPAIR_STAGE: C2 PASS -&gt; final approval requested</span>
+              <span class="terminal-line amber" style="--delay: 810ms">REPAIR_STATE: awaiting_final_approval</span>
+              <span class="terminal-line accent" style="--delay: 900ms">REPAIR_STATE: applied · NEXT_ACTION: none</span>
+              <span class="terminal-line green" style="--delay: 990ms">11 passed in 0.05s</span>
+              <span class="terminal-line dim" style="--delay: 1080ms">verify-repair: C0 FAIL -&gt; C1 FAIL -&gt; C2 PASS -&gt; applied</span>
+            </div>
+          </div>
+          <div class="evidence-list">
+            <article class="evidence-item reveal" style="--delay: 300ms"><span class="check">01</span><div><h3 data-editable="true">Isolation proven</h3><p data-editable="true">C1 and C2 are evaluated outside the source repository; source hashes remain at C0.</p></div></article>
+            <article class="evidence-item reveal" style="--delay: 410ms"><span class="check">02</span><div><h3 data-editable="true">Authority bounded</h3><p data-editable="true">Approval permits exactly README and limiter source, capped at two attempts.</p></div></article>
+            <article class="evidence-item reveal" style="--delay: 520ms"><span class="check">03</span><div><h3 data-editable="true">Apply is transactional</h3><p data-editable="true">Only the passing C2 patch crosses into source after final, digest-bound approval.</p></div></article>
+            <article class="evidence-item reveal" style="--delay: 630ms"><span class="check">04</span><div><h3 data-editable="true">Truth checked last</h3><p data-editable="true">The independent 11-test oracle passes against the applied source.</p></div></article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- === SLIDE 12: CLOSE === -->
+    <section class="slide" id="slide-12" aria-labelledby="title-12">
+      <div class="slide-content">
+        <div class="chapter-header">
+          <div>
+            <p class="eyebrow reveal" style="--delay: 50ms" data-editable="true">Operational takeaway</p>
+            <h2 id="title-12" class="reveal" style="--delay: 120ms" data-editable="true">Two demos. One release contract.</h2>
+          </div>
+          <span class="chapter-index reveal" style="--delay: 180ms" aria-hidden="true">11</span>
+        </div>
+        <div class="comparison">
+          <article class="comparison-card reveal-left" style="--delay: 240ms">
+            <span class="label">python-slugify</span>
+            <h3 data-editable="true">Breadth across the repository</h3>
+            <ul>
+              <li data-editable="true">Clean dependency lifecycle</li>
+              <li data-editable="true">Configuration completeness</li>
+              <li data-editable="true">Scope and policy integrity</li>
+            </ul>
+          </article>
+          <article class="comparison-card reveal" style="--delay: 340ms">
+            <span class="label">rate-limiter</span>
+            <h3 data-editable="true">Depth across behavior and repair</h3>
+            <ul>
+              <li data-editable="true">Exact-boundary correctness</li>
+              <li data-editable="true">Mutation-backed assurance</li>
+              <li data-editable="true">Human-bounded repair authority</li>
+            </ul>
+          </article>
+        </div>
+        <div class="closing-line reveal" style="--delay: 500ms">
+          <strong data-editable="true">Release Gate turns “the agent says it is done” into an evidence-backed decision.</strong>
+          <p class="mono" data-editable="true">clean base · reviewed policy · recorded evidence · bounded authority</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    /* ===========================================
+       SLIDE PRESENTATION CONTROLLER
+       Keyboard, wheel, touch, progress, dots, hash.
+       =========================================== */
+    class SlidePresentation {
+      constructor() {
+        this.slides = Array.from(document.querySelectorAll(".slide"));
+        this.currentSlide = 0;
+        this.wheelLocked = false;
+        this.touchStartY = 0;
+        this.navDotsContainer = document.getElementById("navDots");
+        this.progressBar = document.getElementById("progressBar");
+        this.slideCounter = document.getElementById("slideCounter");
+        this.setupNavDots();
+        this.setupIntersectionObserver();
+        this.setupKeyboardNav();
+        this.setupWheelNav();
+        this.setupTouchNav();
+        this.setupHashNav();
+        this.updateChrome(0);
+      }
+
+      setupIntersectionObserver() {
+        this.observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            const index = this.slides.indexOf(entry.target);
+            if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
+              entry.target.classList.add("visible");
+              this.currentSlide = index;
+              this.updateChrome(index);
+            } else if (!entry.isIntersecting || entry.intersectionRatio < 0.2) {
+              entry.target.classList.remove("visible");
+            }
+          });
+        }, { threshold: [0, 0.2, 0.55, 0.8] });
+
+        this.slides.forEach((slide) => this.observer.observe(slide));
+      }
+
+      setupKeyboardNav() {
+        document.addEventListener("keydown", (event) => {
+          if (event.target?.isContentEditable) return;
+          const nextKeys = ["ArrowRight", "ArrowDown", "PageDown", " "];
+          const previousKeys = ["ArrowLeft", "ArrowUp", "PageUp"];
+          if (nextKeys.includes(event.key)) {
+            event.preventDefault();
+            this.goTo(this.currentSlide + 1);
+          } else if (previousKeys.includes(event.key)) {
+            event.preventDefault();
+            this.goTo(this.currentSlide - 1);
+          } else if (event.key === "Home") {
+            event.preventDefault();
+            this.goTo(0);
+          } else if (event.key === "End") {
+            event.preventDefault();
+            this.goTo(this.slides.length - 1);
+          }
+        });
+      }
+
+      setupWheelNav() {
+        window.addEventListener("wheel", (event) => {
+          if (this.wheelLocked || Math.abs(event.deltaY) < 12 || document.body.classList.contains("edit-active")) return;
+          event.preventDefault();
+          this.wheelLocked = true;
+          this.goTo(this.currentSlide + (event.deltaY > 0 ? 1 : -1));
+          window.setTimeout(() => { this.wheelLocked = false; }, 650);
+        }, { passive: false });
+      }
+
+      setupTouchNav() {
+        window.addEventListener("touchstart", (event) => {
+          this.touchStartY = event.changedTouches[0].clientY;
+        }, { passive: true });
+        window.addEventListener("touchend", (event) => {
+          const delta = this.touchStartY - event.changedTouches[0].clientY;
+          if (Math.abs(delta) > 48 && !document.body.classList.contains("edit-active")) {
+            this.goTo(this.currentSlide + (delta > 0 ? 1 : -1));
+          }
+        }, { passive: true });
+      }
+
+      setupHashNav() {
+        const match = window.location.hash.match(/^#slide-(\d+)$/);
+        if (match) {
+          window.setTimeout(() => this.goTo(Number(match[1]) - 1, false), 0);
+        }
+      }
+
+      setupNavDots() {
+        this.navDotsContainer.innerHTML = "";
+        this.slides.forEach((slide, index) => {
+          const dot = document.createElement("button");
+          dot.type = "button";
+          dot.className = "nav-dot";
+          dot.setAttribute("aria-label", `Go to slide ${index + 1}: ${slide.querySelector("h1, h2")?.textContent || "Untitled"}`);
+          dot.addEventListener("click", () => this.goTo(index));
+          this.navDotsContainer.appendChild(dot);
+        });
+      }
+
+      goTo(index, updateHash = true) {
+        const bounded = Math.max(0, Math.min(index, this.slides.length - 1));
+        this.currentSlide = bounded;
+        this.slides[bounded].scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+        this.updateChrome(bounded);
+        if (updateHash) history.replaceState(null, "", `#slide-${bounded + 1}`);
+      }
+
+      updateChrome(index) {
+        const progress = ((index + 1) / this.slides.length) * 100;
+        this.progressBar.style.width = `${progress}%`;
+        this.slideCounter.textContent = `${String(index + 1).padStart(2, "0")} / ${String(this.slides.length).padStart(2, "0")}`;
+        Array.from(this.navDotsContainer.children).forEach((dot, dotIndex) => {
+          dot.setAttribute("aria-current", dotIndex === index ? "true" : "false");
+        });
+      }
+    }
+
+    /* ===========================================
+       INLINE PRESENTATION EDITOR
+       Auto-saves text and exports a clean HTML file.
+       =========================================== */
+    class PresentationEditor {
+      constructor() {
+        this.isActive = false;
+        this.storageKey = "release-gate-demo-edits-v1";
+        this.editableElements = Array.from(document.querySelectorAll('[data-editable="true"]'));
+        this.editableElements.forEach((element, index) => {
+          element.dataset.editId = element.dataset.editId || `edit-${index + 1}`;
+        });
+        this.restore();
+        this.setupAutoSave();
+      }
+
+      toggleEditMode(force) {
+        this.isActive = typeof force === "boolean" ? force : !this.isActive;
+        document.body.classList.toggle("edit-active", this.isActive);
+        this.editableElements.forEach((element) => {
+          if (this.isActive) element.setAttribute("contenteditable", "true");
+          else element.removeAttribute("contenteditable");
+        });
+        const toggle = document.getElementById("editToggle");
+        const banner = document.querySelector(".edit-banner");
+        toggle.classList.toggle("active", this.isActive);
+        toggle.textContent = this.isActive ? "DONE" : "EDIT";
+        toggle.setAttribute("aria-pressed", String(this.isActive));
+        banner.classList.toggle("active", this.isActive);
+        if (!this.isActive) this.save();
+      }
+
+      setupAutoSave() {
+        let saveTimer;
+        this.editableElements.forEach((element) => {
+          element.addEventListener("input", () => {
+            window.clearTimeout(saveTimer);
+            saveTimer = window.setTimeout(() => this.save(), 250);
+          });
+        });
+      }
+
+      save() {
+        const values = {};
+        this.editableElements.forEach((element) => { values[element.dataset.editId] = element.innerHTML; });
+        localStorage.setItem(this.storageKey, JSON.stringify(values));
+      }
+
+      restore() {
+        try {
+          const values = JSON.parse(localStorage.getItem(this.storageKey) || "{}");
+          this.editableElements.forEach((element) => {
+            if (Object.hasOwn(values, element.dataset.editId)) element.innerHTML = values[element.dataset.editId];
+          });
+        } catch (error) {
+          console.warn("Saved presentation edits could not be restored.", error);
+        }
+      }
+
+      exportFile() {
+        this.save();
+        const wasActive = this.isActive;
+        const editableEls = Array.from(document.querySelectorAll("[contenteditable]"));
+        editableEls.forEach((element) => element.removeAttribute("contenteditable"));
+        document.body.classList.remove("edit-active");
+
+        const editToggle = document.getElementById("editToggle");
+        const editBanner = document.querySelector(".edit-banner");
+        const navDots = document.getElementById("navDots");
+        const navMarkup = navDots.innerHTML;
+        editToggle.classList.remove("active", "show");
+        editToggle.textContent = "EDIT";
+        editToggle.setAttribute("aria-pressed", "false");
+        editBanner.classList.remove("active", "show");
+        navDots.innerHTML = "";
+
+        const html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+
+        navDots.innerHTML = navMarkup;
+        window.presentation.setupNavDots();
+        if (wasActive) {
+          document.body.classList.add("edit-active");
+          editableEls.forEach((element) => element.setAttribute("contenteditable", "true"));
+          editToggle.classList.add("active");
+          editToggle.textContent = "DONE";
+          editToggle.setAttribute("aria-pressed", "true");
+          editBanner.classList.add("active");
+        }
+
+        const blob = new Blob([html], { type: "text/html" });
+        const anchor = document.createElement("a");
+        anchor.href = URL.createObjectURL(blob);
+        anchor.download = "release-gate-demo-edited.html";
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(anchor.href), 0);
+      }
+    }
+
+    /* ===========================================
+       APPLICATION BOOTSTRAP AND EDIT HOTZONE
+       =========================================== */
+    window.presentation = new SlidePresentation();
+    window.editor = new PresentationEditor();
+
+    const hotzone = document.getElementById("editHotzone");
+    const editToggle = document.getElementById("editToggle");
+    let hideTimeout = null;
+
+    hotzone.addEventListener("mouseenter", () => {
+      window.clearTimeout(hideTimeout);
+      editToggle.classList.add("show");
+    });
+    hotzone.addEventListener("mouseleave", () => {
+      hideTimeout = window.setTimeout(() => {
+        if (!window.editor.isActive) editToggle.classList.remove("show");
+      }, 400);
+    });
+    editToggle.addEventListener("mouseenter", () => window.clearTimeout(hideTimeout));
+    editToggle.addEventListener("mouseleave", () => {
+      hideTimeout = window.setTimeout(() => {
+        if (!window.editor.isActive) editToggle.classList.remove("show");
+      }, 400);
+    });
+    editToggle.addEventListener("click", () => window.editor.toggleEditMode());
+    hotzone.addEventListener("click", () => window.editor.toggleEditMode());
+
+    async function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if ((event.key === "e" || event.key === "E") && !event.target?.isContentEditable) {
+        event.preventDefault();
+        window.editor.toggleEditMode();
+      }
+      if (event.key.toLowerCase() === "f" && !event.target?.isContentEditable) {
+        event.preventDefault();
+        toggleFullscreen().catch((error) => {
+          console.warn("Fullscreen toggle was not available.", error);
+        });
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && window.editor.isActive) {
+        event.preventDefault();
+        window.editor.exportFile();
+      }
+    });
+  </script>
+</body>
+</html>
