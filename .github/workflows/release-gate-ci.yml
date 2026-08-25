@@ -7,12 +7,24 @@ on:
       - "release-gate/**"
       - ".github/workflows/release-gate-ci.yml"
       - ".github/workflows/release-gate-release.yml"
+    paths-ignore:
+      - "release-gate/demo/*.html"
+      - "release-gate/**/*.md"
+      - "docs/**"
   pull_request:
     paths:
       - ".gitignore"
       - "release-gate/**"
       - ".github/workflows/release-gate-ci.yml"
       - ".github/workflows/release-gate-release.yml"
+    paths-ignore:
+      - "release-gate/demo/*.html"
+      - "release-gate/**/*.md"
+      - "docs/**"
+
+concurrency:
+  group: release-gate-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -21,6 +33,7 @@ jobs:
   test:
     name: ${{ matrix.os }} / Python ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

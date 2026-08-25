@@ -102,6 +102,7 @@ def run_mutant(
         result = subprocess.run(
             [
                 sys.executable,
+                "-B",
                 "-m",
                 "pytest",
                 "-q",
