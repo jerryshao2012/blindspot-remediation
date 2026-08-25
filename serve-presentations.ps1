@@ -57,7 +57,7 @@ $MaxAttempts = 20
 $Attempts = 0
 
 while (Test-PortInUse -p $CurrentPort) {
-  Write-Host "⚠️  Port $CurrentPort is in use. Checking next port..." -ForegroundColor Yellow
+  Write-Host "[WARN] Port $CurrentPort is in use. Checking next port..." -ForegroundColor Yellow
   $CurrentPort++
   $Attempts++
   if ($Attempts -ge $MaxAttempts) {
@@ -86,22 +86,22 @@ if ($Deck1) {
 # Print visual banner
 Write-Host ""
 Write-Host "================================================================================" -ForegroundColor Cyan
-Write-Host "  🎬 PRESENTATION LOCALHOST SERVER (Windows)" -ForegroundColor Cyan
+Write-Host "  PRESENTATION LOCALHOST SERVER (Windows)" -ForegroundColor Cyan
 Write-Host "================================================================================" -ForegroundColor Cyan
 Write-Host "  Root Directory : $ScriptDir" -ForegroundColor Gray
 Write-Host "  Server Address : $BaseUrl" -ForegroundColor Green
 Write-Host ""
-Write-Host "  📖 Available Presentation Decks:" -ForegroundColor White
+Write-Host "  Available Presentation Decks:" -ForegroundColor White
 Write-Host "    [1] Code Assistant Skill & Plugin Dev:" -ForegroundColor Cyan
 Write-Host "        $Deck1Url" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "    [2] Release Gate Live Demonstration:" -ForegroundColor Cyan
 Write-Host "        $Deck2Url" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "    [★] Presentation Hub:" -ForegroundColor Cyan
+Write-Host "    [*] Presentation Hub:" -ForegroundColor Cyan
 Write-Host "        $PortalUrl" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  💡 Speaker Mode Tip:" -ForegroundColor Green
+Write-Host "  Speaker Mode Tip:" -ForegroundColor Green
 Write-Host "     Press 'N' or click the Speaker Notes icon on any slide." -ForegroundColor White
 Write-Host "     Multi-screen placement works automatically on http://localhost!" -ForegroundColor White
 Write-Host "================================================================================" -ForegroundColor Cyan
@@ -129,14 +129,14 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
 }
 
 if ($pythonCmd) {
-  Write-Host "🚀 Starting server with Python ($pythonCmd)..." -ForegroundColor Green
+  Write-Host "Starting server with Python ($pythonCmd)..." -ForegroundColor Green
   & $pythonCmd -m http.server $Port --bind 127.0.0.1
   exit $LASTEXITCODE
 }
 
 # Check for Node.js
 if (Get-Command node -ErrorAction SilentlyContinue) {
-  Write-Host "🚀 Starting server with Node.js..." -ForegroundColor Green
+  Write-Host "Starting server with Node.js..." -ForegroundColor Green
   $nodeScript = @"
 const http = require('http');
 const fs = require('fs');
@@ -183,7 +183,7 @@ server.listen($Port, '127.0.0.1', () => {
 }
 
 # Fallback: Native .NET HttpListener in PowerShell
-Write-Host "🚀 Starting built-in PowerShell .NET HTTP server on port $Port..." -ForegroundColor Green
+Write-Host "Starting built-in PowerShell .NET HTTP server on port $Port..." -ForegroundColor Green
 $listener = New-Object System.Net.HttpListener
 $prefix = "http://localhost:$Port/"
 $listener.Prefixes.Add($prefix)
