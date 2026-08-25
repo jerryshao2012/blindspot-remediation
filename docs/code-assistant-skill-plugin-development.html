@@ -396,10 +396,15 @@
       .notes-drawer.open { opacity: 1; pointer-events: auto; transform: none; }
       .notes-header, .notes-timer { display: flex; align-items: center; justify-content: space-between; gap: var(--element-gap); padding: clamp(.6rem,.9vw,.9rem); border-bottom: 1px solid rgba(255,255,255,.09); }
       .notes-header strong { font-size: clamp(.76rem,.88vw,.94rem); }
-      .notes-close, .notes-timer button { border: 1px solid rgba(255,255,255,.13); border-radius: clamp(.35rem,.6vw,.6rem); color: rgba(255,255,255,.68); background: rgba(255,255,255,.05); cursor: pointer; }
-      .notes-close { width: clamp(1.55rem,1.95vw,1.95rem); aspect-ratio: 1; }
+      .notes-actions { display: flex; align-items: center; gap: clamp(.3rem,.5vw,.5rem); }
+      .notes-popout, .notes-close, .notes-timer button { border: 1px solid rgba(255,255,255,.13); border-radius: clamp(.35rem,.6vw,.6rem); color: rgba(255,255,255,.68); background: rgba(255,255,255,.05); cursor: pointer; transition: 180ms; }
+      .notes-popout { padding: clamp(.24rem,.45vw,.45rem) clamp(.45rem,.7vw,.7rem); color: var(--sky); border-color: rgba(115,195,235,.35); background: rgba(0,117,190,.16); font-family: var(--font-mono); font-size: clamp(.48rem,.56vw,.6rem); font-weight: 500; }
+      .notes-popout:hover { color: #fff; background: rgba(0,117,190,.38); border-color: var(--sky); }
+      .notes-close { width: clamp(1.55rem,1.95vw,1.95rem); aspect-ratio: 1; display: grid; place-items: center; font-size: 1.1rem; }
+      .notes-close:hover { color: #fff; background: rgba(255,255,255,.12); }
       .notes-timer { color: rgba(255,255,255,.62); font-family: var(--font-mono); font-size: clamp(.58rem,.66vw,.72rem); }
       .notes-timer button { padding: clamp(.26rem,.45vw,.45rem) clamp(.45rem,.72vw,.72rem); font-size: clamp(.46rem,.54vw,.57rem); }
+      .notes-timer button:hover { color: #fff; background: rgba(255,255,255,.12); }
       .notes-content { overflow-y: auto; padding: clamp(.8rem,1.25vw,1.25rem); color: rgba(255,255,255,.76); font-size: clamp(.72rem,.82vw,.88rem); line-height: 1.58; }
       .notes-content p + p { margin-top: clamp(.55rem,.9vw,.9rem); }
       .notes-content strong { color: #fff; font-weight: 500; }
@@ -471,10 +476,9 @@
   </head>
 
   <body>
-    <!-- === GLOBAL CONTROLS === -->
     <div class="progress-track" aria-hidden="true"><div class="progress-bar" id="progressBar" role="progressbar" aria-label="Presentation progress" aria-valuemin="1" aria-valuemax="5" aria-valuenow="1"></div></div>
     <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
-    <div class="keyboard-hint" aria-hidden="true"><span class="key">←</span><span class="key">→</span><span>navigate · F fullscreen · N notes · E edit</span></div>
+    <div class="keyboard-hint" aria-hidden="true"><span class="key">←</span><span class="key">→</span><span>navigate · F fullscreen · N speaker notes popup · E edit</span></div>
     <div class="sr-only" id="fullscreenStatus" role="status" aria-live="polite"></div>
     <div class="edit-hotzone" id="editHotzone" title="Toggle edit mode"></div>
     <button class="edit-toggle" id="editToggle" type="button" title="Edit mode (E)" aria-label="Toggle edit mode">✎</button>
@@ -675,7 +679,13 @@
 
     <!-- === PRESENTER NOTES DRAWER === -->
     <aside class="notes-drawer" id="notesDrawer" aria-hidden="true" aria-label="Speaker notes">
-      <div class="notes-header"><strong id="notesTitle">Speaker notes</strong><button class="notes-close" id="notesClose" type="button" aria-label="Close speaker notes">×</button></div>
+      <div class="notes-header">
+        <strong id="notesTitle">Speaker notes</strong>
+        <div class="notes-actions">
+          <button class="notes-popout" id="notesPopoutBtn" type="button" title="Open speaker notes in a separate popup window for secondary monitor">↗ Pop out</button>
+          <button class="notes-close" id="notesClose" type="button" aria-label="Close speaker notes">×</button>
+        </div>
+      </div>
       <div class="notes-timer"><span><span id="slideTarget">03:00 target</span> · <span id="sessionTimer">00:00 / 30:00</span></span><button id="timerToggle" type="button">Start timer</button></div>
       <div class="notes-content" id="notesContent"></div>
     </aside>
@@ -692,7 +702,7 @@
         }
         connectNotes(notes) { this.notes = notes; notes.render(this.currentSlide); }
         typing(event) { const t = event?.target; return t?.isContentEditable || ["INPUT","TEXTAREA","SELECT"].includes(t?.tagName); }
-        blocked(event) { return document.body.classList.contains("edit-active") || this.notes?.isOpen || this.typing(event); }
+        blocked(event) { return document.body.classList.contains("edit-active") || this.typing(event); }
         setupDots() { this.navDots.innerHTML = ""; this.slides.forEach((slide,index) => { const dot = document.createElement("button"); dot.type = "button"; dot.className = "nav-dot"; dot.setAttribute("aria-label",`Go to slide ${index+1}: ${slide.dataset.title}`); dot.addEventListener("click",() => this.goTo(index)); this.navDots.appendChild(dot); }); }
         setupObserver() { const observer = new IntersectionObserver(entries => entries.forEach(entry => { if (!entry.isIntersecting) return; entry.target.classList.add("visible"); const index = this.slides.indexOf(entry.target); if (entry.intersectionRatio >= .58) { this.currentSlide = index; this.updateChrome(); this.notes?.render(index); } }),{threshold:[.2,.58,.9]}); this.slides.forEach(slide => observer.observe(slide)); }
         setupKeyboard() { document.addEventListener("keydown",event => { const fullscreenKey = event.key.toLowerCase() === "f" && !event.metaKey && !event.ctrlKey && !event.altKey; if (fullscreenKey && !document.body.classList.contains("edit-active") && !this.typing(event)) { event.preventDefault(); this.toggleFullscreen(); return; } if (this.blocked(event)) return; if (["ArrowRight","ArrowDown","PageDown"," "].includes(event.key)) { event.preventDefault(); this.next(); } else if (["ArrowLeft","ArrowUp","PageUp"].includes(event.key)) { event.preventDefault(); this.previous(); } else if (event.key === "Home") { event.preventDefault(); this.goTo(0); } else if (event.key === "End") { event.preventDefault(); this.goTo(this.slides.length-1); } }); }
@@ -706,18 +716,720 @@
         next() { if (this.currentSlide === 3 && this.demoStep < this.maxDemoStep) return this.updateDemo(this.demoStep+1); this.goTo(Math.min(this.slides.length-1,this.currentSlide+1)); }
         previous() { if (this.currentSlide === 3 && this.demoStep > 0) return this.updateDemo(this.demoStep-1); this.goTo(Math.max(0,this.currentSlide-1)); }
         goTo(index,updateHash=true) { this.currentSlide = Math.max(0,Math.min(this.slides.length-1,index)); const slide = this.slides[this.currentSlide]; slide.scrollIntoView({behavior:this.reduced.matches ? "auto" : "smooth",block:"start"}); slide.classList.add("visible"); if (updateHash) history.replaceState(null,"",`#slide-${this.currentSlide+1}`); this.updateChrome(); this.notes?.render(this.currentSlide); }
-        updateDemo(step) { this.demoStep = Math.max(0,Math.min(this.maxDemoStep,step)); const statuses = ["authoring contract","validating skill","building archives","invoking gate"]; this.demoStatus.textContent = statuses[this.demoStep]; document.querySelectorAll("[data-demo-target]").forEach(button => { const active = Number(button.dataset.demoTarget) === this.demoStep; button.classList.toggle("active",active); button.setAttribute("aria-selected",String(active)); }); document.querySelectorAll("[data-demo-panel]").forEach(panel => panel.classList.toggle("active",Number(panel.dataset.demoPanel) === this.demoStep)); document.querySelectorAll("[data-demo-step]").forEach(line => { const visible = Number(line.dataset.demoStep) <= this.demoStep; line.classList.toggle("is-visible",visible); line.setAttribute("aria-hidden",String(!visible)); }); this.updateChrome(); }
+        updateDemo(step) { this.demoStep = Math.max(0,Math.min(this.maxDemoStep,step)); const statuses = ["authoring contract","validating skill","building archives","invoking gate"]; this.demoStatus.textContent = statuses[this.demoStep]; document.querySelectorAll("[data-demo-target]").forEach(button => { const active = Number(button.dataset.demoTarget) === this.demoStep; button.classList.toggle("active",active); button.setAttribute("aria-selected",String(active)); }); document.querySelectorAll("[data-demo-panel]").forEach(panel => panel.classList.toggle("active",Number(panel.dataset.demoPanel) === this.demoStep)); document.querySelectorAll("[data-demo-step]").forEach(line => { const visible = Number(line.dataset.demoStep) <= this.demoStep; line.classList.toggle("is-visible",visible); line.setAttribute("aria-hidden",String(!visible)); }); this.updateChrome(); if (this.currentSlide === 3) { this.notes?.render(3); } }
         updateChrome() { const fraction = this.currentSlide === 3 ? this.demoStep/(this.maxDemoStep+1) : 0; const overall = (this.currentSlide+fraction+1)/this.slides.length; this.progressBar.style.transform = `scaleX(${Math.min(1,overall)})`; this.progressBar.setAttribute("aria-valuenow",String(this.currentSlide+1)); Array.from(this.navDots.children).forEach((dot,index) => { const active = index === this.currentSlide; dot.classList.toggle("active",active); dot.setAttribute("aria-current",active ? "step" : "false"); }); }
       }
 
-      /* === PRESENTER NOTES + TIMER === */
+      /* === PRESENTER NOTES + TIMER + POPUP WINDOW === */
       class PresenterNotes {
-        constructor(presentation) { this.presentation = presentation; this.drawer = document.getElementById("notesDrawer"); this.title = document.getElementById("notesTitle"); this.content = document.getElementById("notesContent"); this.target = document.getElementById("slideTarget"); this.timerLabel = document.getElementById("sessionTimer"); this.timerButton = document.getElementById("timerToggle"); this.isOpen = false; this.running = false; this.startedAt = null; this.elapsed = 0; this.interval = null; document.getElementById("notesClose").addEventListener("click",() => this.toggle(false)); this.timerButton.addEventListener("click",() => this.toggleTimer()); document.addEventListener("keydown",event => { if ((event.key === "n" || event.key === "N") && !event.target.isContentEditable) { event.preventDefault(); this.toggle(); } if (event.key === "Escape" && this.isOpen) this.toggle(false); }); }
-        toggle(force) { this.isOpen = typeof force === "boolean" ? force : !this.isOpen; this.drawer.classList.toggle("open",this.isOpen); this.drawer.setAttribute("aria-hidden",String(!this.isOpen)); if (this.isOpen) this.render(this.presentation.currentSlide); }
-        render(index) { const slide = this.presentation.slides[index]; const notes = slide?.querySelector(".speaker-notes"); if (!notes) return; this.title.textContent = `${index+1}. ${slide.dataset.title}`; this.target.textContent = `${notes.dataset.duration} target`; this.content.innerHTML = notes.innerHTML; }
-        milliseconds() { return this.elapsed + (this.running && this.startedAt ? Date.now()-this.startedAt : 0); }
-        toggleTimer() { if (this.running) { this.elapsed = this.milliseconds(); this.running = false; this.startedAt = null; clearInterval(this.interval); this.interval = null; this.timerButton.textContent = "Resume timer"; } else { this.running = true; this.startedAt = Date.now(); this.interval = setInterval(() => this.renderTimer(),500); this.timerButton.textContent = "Pause timer"; } this.renderTimer(); }
-        renderTimer() { const total = Math.floor(this.milliseconds()/1000); this.timerLabel.textContent = `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")} / 30:00`; }
+        constructor(presentation) {
+          this.presentation = presentation;
+          this.drawer = document.getElementById("notesDrawer");
+          this.title = document.getElementById("notesTitle");
+          this.content = document.getElementById("notesContent");
+          this.target = document.getElementById("slideTarget");
+          this.timerLabel = document.getElementById("sessionTimer");
+          this.timerButton = document.getElementById("timerToggle");
+          this.popoutButton = document.getElementById("notesPopoutBtn");
+          this.popupWindow = null;
+          this.isOpen = false;
+          this.running = false;
+          this.startedAt = null;
+          this.elapsed = 0;
+          this.interval = null;
+          this.popupFontSize = 18;
+
+          document.getElementById("notesClose").addEventListener("click", () => this.toggleDrawer(false));
+          this.popoutButton?.addEventListener("click", () => this.openPopup());
+          this.timerButton.addEventListener("click", () => this.toggleTimer());
+
+          document.addEventListener("keydown", event => {
+            if ((event.key === "n" || event.key === "N") && !event.target.isContentEditable && !this.presentation.typing(event)) {
+              event.preventDefault();
+              this.openPopup();
+            }
+            if (event.key === "Escape" && this.isOpen) {
+              this.toggleDrawer(false);
+            }
+          });
+
+          window.addEventListener("beforeunload", () => {
+            if (this.popupWindow && !this.popupWindow.closed) {
+              try { this.popupWindow.close(); } catch (e) {}
+            }
+          });
+        }
+
+        toggleDrawer(force) {
+          this.isOpen = typeof force === "boolean" ? force : !this.isOpen;
+          this.drawer.classList.toggle("open", this.isOpen);
+          this.drawer.setAttribute("aria-hidden", String(!this.isOpen));
+          if (this.isOpen) this.render(this.presentation.currentSlide);
+        }
+
+        openPopup() {
+          if (this.popupWindow && !this.popupWindow.closed) {
+            this.popupWindow.focus();
+            this.render(this.presentation.currentSlide);
+            return this.popupWindow;
+          }
+
+          const width = Math.min(1040, window.screen.availWidth || 1040);
+          const height = Math.min(800, window.screen.availHeight || 800);
+          const left = (window.screen.availLeft !== undefined ? window.screen.availLeft : 0) + 40;
+          const top = (window.screen.availTop !== undefined ? window.screen.availTop : 0) + 40;
+          const features = `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
+
+          try {
+            this.popupWindow = window.open("", "SpeakerNotesWindow", features);
+          } catch (e) {
+            console.warn("Popup window opening failed", e);
+          }
+
+          if (!this.popupWindow || this.popupWindow.closed || typeof this.popupWindow.closed === "undefined") {
+            this.toggleDrawer(true);
+            alert("Popup window was blocked by your browser. Please allow popups for this page to display speaker notes on your second monitor.");
+            return null;
+          }
+
+          this.initPopupDocument();
+          this.popupWindow.focus();
+          return this.popupWindow;
+        }
+
+        initPopupDocument() {
+          const doc = this.popupWindow.document;
+          doc.open();
+          doc.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Speaker Notes — From Prompt to Product</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23001928'/%3E%3Cpath d='M18 20h18l10 12-10 12H18z' fill='%230075be'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #00121d;
+      --panel: #001c2e;
+      --card: #00283f;
+      --card-alt: #003350;
+      --ink: #f0f6fa;
+      --muted: #8ea0b2;
+      --line: rgba(115,195,235,0.18);
+      --line-bright: rgba(115,195,235,0.36);
+      --orange: #0075be;
+      --sky: #73c3eb;
+      --green: #00e7b4;
+      --amber: #ffc827;
+      --font-display: "Heebo", Arial, sans-serif;
+      --font-mono: "IBM Plex Mono", monospace;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-display);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    header.speaker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem 1.4rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    .deck-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--sky);
+      background: rgba(0,117,190,0.22);
+      border: 1px solid var(--line-bright);
+      padding: 0.22rem 0.55rem;
+      border-radius: 999px;
+    }
+    .deck-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+    .slide-badge {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .clock-pill, .target-pill {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.3);
+      color: var(--muted);
+    }
+    .clock-pill strong, .target-pill strong {
+      color: #fff;
+    }
+    .target-pill strong {
+      color: var(--amber);
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .timer-display {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--green);
+      background: rgba(0,0,0,0.4);
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      min-width: 7.2rem;
+      text-align: center;
+    }
+    .btn {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 0.35rem 0.75rem;
+      border: 1px solid var(--line-bright);
+      border-radius: 6px;
+      background: var(--card);
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: 160ms ease;
+    }
+    .btn:hover {
+      background: var(--orange);
+      border-color: var(--sky);
+      color: #fff;
+    }
+    .btn-nav {
+      font-weight: 600;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.78rem;
+    }
+    .btn-nav.primary {
+      background: var(--orange);
+      border-color: var(--sky);
+    }
+    .btn-nav.primary:hover {
+      background: #008be2;
+    }
+    .btn-icon {
+      padding: 0.35rem 0.55rem;
+      font-weight: bold;
+    }
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 0.95fr);
+      flex: 1;
+      gap: 1.25rem;
+      padding: 1.25rem 1.4rem;
+    }
+    .notes-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.4rem;
+    }
+    .slide-meta-bar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding-bottom: 0.9rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .slide-meta-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .slide-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--sky);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .slide-heading {
+      font-size: 1.35rem;
+      font-weight: 600;
+      line-height: 1.25;
+      color: #fff;
+    }
+    .demo-step-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-top: 0.35rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--amber);
+      background: rgba(255,200,39,0.12);
+      border: 1px solid rgba(255,200,39,0.3);
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+    }
+    .font-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .notes-body {
+      font-size: var(--notes-size, 18px);
+      line-height: 1.68;
+      color: #dbe7f2;
+      overflow-y: auto;
+    }
+    .notes-body p {
+      margin-bottom: 1rem;
+    }
+    .notes-body p:last-child {
+      margin-bottom: 0;
+    }
+    .notes-body strong {
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .notes-body code {
+      font-family: var(--font-mono);
+      color: var(--sky);
+      background: rgba(115,195,235,0.12);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .sidebar-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .side-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .side-card-title {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .next-slide-card {
+      background: linear-gradient(145deg, var(--card), var(--panel));
+      border: 1px solid var(--line-bright);
+    }
+    .next-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1.25;
+    }
+    .next-preview {
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.45;
+      max-height: 5.5rem;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+    .slide-nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .slide-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.45rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: var(--card);
+      color: var(--muted);
+      font-size: 0.78rem;
+      cursor: pointer;
+      text-align: left;
+      transition: 160ms;
+    }
+    .slide-nav-item:hover {
+      background: var(--card-alt);
+      color: #fff;
+      border-color: var(--line);
+    }
+    .slide-nav-item.active {
+      background: rgba(0,117,190,0.28);
+      border-color: var(--sky);
+      color: #fff;
+      font-weight: 500;
+    }
+    .slide-nav-num {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.3);
+      color: var(--sky);
+    }
+    .slide-nav-item.active .slide-nav-num {
+      background: var(--orange);
+      color: #fff;
+    }
+    .shortcuts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(0,0,0,0.25);
+      padding: 0.25rem 0.45rem;
+      border-radius: 4px;
+    }
+    .shortcut-key {
+      color: var(--sky);
+      font-weight: 600;
+    }
+    @media (max-width: 820px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+      .header-center {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="speaker-header">
+    <div class="header-left">
+      <span class="deck-badge">Speaker View</span>
+      <span class="slide-badge" id="popupSlideBadge">SLIDE 1 OF 5</span>
+    </div>
+    <div class="header-center">
+      <div class="clock-pill">Clock: <strong id="popupWallClock">--:--:--</strong></div>
+      <div class="target-pill">Target: <strong id="popupTargetDuration">03:00</strong></div>
+    </div>
+    <div class="header-right">
+      <div class="timer-display" id="popupSessionTimer">00:00 / 30:00</div>
+      <button class="btn" id="popupTimerToggle" type="button">Start</button>
+      <button class="btn" id="popupTimerReset" type="button">Reset</button>
+      <button class="btn btn-nav" id="popupBtnPrev" type="button">◀ Prev</button>
+      <button class="btn btn-nav primary" id="popupBtnNext" type="button">Next ▶</button>
+    </div>
+  </header>
+
+  <main class="main-grid">
+    <section class="notes-pane">
+      <div class="slide-meta-bar">
+        <div class="slide-meta-info">
+          <span class="slide-eyebrow" id="popupSlideEyebrow">Slide Eyebrow</span>
+          <h1 class="slide-heading" id="popupSlideTitle">Slide Title</h1>
+          <div id="popupDemoStepBox" style="display:none;"></div>
+        </div>
+        <div class="font-controls">
+          <button class="btn btn-icon" id="popupFontMinus" title="Decrease font size" type="button">A-</button>
+          <button class="btn btn-icon" id="popupFontPlus" title="Increase font size" type="button">A+</button>
+        </div>
+      </div>
+      <div class="notes-body" id="popupNotesBody"></div>
+    </section>
+
+    <aside class="sidebar-pane">
+      <div class="side-card next-slide-card">
+        <div class="side-card-title">
+          <span>Up Next</span>
+          <span id="popupNextDuration" style="color:var(--amber);">05:00</span>
+        </div>
+        <div class="next-title" id="popupNextTitle">Next Slide Title</div>
+        <div class="next-preview" id="popupNextPreview">Next slide preview content...</div>
+      </div>
+
+      <div class="side-card">
+        <div class="side-card-title">Slide Navigation</div>
+        <div class="slide-nav-list" id="popupSlideList"></div>
+      </div>
+
+      <div class="side-card">
+        <div class="side-card-title">Keyboard Shortcuts</div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-row"><span>Next slide</span><span class="shortcut-key">→ / Space</span></div>
+          <div class="shortcut-row"><span>Prev slide</span><span class="shortcut-key">←</span></div>
+          <div class="shortcut-row"><span>Toggle timer</span><span class="shortcut-key">T</span></div>
+          <div class="shortcut-row"><span>Reset timer</span><span class="shortcut-key">R</span></div>
+          <div class="shortcut-row"><span>Jump slide</span><span class="shortcut-key">1 – 5</span></div>
+          <div class="shortcut-row"><span>Font size</span><span class="shortcut-key">+ / -</span></div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>`);
+          doc.close();
+
+          // Attach event listeners inside the popup window
+          const win = this.popupWindow;
+
+          win.addEventListener("beforeunload", () => {
+            this.popupWindow = null;
+          });
+
+          doc.getElementById("popupBtnNext")?.addEventListener("click", () => this.presentation.next());
+          doc.getElementById("popupBtnPrev")?.addEventListener("click", () => this.presentation.previous());
+          doc.getElementById("popupTimerToggle")?.addEventListener("click", () => this.toggleTimer());
+          doc.getElementById("popupTimerReset")?.addEventListener("click", () => this.resetTimer());
+          doc.getElementById("popupFontPlus")?.addEventListener("click", () => this.changePopupFontSize(1));
+          doc.getElementById("popupFontMinus")?.addEventListener("click", () => this.changePopupFontSize(-1));
+
+          // Populate slide list in popup sidebar
+          const listEl = doc.getElementById("popupSlideList");
+          if (listEl) {
+            listEl.innerHTML = "";
+            this.presentation.slides.forEach((slide, idx) => {
+              const item = doc.createElement("button");
+              item.type = "button";
+              item.className = "slide-nav-item";
+              item.dataset.slideIdx = String(idx);
+              item.innerHTML = `<span class="slide-nav-num">${String(idx + 1).padStart(2, "0")}</span> <span>${slide.dataset.title || `Slide ${idx + 1}`}</span>`;
+              item.addEventListener("click", () => this.presentation.goTo(idx));
+              listEl.appendChild(item);
+            });
+          }
+
+          // Keyboard listener in popup window
+          doc.addEventListener("keydown", event => {
+            const key = event.key;
+            if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(key)) {
+              event.preventDefault();
+              this.presentation.next();
+            } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(key)) {
+              event.preventDefault();
+              this.presentation.previous();
+            } else if (key === "Home") {
+              event.preventDefault();
+              this.presentation.goTo(0);
+            } else if (key === "End") {
+              event.preventDefault();
+              this.presentation.goTo(this.presentation.slides.length - 1);
+            } else if (["1", "2", "3", "4", "5"].includes(key)) {
+              event.preventDefault();
+              this.presentation.goTo(Number(key) - 1);
+            } else if (key.toLowerCase() === "t") {
+              event.preventDefault();
+              this.toggleTimer();
+            } else if (key.toLowerCase() === "r") {
+              event.preventDefault();
+              this.resetTimer();
+            } else if (key === "+" || key === "=") {
+              event.preventDefault();
+              this.changePopupFontSize(1);
+            } else if (key === "-" || key === "_") {
+              event.preventDefault();
+              this.changePopupFontSize(-1);
+            }
+          });
+
+          this.render(this.presentation.currentSlide);
+          this.renderTimer();
+        }
+
+        changePopupFontSize(delta) {
+          this.popupFontSize = Math.max(14, Math.min(32, this.popupFontSize + delta * 2));
+          if (this.popupWindow && !this.popupWindow.closed) {
+            const body = this.popupWindow.document.getElementById("popupNotesBody");
+            if (body) body.style.setProperty("--notes-size", `${this.popupFontSize}px`);
+          }
+        }
+
+        render(index) {
+          const slide = this.presentation.slides[index];
+          const notes = slide?.querySelector(".speaker-notes");
+          if (!notes) return;
+
+          // Render in in-slide drawer
+          this.title.textContent = `${index + 1}. ${slide.dataset.title}`;
+          this.target.textContent = `${notes.dataset.duration} target`;
+          this.content.innerHTML = notes.innerHTML;
+
+          // Render in popup window if open
+          if (this.popupWindow && !this.popupWindow.closed) {
+            try {
+              const doc = this.popupWindow.document;
+              const total = this.presentation.slides.length;
+              const badge = doc.getElementById("popupSlideBadge");
+              if (badge) badge.textContent = `SLIDE ${index + 1} OF ${total}`;
+
+              const targetDur = doc.getElementById("popupTargetDuration");
+              if (targetDur) targetDur.textContent = notes.dataset.duration || "03:00";
+
+              const eyebrowEl = doc.getElementById("popupSlideEyebrow");
+              const eyebrowSource = slide.querySelector(".eyebrow");
+              if (eyebrowEl) eyebrowEl.textContent = eyebrowSource ? eyebrowSource.textContent : (slide.dataset.title || `Slide ${index + 1}`);
+
+              const titleEl = doc.getElementById("popupSlideTitle");
+              if (titleEl) titleEl.textContent = `${index + 1}. ${slide.dataset.title}`;
+
+              // Demo slide step indicator
+              const demoBox = doc.getElementById("popupDemoStepBox");
+              if (demoBox) {
+                if (index === 3 && this.presentation.demoStatus) {
+                  demoBox.style.display = "block";
+                  demoBox.innerHTML = `<span class="demo-step-pill">● Step ${this.presentation.demoStep + 1} of 4: ${this.presentation.demoStatus.textContent}</span>`;
+                } else {
+                  demoBox.style.display = "none";
+                }
+              }
+
+              const bodyEl = doc.getElementById("popupNotesBody");
+              if (bodyEl) {
+                bodyEl.style.setProperty("--notes-size", `${this.popupFontSize}px`);
+                bodyEl.innerHTML = notes.innerHTML;
+              }
+
+              // Up next slide info
+              const nextIndex = index + 1;
+              const nextTitleEl = doc.getElementById("popupNextTitle");
+              const nextDurEl = doc.getElementById("popupNextDuration");
+              const nextPrevEl = doc.getElementById("popupNextPreview");
+
+              if (nextIndex < total) {
+                const nextSlide = this.presentation.slides[nextIndex];
+                const nextNotes = nextSlide.querySelector(".speaker-notes");
+                if (nextTitleEl) nextTitleEl.textContent = `${nextIndex + 1}. ${nextSlide.dataset.title}`;
+                if (nextDurEl) nextDurEl.textContent = nextNotes?.dataset.duration || "";
+                if (nextPrevEl) {
+                  const firstPara = nextNotes?.querySelector("p");
+                  nextPrevEl.textContent = firstPara ? firstPara.textContent : "Ready for next slide.";
+                }
+              } else {
+                if (nextTitleEl) nextTitleEl.textContent = "Presentation Complete";
+                if (nextDurEl) nextDurEl.textContent = "Q&A";
+                if (nextPrevEl) nextPrevEl.textContent = "End of slides. Open floor for questions and discussion.";
+              }
+
+              // Active state in slide navigator
+              doc.querySelectorAll(".slide-nav-item").forEach(item => {
+                const active = Number(item.dataset.slideIdx) === index;
+                item.classList.toggle("active", active);
+              });
+            } catch (e) {
+              console.warn("Could not update speaker notes popup window", e);
+            }
+          }
+        }
+
+        milliseconds() {
+          return this.elapsed + (this.running && this.startedAt ? Date.now() - this.startedAt : 0);
+        }
+
+        resetTimer() {
+          this.elapsed = 0;
+          this.startedAt = this.running ? Date.now() : null;
+          this.renderTimer();
+        }
+
+        toggleTimer() {
+          if (this.running) {
+            this.elapsed = this.milliseconds();
+            this.running = false;
+            this.startedAt = null;
+            clearInterval(this.interval);
+            this.interval = null;
+            this.timerButton.textContent = "Resume timer";
+          } else {
+            this.running = true;
+            this.startedAt = Date.now();
+            this.interval = setInterval(() => this.renderTimer(), 500);
+            this.timerButton.textContent = "Pause timer";
+          }
+          this.renderTimer();
+        }
+
+        renderTimer() {
+          const total = Math.floor(this.milliseconds() / 1000);
+          const timeStr = `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")} / 30:00`;
+          this.timerLabel.textContent = timeStr;
+
+          if (this.popupWindow && !this.popupWindow.closed) {
+            try {
+              const popupTimer = this.popupWindow.document.getElementById("popupSessionTimer");
+              if (popupTimer) popupTimer.textContent = timeStr;
+
+              const popupBtn = this.popupWindow.document.getElementById("popupTimerToggle");
+              if (popupBtn) {
+                popupBtn.textContent = this.running ? "Pause" : (this.elapsed > 0 ? "Resume" : "Start");
+              }
+
+              const clockEl = this.popupWindow.document.getElementById("popupWallClock");
+              if (clockEl) {
+                const now = new Date();
+                clockEl.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+              }
+            } catch (e) {
+              // popup document may be re-initializing
+            }
+          }
+        }
       }
 
       /* === INLINE EDITOR === */
