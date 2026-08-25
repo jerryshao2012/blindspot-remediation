@@ -5,22 +5,20 @@ on:
     paths:
       - ".gitignore"
       - "release-gate/**"
+      - "!release-gate/demo/*.html"
+      - "!release-gate/**/*.md"
+      - "!release-gate/**/README*"
       - ".github/workflows/release-gate-ci.yml"
       - ".github/workflows/release-gate-release.yml"
-    paths-ignore:
-      - "release-gate/demo/*.html"
-      - "release-gate/**/*.md"
-      - "docs/**"
   pull_request:
     paths:
       - ".gitignore"
       - "release-gate/**"
+      - "!release-gate/demo/*.html"
+      - "!release-gate/**/*.md"
+      - "!release-gate/**/README*"
       - ".github/workflows/release-gate-ci.yml"
       - ".github/workflows/release-gate-release.yml"
-    paths-ignore:
-      - "release-gate/demo/*.html"
-      - "release-gate/**/*.md"
-      - "docs/**"
 
 concurrency:
   group: release-gate-ci-${{ github.ref }}
