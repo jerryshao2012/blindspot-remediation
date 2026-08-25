@@ -506,7 +506,7 @@
           <p><strong>0:00–0:30 · Open with the problem.</strong> Ask: “How many useful prompts or review checklists are currently trapped in one person’s chat history?” Pause for hands. That is the gap this session addresses.</p>
           <p><strong>0:30–1:20 · Establish the vocabulary.</strong> A prompt is a one-off instruction. A skill is a reusable workflow contract the assistant can discover and follow. A plugin is the installable distribution boundary around one or more skills and related capabilities.</p>
           <p><strong>1:20–2:15 · Explain the pipeline.</strong> <code>SKILL.md</code> says when to run and how to work. Deterministic code handles facts or policy that must be reproducible. Packaging adds installation, upgrades, compatibility, and rollback.</p>
-          <p><strong>2:15–3:00 · State the thesis.</strong> This is not “more prompt engineering.” We are turning team judgment into an artifact we can test, version, qualify, and support. Release Gate 0.3.0 is the real example for the rest of the talk.</p>
+          <p><strong>2:15–3:00 · State the thesis.</strong> This is not “more prompt engineering.” We are turning team judgment into an artifact we can test, version, qualify, and support. Release Gate 0.6.0 is the real example for the rest of the talk.</p>
           <p><strong>Transition:</strong> “Before we build anything, we need to choose the smallest extension that actually fits the job.”</p>
           <p>Source: <code>docs/plugin-development-guideline.md</code>, sections 1–2.</p>
         </aside>
@@ -548,7 +548,7 @@
       <!-- === SLIDE 3 · 6 MINUTES === -->
       <section class="slide slide-dark" id="slide-3" data-title="Release Gate Anatomy" data-minutes="6" aria-labelledby="title-3">
         <div class="slide-content">
-          <header class="slide-header"><div class="slide-header-copy"><p class="eyebrow reveal" style="--delay:60ms" data-editable id="s3-eyebrow">Real case study · release-gate 0.3.0</p><h2 class="reveal" id="title-3" style="--delay:130ms" data-editable id="s3-title">The skill guides. The CLI decides.</h2></div><span class="slide-number reveal" style="--delay:180ms">03 / 05 · 06 MIN</span></header>
+          <header class="slide-header"><div class="slide-header-copy"><p class="eyebrow reveal" style="--delay:60ms" data-editable id="s3-eyebrow">Real case study · release-gate 0.6.0</p><h2 class="reveal" id="title-3" style="--delay:130ms" data-editable id="s3-title">The skill guides. The CLI decides.</h2></div><span class="slide-number reveal" style="--delay:180ms">03 / 05 · 06 MIN</span></header>
           <div class="anatomy-stage">
             <article class="anatomy-card reveal-left" style="--delay:200ms">
               <div class="anatomy-title"><h3>Portable skill contract</h3><span>skills/release-gate/</span></div>
@@ -566,7 +566,7 @@
             <article class="anatomy-card reveal" style="--delay:360ms">
               <div class="anatomy-title"><h3>Deterministic release core</h3><span>src/release_gate/</span></div>
               <div class="stack">
-                <div class="stack-row"><span class="stack-icon">01</span><span><strong>Compatibility preflight</strong><small>Require exact output: release-gate 0.3.0.</small></span></div>
+                <div class="stack-row"><span class="stack-icon">01</span><span><strong>Compatibility preflight</strong><small>Require exact output: release-gate 0.6.0.</small></span></div>
                 <div class="stack-row"><span class="stack-icon">02</span><span><strong>Trusted workspace + controls</strong><small>Reconstruct base/candidate; execute bounded argv without a shell.</small></span></div>
                 <div class="stack-row"><span class="stack-icon">03</span><span><strong>Three-way policy verdict</strong><small>Preserve PASS, FAIL, or NEEDS_HUMAN.</small></span></div>
                 <div class="stack-row"><span class="stack-icon">04</span><span><strong>Evidence + observability</strong><small>Atomic, tamper-evident output; reporting stays non-gating.</small></span></div>
@@ -579,7 +579,7 @@
           <p><strong>0:00–1:15 · Read the left side as a contract.</strong> The portable skill is intentionally small: two-field frontmatter, an explicit trigger, required inputs, ordered calls, exact output semantics, and stop rules. The description says “use only when explicitly invoked,” so discovery is not authorization.</p>
           <p><strong>1:15–2:00 · Explain progressive disclosure.</strong> <code>SKILL.md</code> stays readable. Exact compatibility lives in JSON, longer policy guidance lives in <code>initialization.md</code>, and the Codex UI metadata lives in <code>agents/openai.yaml</code>. Load details only when the workflow reaches them.</p>
           <p><strong>2:00–2:40 · Point to the bridge.</strong> The skill does not reproduce the release algorithm in prose. It makes exact CLI calls. That keeps the model responsible for orchestration and the executable responsible for enforcement.</p>
-          <p><strong>2:40–4:35 · Walk the deterministic core.</strong> First, require the exact compatibility string <code>release-gate 0.3.0</code>. Then reconstruct trusted base and candidate workspaces and run bounded argument vectors without a shell. Preserve the engine’s PASS, FAIL, or NEEDS_HUMAN verdict. Finally, write atomic, tamper-evident evidence.</p>
+          <p><strong>2:40–4:35 · Walk the deterministic core.</strong> First, require the exact compatibility string <code>release-gate 0.6.0</code>. Then reconstruct trusted base and candidate workspaces and run bounded argument vectors without a shell. Preserve the engine’s PASS, FAIL, or NEEDS_HUMAN verdict. Finally, write atomic, tamper-evident evidence.</p>
           <p><strong>4:35–5:25 · Clarify the safety boundary.</strong> The skill calls the gate once. It never reinterprets, retries, merges, deploys, or upgrades NEEDS_HUMAN into PASS. Reporting may follow, but it remains non-gating.</p>
           <p><strong>5:25–6:00 · Name the common mistake.</strong> Do not ask the model to “inspect the diff and decide if release is safe” when the decision must be reproducible. Let the model guide; let code decide. Evidence is <em>tamper-evident, not immutable</em>, and PASS covers only configured policy.</p>
           <p><strong>Transition:</strong> “Now let’s build and invoke this exact skill, one development state at a time.”</p>
@@ -612,12 +612,12 @@
                 <div class="terminal-line success" data-demo-step="1"><span class="terminal-prompt">✓</span><span>VALID: skills/release-gate/SKILL.md</span></div>
                 <div class="terminal-line success" data-demo-step="1"><span class="terminal-prompt">✓</span><span>frontmatter · references · schemas · version sync</span></div>
                 <div class="terminal-line command" data-demo-step="2"><span class="terminal-prompt">$</span><span>python scripts/build_skill_archives.py --output-dir dist</span></div>
-                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-copilot-0.3.0.tar.gz</span></div>
-                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-codex-0.3.0.tar.gz</span></div>
-                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-claude-code-0.3.0.tar.gz</span></div>
-                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-antigravity-0.3.0.tar.gz</span></div>
+                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-copilot-0.6.0.tar.gz</span></div>
+                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-codex-0.6.0.tar.gz</span></div>
+                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-claude-code-0.6.0.tar.gz</span></div>
+                <div class="terminal-line info" data-demo-step="2"><span class="terminal-prompt">+</span><span>release-gate-skill-antigravity-0.6.0.tar.gz</span></div>
                 <div class="terminal-line command" data-demo-step="3"><span class="terminal-prompt">$</span><span>release-gate --version</span></div>
-                <div class="terminal-line success" data-demo-step="3"><span class="terminal-prompt">✓</span><span>release-gate 0.3.0</span></div>
+                <div class="terminal-line success" data-demo-step="3"><span class="terminal-prompt">✓</span><span>release-gate 0.6.0</span></div>
                 <div class="terminal-line command" data-demo-step="3"><span class="terminal-prompt">$</span><span>release-gate validate --repo .</span></div>
                 <div class="terminal-line command" data-demo-step="3"><span class="terminal-prompt">$</span><span>release-gate run --repo . --base &lt;ref&gt;</span></div>
                 <div class="terminal-line success" data-demo-step="3"><span class="terminal-prompt">✓</span><span>RESULT: .release-gate/runs/&lt;id&gt;/result.json</span></div>
@@ -638,7 +638,7 @@
           <p><strong>0:00–2:00 · Author.</strong> Point to the two-field frontmatter: <code>name</code> and <code>description</code>. Say: “The description is a router, so it must include the positive trigger and the negative boundary.” Then show the body rule: never infer a subcommand and never treat skill discovery as authorization.</p>
           <p><strong>2:00–4:00 · Validate.</strong> Advance once. <code>python tests/validate_skill.py</code> checks frontmatter, reachable references, schemas, exact commands, safety invariants, and version synchronization. Explain that routing tests need positive, paraphrase, negative, and adjacent prompts in fresh sessions; avoid prose snapshot tests that fail on harmless wording.</p>
           <p><strong>4:00–6:00 · Package.</strong> Advance again. <code>python scripts/build_skill_archives.py --output-dir dist</code> creates four archives from one canonical source: Copilot, Codex, Claude Code, and Antigravity. Sorted members, fixed timestamps, normalized line endings, and SHA-256 make the deliverables reproducible.</p>
-          <p><strong>6:00–8:45 · Invoke.</strong> Advance to the last state. First call <code>release-gate --version</code> and require exactly <code>release-gate 0.3.0</code>. Then validate configuration and run once with <code>release-gate run --repo . --base &lt;ref&gt;</code>. Read <code>.release-gate/runs/&lt;id&gt;/result.json</code> before giving advice.</p>
+          <p><strong>6:00–8:45 · Invoke.</strong> Advance to the last state. First call <code>release-gate --version</code> and require exactly <code>release-gate 0.6.0</code>. Then validate configuration and run once with <code>release-gate run --repo . --base &lt;ref&gt;</code>. Read <code>.release-gate/runs/&lt;id&gt;/result.json</code> before giving advice.</p>
           <p><strong>8:45–9:30 · Explain the three outcomes.</strong> PASS means configured policy passed; it is not merge authorization. FAIL means a deterministic policy check failed. NEEDS_HUMAN is a first-class result for unresolved judgment—not an error to retry away.</p>
           <p><strong>9:30–10:00 · Land the lesson.</strong> The skill never softens, reinterprets, retries, merges, or deploys. Ask: “Which part of your current assistant workflow should become deterministic code?”</p>
           <p><strong>Transition:</strong> “A working source tree is not a release. The installed artifact still has to prove itself.”</p>
