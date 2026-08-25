@@ -1715,6 +1715,8 @@
     .notes-header, .notes-timer { display: flex; align-items: center; justify-content: space-between; gap: var(--element-gap); padding: clamp(.6rem,.9vw,.9rem); border-bottom: 1px solid rgba(255,255,255,.09); }
     .notes-header strong { font-size: clamp(.76rem,.88vw,.94rem); }
     .notes-actions { display: flex; align-items: center; gap: clamp(.3rem,.5vw,.5rem); }
+    .notes-status { display: none; max-width: 24rem; color: var(--muted); font-size: 0.72rem; line-height: 1.25; }
+    .notes-status.visible { display: inline; }
     .notes-popout, .notes-close, .notes-timer button { border: 1px solid rgba(255,255,255,.14); border-radius: clamp(.35rem,.6vw,.6rem); color: rgba(255,255,255,.75); background: rgba(255,255,255,.06); cursor: pointer; transition: 180ms; }
     .notes-popout { padding: clamp(.24rem,.45vw,.45rem) clamp(.45rem,.7vw,.7rem); color: var(--sky); border-color: rgba(115,195,235,.35); background: rgba(0,117,190,.22); font-family: var(--font-mono); font-size: clamp(.48rem,.56vw,.6rem); font-weight: 500; }
     .notes-popout:hover { color: #fff; background: rgba(0,117,190,.45); border-color: var(--sky); }
@@ -2225,6 +2227,7 @@
     <div class="notes-header">
       <strong id="notesTitle">Speaker notes</strong>
       <div class="notes-actions">
+        <span class="notes-status" id="notesStatus" role="status" aria-live="polite"></span>
         <button class="notes-popout" id="notesPopoutBtn" type="button" title="Open speaker notes in a separate popup window for secondary monitor">↗ Pop out</button>
         <button class="notes-close" id="notesClose" type="button" aria-label="Close speaker notes">×</button>
       </div>
@@ -2397,6 +2400,7 @@
         this.timerLabel = document.getElementById("sessionTimer");
         this.timerButton = document.getElementById("timerToggle");
         this.popoutButton = document.getElementById("notesPopoutBtn");
+        this.notesStatus = document.getElementById("notesStatus");
         this.popupWindow = null;
         this.isOpen = false;
         this.running = false;
@@ -2404,15 +2408,26 @@
         this.elapsed = 0;
         this.interval = null;
         this.popupFontSize = 18;
+        this.screenAccessState = "checking";
+        this.screenDetails = null;
+        this.screenPermission = null;
+        this.targetScreen = null;
+        this.targetWindowBounds = null;
+        this.screenAccessPromise = null;
+        this.screenAccessGeneration = 0;
+        this.screenAccessOperation = null;
+        this.placementCheckTimer = null;
+        this.handleScreenTopologyChange = () => this.recomputeTargetScreen();
+        this.handleScreenPermissionChange = () => this.onScreenPermissionChange();
 
         document.getElementById("notesClose")?.addEventListener("click", () => this.toggleDrawer(false));
-        this.popoutButton?.addEventListener("click", () => this.openPopup());
+        this.popoutButton?.addEventListener("click", () => this.handlePopupActivation());
         this.timerButton?.addEventListener("click", () => this.toggleTimer());
 
         document.addEventListener("keydown", (event) => {
           if ((event.key === "n" || event.key === "N") && !event.target.isContentEditable && !this.presentation.typing(event)) {
             event.preventDefault();
-            this.openPopup();
+            this.handlePopupActivation();
           }
           if (event.key === "Escape" && this.isOpen) {
             this.toggleDrawer(false);
@@ -2420,10 +2435,261 @@
         });
 
         window.addEventListener("beforeunload", () => {
+          this.screenAccessGeneration += 1;
+          this.clearPlacementCheck();
+          this.detachScreenDetails();
+          if (this.screenPermission) {
+            this.screenPermission.removeEventListener?.("change", this.handleScreenPermissionChange);
+          }
           if (this.popupWindow && !this.popupWindow.closed) {
             try { this.popupWindow.close(); } catch (e) {}
           }
         });
+
+        void this.initializeScreenAccess();
+      }
+
+      setScreenAccessState(state, message = "") {
+        this.screenAccessState = state;
+        this.renderScreenAccessState();
+        this.setScreenStatus(message);
+      }
+
+      setScreenStatus(message) {
+        if (!this.notesStatus) return;
+        this.notesStatus.textContent = message || "";
+        this.notesStatus.classList.toggle("visible", Boolean(message));
+      }
+
+      renderScreenAccessState() {
+        if (!this.popoutButton) return;
+        const labels = {
+          checking: "Checking displays…",
+          requesting: "Checking displays…",
+          "needs-permission": "↗ Pop out",
+          ready: "Open speaker view",
+          fallback: "Open speaker view"
+        };
+        this.popoutButton.textContent = labels[this.screenAccessState] || "Open speaker view";
+      }
+
+      hasScreenDetailsApi() {
+        return typeof window.getScreenDetails === "function";
+      }
+
+      async initializeScreenAccess() {
+        if (!this.hasScreenDetailsApi()) {
+          this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
+          return;
+        }
+
+        let permission = null;
+        try {
+          permission = await navigator.permissions?.query?.({ name: "window-management" });
+        } catch (error) {
+          this.setScreenAccessState("needs-permission");
+          return;
+        }
+
+        if (!permission) {
+          this.setScreenAccessState("needs-permission");
+          return;
+        }
+
+        this.screenPermission = permission;
+        permission.addEventListener?.("change", this.handleScreenPermissionChange);
+
+        if (permission.state === "denied") {
+          this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
+        } else if (permission.state === "granted") {
+          this.startWarmScreenDetails();
+        } else {
+          this.setScreenAccessState("needs-permission");
+        }
+      }
+
+      startWarmScreenDetails() {
+        if (this.screenAccessPromise) {
+          this.setScreenAccessState("checking");
+          return this.screenAccessPromise;
+        }
+        this.clearScreenDetails();
+        const generation = this.screenAccessGeneration;
+        this.setScreenAccessState("checking");
+        return this.loadScreenDetails(generation).catch(() => {
+          if (generation === this.screenAccessGeneration) {
+            this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
+          }
+        });
+      }
+
+      async loadScreenDetails(generation) {
+        if (this.screenAccessPromise) return this.screenAccessPromise;
+        const loadPromise = window.getScreenDetails()
+          .then(details => {
+            this.cacheScreenDetails(details, generation);
+            return details;
+          })
+          .finally(() => {
+            if (this.screenAccessPromise === loadPromise) {
+              this.screenAccessPromise = null;
+            }
+          });
+        this.screenAccessPromise = loadPromise;
+        return loadPromise;
+      }
+
+      async requestScreenAccess() {
+        if (!this.hasScreenDetailsApi()) {
+          this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
+          return null;
+        }
+        if (this.screenAccessOperation) return this.screenAccessOperation.promise;
+
+        this.clearScreenDetails();
+        const generation = this.screenAccessGeneration;
+        this.setScreenAccessState("requesting");
+        const operation = {};
+        operation.generation = generation;
+        operation.promise = this.loadScreenDetails(generation)
+          .catch(() => {
+            if (generation === this.screenAccessGeneration) {
+              this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
+            }
+            return null;
+          })
+          .finally(() => {
+            if (this.screenAccessOperation === operation) this.screenAccessOperation = null;
+          });
+        this.screenAccessOperation = operation;
+        return operation.promise;
+      }
+
+      clearScreenDetails() {
+        this.detachScreenDetails();
+        this.screenDetails = null;
+        this.targetScreen = null;
+        this.targetWindowBounds = null;
+        this.screenAccessPromise = null;
+        this.screenAccessGeneration += 1;
+      }
+
+      detachScreenDetails() {
+        if (!this.screenDetails) return;
+        this.screenDetails.removeEventListener?.("screenschange", this.handleScreenTopologyChange);
+        this.screenDetails.removeEventListener?.("currentscreenchange", this.handleScreenTopologyChange);
+      }
+
+      cacheScreenDetails(details, generation) {
+        if (generation !== this.screenAccessGeneration || !details) return;
+        this.detachScreenDetails();
+        this.screenDetails = details;
+        details.addEventListener?.("screenschange", this.handleScreenTopologyChange);
+        details.addEventListener?.("currentscreenchange", this.handleScreenTopologyChange);
+        this.recomputeTargetScreen();
+      }
+
+      sameScreen(a, b) {
+        return Boolean(a && b && (a === b || (
+          a.left === b.left &&
+          a.top === b.top &&
+          a.width === b.width &&
+          a.height === b.height
+        )));
+      }
+
+      selectTargetScreen(details) {
+        const screens = Array.from(details?.screens || []);
+        const current = details?.currentScreen;
+        return screens.find(screen => !this.sameScreen(screen, current)) || null;
+      }
+
+      recomputeTargetScreen() {
+        if (!this.screenDetails) return;
+        this.targetScreen = this.selectTargetScreen(this.screenDetails);
+        if (this.targetScreen) {
+          this.targetWindowBounds = this.boundsForScreen(this.targetScreen);
+          this.setScreenAccessState("ready", "Display access ready. Activate again to open speaker view.");
+        } else {
+          this.targetWindowBounds = null;
+          this.setScreenAccessState("fallback", "A second display is unavailable; speaker view will open here.");
+        }
+      }
+
+      onScreenPermissionChange() {
+        const state = this.screenPermission?.state;
+        if (state === "prompt") {
+          this.clearScreenDetails();
+          this.setScreenAccessState("needs-permission");
+        } else if (state === "denied") {
+          this.clearScreenDetails();
+          this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
+        } else if (state === "granted") {
+          if (this.screenAccessOperation) {
+            this.setScreenAccessState("requesting");
+          } else {
+            this.startWarmScreenDetails();
+          }
+        }
+      }
+
+      handlePopupActivation() {
+        if (this.screenAccessState === "needs-permission") {
+          void this.requestScreenAccess();
+          return null;
+        }
+        if (this.screenAccessState === "checking" || this.screenAccessState === "requesting") {
+          return null;
+        }
+        return this.openPopup();
+      }
+
+      boundsForScreen(screen) {
+        const screenLeft = screen?.availLeft ?? screen?.left ?? 0;
+        const screenTop = screen?.availTop ?? screen?.top ?? 0;
+        const screenWidth = screen?.availWidth ?? screen?.width ?? 1040;
+        const screenHeight = screen?.availHeight ?? screen?.height ?? 800;
+        return {
+          fullLeft: screen?.left ?? screenLeft,
+          fullTop: screen?.top ?? screenTop,
+          fullWidth: screen?.width ?? screenWidth,
+          fullHeight: screen?.height ?? screenHeight,
+          left: screenLeft + 40,
+          top: screenTop + 40,
+          width: Math.min(1040, screenWidth),
+          height: Math.min(800, screenHeight)
+        };
+      }
+
+      fallbackWindowBounds() {
+        return {
+          left: (window.screen.availLeft ?? window.screenLeft ?? 0) + 40,
+          top: (window.screen.availTop ?? window.screenTop ?? 0) + 40,
+          width: Math.min(1040, window.screen.availWidth || 1040),
+          height: Math.min(800, window.screen.availHeight || 800)
+        };
+      }
+
+      clearPlacementCheck() {
+        if (this.placementCheckTimer) {
+          clearTimeout(this.placementCheckTimer);
+          this.placementCheckTimer = null;
+        }
+      }
+
+      verifyPopupPlacement(popup, bounds) {
+        if (!popup || popup.closed || this.popupWindow !== popup || !bounds) return;
+        const hasScreenXY = Number.isFinite(popup.screenX) && Number.isFinite(popup.screenY);
+        const hasScreenLeftTop = Number.isFinite(popup.screenLeft) && Number.isFinite(popup.screenTop);
+        const x = hasScreenXY ? popup.screenX : (hasScreenLeftTop ? popup.screenLeft : null);
+        const y = hasScreenXY ? popup.screenY : (hasScreenLeftTop ? popup.screenTop : null);
+        if (x === null || y === null) return;
+        const tolerance = 8;
+        const inside = x >= bounds.fullLeft - tolerance &&
+          x < bounds.fullLeft + bounds.fullWidth + tolerance &&
+          y >= bounds.fullTop - tolerance &&
+          y < bounds.fullTop + bounds.fullHeight + tolerance;
+        this.setScreenStatus(inside ? "" : "The browser kept speaker view on this display. Move it to the other display manually.");
       }
 
       toggleDrawer(force) {
@@ -2440,11 +2706,18 @@
           return this.popupWindow;
         }
 
-        const width = Math.min(1040, window.screen.availWidth || 1040);
-        const height = Math.min(800, window.screen.availHeight || 800);
-        const left = (window.screen.availLeft !== undefined ? window.screen.availLeft : 0) + 40;
-        const top = (window.screen.availTop !== undefined ? window.screen.availTop : 0) + 40;
-        const features = `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
+        if (this.screenAccessState === "needs-permission") {
+          return this.requestScreenAccess();
+        }
+        if (this.screenAccessState === "checking" || this.screenAccessState === "requesting") {
+          return null;
+        }
+
+        const readyPlacement = this.screenAccessState === "ready" && this.targetWindowBounds;
+        const bounds = readyPlacement ? this.targetWindowBounds : this.fallbackWindowBounds();
+        const { left, top, width, height } = bounds;
+
+        const features = `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
 
         try {
           this.popupWindow = window.open("", "ReleaseGateSpeakerNotes", features);
@@ -2458,9 +2731,27 @@
           return null;
         }
 
+        const popup = this.popupWindow;
+        const moveWindow = () => {
+          if (!popup || popup.closed || this.popupWindow !== popup) return;
+          try {
+            popup.moveTo(left, top);
+            popup.resizeTo(width, height);
+          } catch (e) {
+            console.debug("moveTo error:", e);
+          }
+        };
+
+        moveWindow();
+        setTimeout(moveWindow, 100);
+        this.clearPlacementCheck();
+        if (readyPlacement) {
+          this.placementCheckTimer = setTimeout(() => this.verifyPopupPlacement(popup, bounds), 350);
+        }
+
         this.initPopupDocument();
-        this.popupWindow.focus();
-        return this.popupWindow;
+        popup.focus();
+        return popup;
       }
 
       initPopupDocument() {
