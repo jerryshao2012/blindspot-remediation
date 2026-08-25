@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presentation Hub — Local Server</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23001928'/%3E%3Ccircle cx='24' cy='32' r='8' fill='%230075be'/%3E%3Ccircle cx='40' cy='32' r='8' fill='%2300a6ff'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #00121d;
+      --bg-card: #001928;
+      --bg-card-hover: #032439;
+      --navy-line: rgba(0, 166, 255, 0.16);
+      --navy-line-bright: rgba(0, 166, 255, 0.38);
+      --bmo-blue: #0075be;
+      --sky: #00a6ff;
+      --amber: #ffc827;
+      --green: #2cd46b;
+      --text: #f0f6fa;
+      --muted: #8eaec2;
+      --font-main: "Heebo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem 1.5rem;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Ambient background glowing orbs */
+    .ambient-glow {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(90px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.35;
+    }
+    .glow-1 {
+      width: 480px;
+      height: 480px;
+      background: radial-gradient(circle, #0075be, transparent 70%);
+      top: -120px;
+      left: -120px;
+    }
+    .glow-2 {
+      width: 520px;
+      height: 520px;
+      background: radial-gradient(circle, #00a6ff, transparent 70%);
+      bottom: -150px;
+      right: -150px;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 980px;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .host-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      background: rgba(44, 212, 107, 0.12);
+      border: 1px solid rgba(44, 212, 107, 0.35);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--green);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    h1 {
+      font-size: 2.3rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      background: linear-gradient(135deg, #ffffff 40%, #a6dfff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 620px;
+      line-height: 1.5;
+    }
+
+    /* Grid of Presentation Cards */
+    .decks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .deck-card {
+      background: var(--bg-card);
+      border: 1px solid var(--navy-line);
+      border-radius: 14px;
+      padding: 1.8rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1.4rem;
+      text-decoration: none;
+      color: inherit;
+      transition: all 220ms ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .deck-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--bmo-blue), var(--sky));
+      opacity: 0;
+      transition: opacity 220ms ease;
+    }
+
+    .deck-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--navy-line-bright);
+      transform: translateY(-4px);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+    }
+
+    .deck-card:hover::before {
+      opacity: 1;
+    }
+
+    .deck-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .deck-tag {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      background: rgba(0, 166, 255, 0.12);
+      color: var(--sky);
+      border: 1px solid rgba(0, 166, 255, 0.28);
+    }
+
+    .deck-slides-count {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .deck-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      line-height: 1.28;
+      color: #ffffff;
+    }
+
+    .deck-desc {
+      font-size: 0.92rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .deck-features {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+
+    .feature-pill {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: #d1e5f2;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .deck-action {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 1rem;
+      border-top: 1px solid var(--navy-line);
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--sky);
+    }
+
+    .deck-action span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .deck-card:hover .deck-action span {
+      color: #ffffff;
+    }
+
+    /* Tips & Info Banner */
+    .info-banner {
+      background: rgba(0, 25, 40, 0.75);
+      border: 1px solid var(--navy-line);
+      border-radius: 12px;
+      padding: 1.4rem 1.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .info-title {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--amber);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+      font-size: 0.86rem;
+      color: #bdd3e3;
+      line-height: 1.5;
+    }
+
+    .info-item strong {
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+    }
+
+    kbd {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--navy-line-bright);
+      color: var(--sky);
+    }
+
+    footer {
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+
+    @media (max-width: 600px) {
+      .decks-grid {
+        grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 1.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <main class="container">
+    <header>
+      <div class="host-badge">
+        <div class="pulse-dot"></div>
+        <span>HTTP://LOCALHOST SERVER ACTIVE</span>
+      </div>
+      <h1>Presentation Hub</h1>
+      <p class="subtitle">
+        Interactive presentation decks running in a secure local origin with multi-monitor Window Management and standalone Speaker View.
+      </p>
+    </header>
+
+    <section class="decks-grid">
+      <!-- Deck 1 -->
+      <a href="/docs/code-assistant-skill-plugin-development.html" class="deck-card">
+        <div style="display: flex; flex-direction: column; gap: 0.9rem;">
+          <div class="deck-header">
+            <span class="deck-tag">Skills & Plugins</span>
+            <span class="deck-slides-count">5 Slides · 30m</span>
+          </div>
+          <h2 class="deck-title">Code Assistant Skill & Plugin Development</h2>
+          <p class="deck-desc">
+            A comprehensive overview covering skills vs. plugins architecture, skill anatomy, manifest configuration, tools integration, and live demonstration workflow.
+          </p>
+          <div class="deck-features">
+            <span class="feature-pill">✦ Standalone Speaker View</span>
+            <span class="feature-pill">✦ Secondary Monitor Placement</span>
+            <span class="feature-pill">✦ Live Stopwatch Timer</span>
+            <span class="feature-pill">✦ Font Sizing (A+/A-)</span>
+          </div>
+        </div>
+        <div class="deck-action">
+          <span>Launch Presentation</span>
+          <span>↗</span>
+        </div>
+      </a>
+
+      <!-- Deck 2 -->
+      <a href="/release-gate/demo/release-gate-demo.html" class="deck-card">
+        <div style="display: flex; flex-direction: column; gap: 0.9rem;">
+          <div class="deck-header">
+            <span class="deck-tag">Live Demonstration</span>
+            <span class="deck-slides-count">12 Slides · 30m</span>
+          </div>
+          <h2 class="deck-title">Autonomous Release Gate Execution</h2>
+          <p class="deck-desc">
+            Live interactive pipeline demonstration showcasing task intake, test analysis, patch generation, automated verification, evidence ledger, and gate decisioning.
+          </p>
+          <div class="deck-features">
+            <span class="feature-pill">✦ Standalone Speaker View</span>
+            <span class="feature-pill">✦ Interactive Execution Steps</span>
+            <span class="feature-pill">✦ Real-time Synchronized Notes</span>
+            <span class="feature-pill">✦ Keyboard Navigation</span>
+          </div>
+        </div>
+        <div class="deck-action">
+          <span>Launch Presentation</span>
+          <span>↗</span>
+        </div>
+      </a>
+    </section>
+
+    <section class="info-banner">
+      <div class="info-title">
+        <span>💡 Presenter Mode & Shortcuts</span>
+      </div>
+      <div class="info-grid">
+        <div class="info-item">
+          <strong><kbd>N</kbd> Speaker Notes Window</strong><br />
+          Opens the standalone speaker notes dialog. Because you're on <code>localhost</code>, the browser will automatically position the notes window on your secondary monitor.
+        </div>
+        <div class="info-item">
+          <strong><kbd>F</kbd> Fullscreen Mode</strong><br />
+          Toggles immersive full-screen presentation mode for clean audience projection.
+        </div>
+        <div class="info-item">
+          <strong><kbd>→</kbd> / <kbd>Space</kbd> Navigation</strong><br />
+          Navigate between slides using arrow keys, spacebar, or direct slide number keys (<kbd>1</kbd>–<kbd>9</kbd>).
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>IBM Applied AI · Blindspot Remediation Architecture</span>
+    </footer>
+  </main>
+</body>
+</html>
