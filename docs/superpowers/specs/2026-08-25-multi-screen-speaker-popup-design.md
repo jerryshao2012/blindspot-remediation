@@ -20,14 +20,16 @@ The code also falls back to the current screen whenever detailed screen informat
 
 ## Selected Design
 
-Use a small permission-and-placement state machine shared structurally by both standalone decks.
+Use a small permission-and-placement state machine shared structurally by both standalone decks. Its access state is one of `checking`, `requesting`, `ready`, or `fallback`:
 
-1. On initialization, query the `window-management` permission when the Permissions API supports it. If permission is already granted, asynchronously cache `ScreenDetails` so the next presenter action can open the popup synchronously.
-2. On the first presenter action when details are not cached, request `getScreenDetails()`. If permission is granted and another display exists, cache the selected target and change the control to clearly request one more click or keypress to open on that display. Do not pretend a popup was placed during this permission step.
-3. On the next presenter action, call `window.open()` synchronously, using the cached target display's available coordinates and dimensions. Keep `moveTo()` and `resizeTo()` as compatibility reinforcement after creation.
-4. Select the first display whose identity or full bounds differ from `currentScreen`; do not assume array position alone identifies the secondary display.
-5. After opening, compare the popup's reported screen position with the target display bounds. If placement is outside the target, keep the usable popup open but show a concise warning that the browser or OS kept it on the current display and that it can be moved manually.
-6. If the API is unsupported, permission is denied, or only one display is visible, open a normal popup on the current display and communicate that cross-screen placement was unavailable. Preserve the existing in-page notes drawer when popup creation itself is blocked.
+1. On initialization, enter `checking` and query the `window-management` permission when the Permissions API supports it. If permission is already granted, asynchronously obtain and cache `ScreenDetails`, then enter `ready` when another display exists or `fallback` when it does not. If the API is known to be unsupported, enter `fallback` immediately. Initialization never opens a window.
+2. If the presenter activates the control while `checking` is in flight, do not open a window; show that display access is still being checked. Repeated activations while `checking` or `requesting` do not start duplicate requests.
+3. On the first presenter action when permission is undecided, enter `requesting` and call `getScreenDetails()`. Whether that asynchronous request resolves to multiple screens, one screen, denial, or error, it only caches the resulting `ready` or `fallback` state. It never calls `window.open()` after the asynchronous boundary. The control then asks for a fresh click or keypress.
+4. On a presenter action when state is `ready`, call `window.open()` synchronously using the cached target display's available coordinates and dimensions. On a presenter action when state is a previously resolved `fallback`, synchronously open a normal current-display popup. Keep `moveTo()` and `resizeTo()` as compatibility reinforcement after creation.
+5. Treat a screen as the current screen when it is the same object as `currentScreen` **or** has identical `left`, `top`, `width`, and `height` bounds. Select the first candidate that satisfies neither equivalence test; do not assume array position alone identifies the secondary display. Negative `left` or `top` coordinates are valid.
+6. Subscribe to `screenschange` and `currentscreenchange` on the live `ScreenDetails` object and recompute the target. Subscribe to the permission object's `change` event and clear cached details when permission is no longer granted. A topology or permission change returns the flow to `checking`, `ready`, or `fallback` as appropriate and never opens a window on its own.
+7. After the final compatibility move attempt, sample `screenX`/`screenY`, falling back to `screenLeft`/`screenTop`. Treat placement as successful when that point is inside the target's `[left, left + width)` and `[top, top + height)` bounds with an 8 CSS-pixel tolerance for browser chrome. If it is outside, keep the usable popup open but warn that the browser or OS kept it on another display and that it can be moved manually.
+8. If popup creation itself is blocked, preserve the existing in-page notes drawer fallback.
 
 Both decks retain their existing popup document, navigation, timer, and keyboard behavior. Only permission acquisition, target selection, opening, and placement feedback change.
 
@@ -36,7 +38,9 @@ Both decks retain their existing popup document, navigation, timer, and keyboard
 - First use with undecided permission: the presenter activates Pop out or presses `N`, approves the browser prompt, and sees a short instruction to activate the control again.
 - Second activation: the notes popup opens on the cached secondary display.
 - Later uses while permission remains granted: screen details are warmed during initialization, so one activation normally opens the popup.
-- Unsupported or clamped placement: the popup remains usable and the deck provides a specific explanation instead of silently claiming secondary-display success.
+- While access is being checked, the control reads `Checking displays…`. After an asynchronous result it reads `Open speaker view` and the status asks for a fresh activation.
+- Add a dedicated presenter-status element beside the pop-out control with `role="status"` and `aria-live="polite"`. Both decks use this surface for stable messages: `Display access ready. Activate again to open speaker view.`, `A second display is unavailable; speaker view will open here.`, and `The browser kept speaker view on this display. Move it to the other display manually.`
+- Unsupported, denied, single-screen, or clamped placement leaves the popup usable and gives the presenter a specific explanation instead of silently claiming secondary-display success.
 
 ## Testing
 
@@ -48,6 +52,8 @@ Add a lightweight regression test that extracts and executes the presentation co
 - a one-screen or unsupported environment uses the documented fallback;
 - a blocked popup retains the existing drawer fallback;
 - both decks keep equivalent placement behavior.
+
+The state-machine cases cover already-granted warm-up opening in one activation; an activation while initialization is in flight; denied, prompted, and one-screen outcomes requiring a fresh activation; permission and topology invalidation; negative secondary-display coordinates; correct placement producing no warning; and clamped placement producing the stable warning. The harness models activation explicitly so an attempted `window.open()` after an asynchronous boundary fails, proving that the implementation uses a fresh synchronous activation.
 
 Manual verification should cover direct `file://` opening in a Chromium browser with two displays, including first permission, second activation, reuse after closing the popup, and a denied-permission fallback.
 
