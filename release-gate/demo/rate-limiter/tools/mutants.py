@@ -109,6 +109,9 @@ def run_mutant(
                 "-x",
                 "-p",
                 "no:cacheprovider",
+                "--assert=plain",
+                "-o",
+                f"cache_dir={temporary}",
                 f"--junitxml={report}",
                 pytest_target,
             ],
@@ -127,7 +130,7 @@ def run_mutant(
             errors = sum(int(suite.attrib.get("errors", "0")) for suite in suites)
         except (OSError, ValueError, element_tree.ParseError):
             tests = failures = errors = -1
-    if PYCACHE.exists():
+    if PYCACHE.exists() and any(PYCACHE.iterdir()):
         raise RuntimeError("bytecode cache reappeared during mutant execution")
     if result.returncode == 1 and tests > 0 and failures > 0 and errors == 0:
         return MutationResult("KILLED", result.returncode)

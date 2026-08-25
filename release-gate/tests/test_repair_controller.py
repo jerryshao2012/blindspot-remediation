@@ -39,7 +39,8 @@ def _init_failing_repo(path: Path) -> str:
         env=env,
     )
 
-    policy = """\
+    python_exe = sys.executable.replace("\\", "/")
+    policy = f"""\\
 version: 1
 scope:
   allowed_paths: ["**"]
@@ -50,7 +51,7 @@ checks:
   - id: unit-tests
     mode: candidate
     severity: blocking
-    argv: ["python3", "test_calc.py"]
+    argv: ["{python_exe}", "test_calc.py"]
 """
     (path / ".release-gate.yaml").write_text(policy, encoding="utf-8")
     (path / ".gitignore").write_text("/.release-gate/runs/\n", encoding="utf-8")
