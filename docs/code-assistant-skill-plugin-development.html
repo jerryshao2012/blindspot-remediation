@@ -968,13 +968,17 @@
           }
         }
 
-        handlePopupActivation() {
-          if (this.screenAccessState === "needs-permission") {
-            void this.requestScreenAccess();
-            return null;
+        async handlePopupActivation() {
+          if (this.popupWindow && !this.popupWindow.closed) {
+            this.popupWindow.focus();
+            this.render(this.presentation.currentSlide);
+            return this.popupWindow;
           }
-          if (this.screenAccessState === "checking" || this.screenAccessState === "requesting") {
-            return null;
+
+          if (this.screenAccessState === "needs-permission" || this.screenAccessState === "requesting" || this.screenAccessState === "checking") {
+            try {
+              await this.requestScreenAccess();
+            } catch (e) {}
           }
           return this.openPopup();
         }
@@ -1034,7 +1038,7 @@
           if (this.isOpen) this.render(this.presentation.currentSlide);
         }
 
-        openPopup() {
+        async openPopup() {
           if (this.popupWindow && !this.popupWindow.closed) {
             this.popupWindow.focus();
             this.render(this.presentation.currentSlide);
@@ -1042,13 +1046,16 @@
           }
 
           if (this.screenAccessState === "needs-permission") {
-            return this.requestScreenAccess();
-          }
-          if (this.screenAccessState === "checking" || this.screenAccessState === "requesting") {
-            return null;
+            try {
+              await this.requestScreenAccess();
+            } catch (e) {}
           }
 
-          const readyPlacement = this.screenAccessState === "ready" && this.targetWindowBounds;
+          if (this.screenDetails && !this.targetWindowBounds) {
+            this.recomputeTargetScreen();
+          }
+
+          const readyPlacement = this.targetWindowBounds;
           const bounds = readyPlacement ? this.targetWindowBounds : this.fallbackWindowBounds();
           const { left, top, width, height } = bounds;
 
@@ -1078,10 +1085,12 @@
           };
 
           moveWindow();
-          setTimeout(moveWindow, 100);
+          setTimeout(moveWindow, 80);
+          setTimeout(moveWindow, 250);
+          setTimeout(moveWindow, 600);
           this.clearPlacementCheck();
           if (readyPlacement) {
-            this.placementCheckTimer = setTimeout(() => this.verifyPopupPlacement(popup, bounds), 350);
+            this.placementCheckTimer = setTimeout(() => this.verifyPopupPlacement(popup, bounds), 400);
           }
 
           this.initPopupDocument();
@@ -1466,6 +1475,7 @@
       <div class="timer-display" id="popupSessionTimer">00:00 / 30:00</div>
       <button class="btn" id="popupTimerToggle" type="button">Start</button>
       <button class="btn" id="popupTimerReset" type="button">Reset</button>
+      <button class="btn" id="popupMoveScreenBtn" type="button" title="Move to secondary monitor">⤢ Screen 2</button>
       <button class="btn btn-nav" id="popupBtnPrev" type="button">◀ Prev</button>
       <button class="btn btn-nav primary" id="popupBtnNext" type="button">Next ▶</button>
     </div>
@@ -1498,19 +1508,22 @@
       </div>
 
       <div class="side-card">
-        <div class="side-card-title">Slide Navigation</div>
+        <div class="side-card-title">
+          <span>Slide Outline</span>
+          <span>5 Slides</span>
+        </div>
         <div class="slide-nav-list" id="popupSlideList"></div>
       </div>
 
       <div class="side-card">
         <div class="side-card-title">Keyboard Shortcuts</div>
         <div class="shortcuts-grid">
-          <div class="shortcut-row"><span>Next slide</span><span class="shortcut-key">→ / Space</span></div>
-          <div class="shortcut-row"><span>Prev slide</span><span class="shortcut-key">←</span></div>
-          <div class="shortcut-row"><span>Toggle timer</span><span class="shortcut-key">T</span></div>
-          <div class="shortcut-row"><span>Reset timer</span><span class="shortcut-key">R</span></div>
-          <div class="shortcut-row"><span>Jump slide</span><span class="shortcut-key">1 – 5</span></div>
-          <div class="shortcut-row"><span>Font size</span><span class="shortcut-key">+ / -</span></div>
+          <div class="shortcut-row"><span>Next</span> <span class="shortcut-key">▶ / Space</span></div>
+          <div class="shortcut-row"><span>Previous</span> <span class="shortcut-key">◀</span></div>
+          <div class="shortcut-row"><span>Timer</span> <span class="shortcut-key">T</span></div>
+          <div class="shortcut-row"><span>Reset</span> <span class="shortcut-key">R</span></div>
+          <div class="shortcut-row"><span>Jump</span> <span class="shortcut-key">1 – 5</span></div>
+          <div class="shortcut-row"><span>Font</span> <span class="shortcut-key">+ / -</span></div>
         </div>
       </div>
     </aside>
@@ -1532,6 +1545,25 @@
           doc.getElementById("popupTimerReset")?.addEventListener("click", () => this.resetTimer());
           doc.getElementById("popupFontPlus")?.addEventListener("click", () => this.changePopupFontSize(1));
           doc.getElementById("popupFontMinus")?.addEventListener("click", () => this.changePopupFontSize(-1));
+
+          doc.getElementById("popupMoveScreenBtn")?.addEventListener("click", () => {
+            if (this.targetWindowBounds) {
+              try {
+                win.moveTo(this.targetWindowBounds.left, this.targetWindowBounds.top);
+                win.resizeTo(this.targetWindowBounds.width, this.targetWindowBounds.height);
+              } catch (e) {
+                console.warn("Manual screen move constrained:", e);
+              }
+            } else {
+              this.recomputeTargetScreen();
+              if (this.targetWindowBounds) {
+                try {
+                  win.moveTo(this.targetWindowBounds.left, this.targetWindowBounds.top);
+                  win.resizeTo(this.targetWindowBounds.width, this.targetWindowBounds.height);
+                } catch (e) {}
+              }
+            }
+          });
 
           // Populate slide list in popup sidebar
           const listEl = doc.getElementById("popupSlideList");
