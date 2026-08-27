@@ -1911,8 +1911,8 @@ verdict: <span class="wn">NEEDS_HUMAN</span> · POLICY_FILE_CHANGED</pre></div>
 
     render(index) {
       const slide = slides[index];
-      const notes = slide?.querySelector(".speaker-notes");
-      if (!notes) return;
+      if (!slide) return;
+      const notes = slide.querySelector(".speaker-notes");
 
       if (this.popupWindow && !this.popupWindow.closed) {
         try {
@@ -1922,7 +1922,7 @@ verdict: <span class="wn">NEEDS_HUMAN</span> · POLICY_FILE_CHANGED</pre></div>
           if (badge) badge.textContent = `SLIDE ${index + 1} OF ${total}`;
 
           const targetDur = doc.getElementById("popupTargetDuration");
-          if (targetDur) targetDur.textContent = notes.dataset.duration || "01:30";
+          if (targetDur) targetDur.textContent = notes?.dataset.duration || "01:30";
 
           const eyebrowEl = doc.getElementById("popupSlideEyebrow");
           const kicker = slide.querySelector(".kicker");
@@ -1934,7 +1934,7 @@ verdict: <span class="wn">NEEDS_HUMAN</span> · POLICY_FILE_CHANGED</pre></div>
           const bodyEl = doc.getElementById("popupNotesBody");
           if (bodyEl) {
             bodyEl.style.setProperty("--notes-size", `${this.popupFontSize}px`);
-            bodyEl.innerHTML = notes.innerHTML;
+            bodyEl.innerHTML = notes ? notes.innerHTML : "<p>No notes for this slide.</p>";
           }
 
           // Up Next

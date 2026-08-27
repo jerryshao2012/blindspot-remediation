@@ -753,6 +753,9 @@ classification: <span class="ok">good_pass</span></pre></div>
     </div>
   </div>
   <div class="src">control-evidence/_repairs/ · RUN-LOG-2026-08-24-repair-success.md</div>
+  <aside class="speaker-notes" data-duration="01:30">
+    <p><strong>0:00–1:00 · The Audit Package.</strong> Every artifact from the repair session is permanently archived with cryptographic hashes. If an auditor asks 6 months later why code changed, the complete trail exists on disk.</p>
+    <p><strong>1:00–1:30 · Enterprise Readiness.</strong> This is what enables AI coding agents in regulated enterprise environments.</p>
     <p><strong>Transition:</strong> “Thank you — open for questions and live control verification.”</p>
   </aside>
 </section>
@@ -1653,8 +1656,8 @@ classification: <span class="ok">good_pass</span></pre></div>
 
     render(index) {
       const slide = slides[index];
-      const notes = slide?.querySelector(".speaker-notes");
-      if (!notes) return;
+      if (!slide) return;
+      const notes = slide.querySelector(".speaker-notes");
 
       if (this.popupWindow && !this.popupWindow.closed) {
         try {
@@ -1664,7 +1667,7 @@ classification: <span class="ok">good_pass</span></pre></div>
           if (badge) badge.textContent = `SLIDE ${index + 1} OF ${total}`;
 
           const targetDur = doc.getElementById("popupTargetDuration");
-          if (targetDur) targetDur.textContent = notes.dataset.duration || "01:30";
+          if (targetDur) targetDur.textContent = notes?.dataset.duration || "01:30";
 
           const eyebrowEl = doc.getElementById("popupSlideEyebrow");
           const kicker = slide.querySelector(".kicker");
@@ -1676,7 +1679,7 @@ classification: <span class="ok">good_pass</span></pre></div>
           const bodyEl = doc.getElementById("popupNotesBody");
           if (bodyEl) {
             bodyEl.style.setProperty("--notes-size", `${this.popupFontSize}px`);
-            bodyEl.innerHTML = notes.innerHTML;
+            bodyEl.innerHTML = notes ? notes.innerHTML : "<p>No notes for this slide.</p>";
           }
 
           // Up Next
