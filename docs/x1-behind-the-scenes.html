@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>X1 — Behind the Scenes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f5f6f7; --paper-deep: #e6f9fe; --white: #fefefe;
+    --ink: #001928; --muted: #646c76; --muted-dark: #8b949e;
+    --line: rgba(0,25,40,.16); --soft-line: rgba(0,25,40,.09);
+    --terminal: #001928; --terminal-soft: #003552;
+    --blue: #0075be; --blue-bright: #38a5e8; --blue-soft: rgba(0,117,190,.12);
+    --cyan: #009ec9; --green: #00b88c; --amber: #d99100; --red: #e9425f;
+    --purple: #835ec2;
+    --font-display: "Heebo", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+    --h2-size: clamp(1.5rem, 3.4vw, 3.2rem);
+    --body-size: clamp(.78rem, 1.1vw, 1.02rem);
+    --small-size: clamp(.64rem, .86vw, .82rem);
+    --micro-size: clamp(.56rem, .72vw, .7rem);
+    --pad: clamp(1.1rem, 4vw, 4.2rem);
+    --ease: cubic-bezier(.16,1,.3,1);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { font-family:var(--font-display); background:var(--paper); color:var(--ink); }
+
+  /* ---------- chrome ---------- */
+  .topbar { position:fixed; inset:0 0 auto 0; z-index:40; display:flex; justify-content:space-between;
+    padding:.7rem var(--pad) .4rem; font-family:var(--font-mono); font-size:var(--micro-size);
+    letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    background:linear-gradient(var(--paper) 65%, transparent); pointer-events:none; }
+  .progress { position:fixed; top:0; left:0; height:3px; background:var(--blue); z-index:50; width:0; transition:width .3s var(--ease); }
+  .counter { position:fixed; right:var(--pad); bottom:.7rem; font-family:var(--font-mono); font-size:var(--micro-size); color:var(--muted); z-index:40; }
+  .hints { position:fixed; left:var(--pad); bottom:.7rem; font-family:var(--font-mono); font-size:var(--micro-size); color:var(--muted-dark); z-index:40; }
+  .navdots { position:fixed; right:.9rem; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:.45rem; z-index:40; }
+  .navdots button { width:8px; height:8px; border-radius:50%; border:1px solid var(--muted-dark); background:transparent; cursor:pointer; padding:0; }
+  .navdots button.on { background:var(--blue); border-color:var(--blue); }
+
+  /* ---------- pipeline strip ---------- */
+  .pipeline { position:fixed; top:2.2rem; left:50%; transform:translateX(-50%); z-index:35;
+    background:var(--white); border:1px solid var(--line); border-radius:10px;
+    padding:.5rem .9rem; display:flex; flex-direction:column; gap:.28rem;
+    font-family:var(--font-mono); font-size:var(--micro-size);
+    box-shadow:0 6px 22px rgba(0,25,40,.08); opacity:0; pointer-events:none; transition:opacity .3s var(--ease);
+    max-width:min(96vw, 1080px); }
+  .pipeline.show { opacity:1; }
+  .lane { display:flex; align-items:center; gap:.32rem; flex-wrap:wrap; }
+  .lane-label { color:var(--muted-dark); letter-spacing:.16em; margin-right:.2rem; min-width:4.4em; }
+  .pn { border:1px solid var(--line); border-radius:5px; padding:.13rem .42rem; color:var(--muted);
+    background:var(--paper); white-space:nowrap; transition:all .25s var(--ease); }
+  .arrow { color:var(--muted-dark); }
+  .pgroup { display:flex; align-items:center; gap:.28rem; border:1px dashed var(--line); border-radius:7px; padding:.16rem .4rem; }
+  .pgroup > b { color:var(--muted); font-weight:600; letter-spacing:.1em; font-size:.92em; }
+  .pn.dashed { border-style:dashed; color:var(--muted-dark); }
+  .pn.on { background:var(--terminal); color:#fff; border-color:var(--terminal); font-weight:600; }
+  .pn.on.verdict-pass { background:var(--green); border-color:var(--green); }
+  .pgroup.on { border-color:var(--blue); background:var(--blue-soft); }
+
+  /* ---------- slides ---------- */
+  main { height:100vh; overflow-y:auto; scroll-snap-type:y mandatory; }
+  section.slide { min-height:100vh; scroll-snap-align:start; display:flex; flex-direction:column;
+    justify-content:center; padding:calc(var(--pad) + 4.4rem) var(--pad) calc(var(--pad) * .8); position:relative; }
+  .kicker { display:flex; align-items:center; gap:.6rem; font-family:var(--font-mono);
+    font-size:var(--small-size); letter-spacing:.22em; text-transform:uppercase; color:var(--blue); margin-bottom:.7rem; }
+  .kicker::before { content:""; width:2rem; height:2px; background:var(--blue); }
+  h1 { font-size:clamp(2.2rem,6vw,5.4rem); font-weight:700; line-height:1.04; letter-spacing:-.02em; }
+  h2 { font-size:var(--h2-size); font-weight:700; line-height:1.08; letter-spacing:-.015em; margin-bottom:1.1rem; }
+  .stepno { position:absolute; right:var(--pad); top:38%; font-size:clamp(3rem,8vw,7rem); font-weight:300;
+    color:rgba(0,25,40,.07); font-family:var(--font-mono); }
+  .lead { font-size:var(--body-size); color:var(--muted); max-width:56ch; }
+  .grid { display:grid; gap:.9rem; margin-top:1.1rem; }
+  .g2 { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+  .g3 { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+  .card { background:var(--white); border:1px solid var(--soft-line); border-radius:10px; padding:.85rem .95rem; }
+  .card h3 { font-family:var(--font-mono); font-size:var(--micro-size); letter-spacing:.18em;
+    text-transform:uppercase; color:var(--muted); margin-bottom:.45rem; }
+  .card p, .card li { font-size:var(--small-size); color:var(--ink); line-height:1.55; }
+  .card ul { list-style:none; } .card li { padding-left:1em; text-indent:-1em; }
+  .card li::before { content:"— "; color:var(--muted-dark); }
+  .accent-l { border-left:3px solid var(--blue); }
+  .good  { border-left:3px solid var(--green); }
+  .bad   { border-left:3px solid var(--red); }
+  .warn  { border-left:3px solid var(--amber); }
+
+  .term { background:var(--terminal); color:#dfe9f0; border-radius:10px; padding:.8rem 1rem;
+    font-family:var(--font-mono); font-size:var(--small-size); line-height:1.6; overflow-x:auto; }
+  .term .cbar { display:flex; gap:.35rem; margin-bottom:.55rem; }
+  .term .cbar i { width:.55rem; height:.55rem; border-radius:50%; background:var(--terminal-soft); }
+  .term .p { color:var(--blue-bright); }
+  .term .ok { color:var(--green); } .term .er { color:var(--red); } .term .wn { color:var(--amber); }
+  .term .dim { color:#7d93a3; }
+  .term pre { white-space:pre; font-family:inherit; }
+  .diff-del { color:#ff8ba0; } .diff-add { color:#5fe3bd; }
+
+  table.t { width:100%; border-collapse:collapse; font-size:var(--small-size); background:var(--white);
+    border:1px solid var(--soft-line); border-radius:10px; overflow:hidden; }
+  .t th { font-family:var(--font-mono); font-size:var(--micro-size); letter-spacing:.14em; text-transform:uppercase;
+    color:var(--muted); text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line); background:var(--paper); }
+  .t td { padding:.5rem .7rem; border-bottom:1px solid var(--soft-line); vertical-align:top; }
+  .t tr:last-child td { border-bottom:none; }
+  .mono { font-family:var(--font-mono); }
+  .v-pass { color:var(--green); font-weight:600; } .v-fail { color:var(--red); font-weight:600; }
+  .v-hum { color:var(--amber); font-weight:600; }
+  .src { margin-top:.9rem; font-family:var(--font-mono); font-size:var(--micro-size); color:var(--muted-dark); }
+  .src::before { content:"source · "; color:var(--blue); }
+  .pill { display:inline-block; font-family:var(--font-mono); font-size:var(--micro-size); border:1px solid var(--line);
+    border-radius:99px; padding:.1rem .55rem; color:var(--muted); margin:.12rem .18rem 0 0; }
+
+  /* ---------- notes drawer ---------- */
+  .drawer { position:fixed; inset:0 0 0 auto; width:min(430px,92vw); background:var(--terminal); color:#dfe9f0;
+    z-index:60; transform:translateX(102%); transition:transform .35s var(--ease); padding:1.2rem 1.3rem;
+    overflow-y:auto; box-shadow:-12px 0 40px rgba(0,25,40,.35); }
+  .drawer.open { transform:none; }
+  .drawer h4 { font-family:var(--font-mono); font-size:var(--small-size); color:var(--blue-bright); margin-bottom:.9rem; }
+  .drawer .body p { font-size:var(--small-size); line-height:1.7; margin-bottom:.8rem; color:#c6d4de; }
+  .drawer .body strong { color:#fff; }
+  .drawer .close { position:absolute; top:.9rem; right:.9rem; background:none; border:1px solid var(--terminal-soft);
+    color:#dfe9f0; border-radius:6px; padding:.15rem .5rem; cursor:pointer; font-family:var(--font-mono); }
+  aside.speaker-notes { display:none; }
+  @media (max-width: 900px){ .pipeline{ display:none; } .stepno{ display:none; } }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="topbar"><span>BMO · Applied AI · AI Powered SDLC · X1 Walkthrough</span><span>Behind the Scenes</span></div>
+<div class="counter" id="counter">01 / 14</div>
+<div class="hints">← → navigate · F fullscreen · N notes</div>
+<div class="navdots" id="navdots"></div>
+
+<!-- ======= persistent pipeline map — the "where are we" strip ======= -->
+<div class="pipeline" id="pipeline">
+  <div class="lane">
+    <span class="lane-label">ONLINE</span>
+    <span class="pn" id="n-bench">workbench</span><span class="arrow">→</span>
+    <span class="pn" id="n-task">task card</span><span class="arrow">→</span>
+    <span class="pn" id="n-exec">executor</span><span class="arrow">→</span>
+    <span class="pn" id="n-cand">candidate</span><span class="arrow">→</span>
+    <span class="pgroup" id="g-gate"><b>RELEASE GATE</b>
+      <span class="pn" id="n-rebuild">rebuild</span>
+      <span class="pn" id="n-scope">scope</span>
+      <span class="pn" id="n-checks">checks</span>
+      <span class="pn" id="n-verdict">verdict</span>
+    </span><span class="arrow">→</span>
+    <span class="pn" id="n-out">PASS · FAIL · HUMAN</span>
+  </div>
+  <div class="lane">
+    <span class="lane-label">OFFLINE</span>
+    <span class="pn" id="n-oracle">hidden oracle</span><span class="arrow">→</span>
+    <span class="pn" id="n-grade">grade</span><span class="arrow">→</span>
+    <span class="pn" id="n-log">run log · dashboard</span>
+    <span class="pn dashed" id="n-edm">evidence diversity mapper · not built</span>
+  </div>
+</div>
+
+<main id="deck">
+
+<!-- 1 ================================================================ -->
+<section class="slide">
+  <div class="kicker">AI Engineering · Homework Walkthrough</div>
+  <h1>X1, behind<br>the scenes.</h1>
+  <p class="lead" style="margin-top:1rem">One small task, traced end to end: every command, every file it
+  touches, every piece of evidence — and exactly where each verdict comes from.</p>
+  <p class="lead" style="margin-top:.6rem">Every number on these slides comes from a recorded run of the
+  Release&nbsp;Gate 0.6.0 demo. Nothing is invented.</p>
+  <div class="src">release-gate/demo/python-slugify · run 20260827T143722Z-58368f55bad1</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–0:40 · Set the frame.</strong> This is not a slideware pipeline — every verdict, hash and
+    reason code on these slides was produced by a real gate run on this laptop. When someone doubts a number,
+    open the file named at the bottom of the slide.</p>
+    <p><strong>Transition:</strong> “First, the map — so we always know where we are.”</p>
+  </aside>
+</section>
+
+<!-- 2 ================================================================ -->
+<section class="slide" data-stage="map">
+  <div class="kicker">The map</div>
+  <h2>Two lanes. One lit box at a time.</h2>
+  <div class="grid g2">
+    <div class="card accent-l">
+      <h3>Online — judges one change</h3>
+      <p>A task is specified, an executor edits code, and the gate independently decides
+      <span class="v-pass">PASS</span>, <span class="v-fail">FAIL</span> or <span class="v-hum">NEEDS_HUMAN</span>.
+      This lane runs on every change.</p>
+    </div>
+    <div class="card accent-l">
+      <h3>Offline — grades the judge</h3>
+      <p>A hidden answer key checks whether the gate’s verdict was <em>right</em>.
+      It exists only for measurement. In production there is no oracle — which is why it is measured first.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:.9rem">
+    <h3>How to read this deck</h3>
+    <p>The strip above stays on screen. The <b>dark box is where we are</b> at each step.
+    The dashed box — the Evidence Diversity Mapper — is designed but not built; it will never light up. That is honest, not an omission.</p>
+  </div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:00 · Anchor the two lanes.</strong> Online = the product (the guardrail on every change).
+    Offline = the clinical trial (known-answer tasks that measure the guardrail). Point at the dashed mapper box
+    and say out loud that it is not built — credibility comes from the dashed box.</p>
+  </aside>
+</section>
+
+<!-- 3 ================================================================ -->
+<section class="slide" data-stage="task">
+  <span class="stepno">01</span>
+  <div class="kicker">Step 1 · the task</div>
+  <h2>A two-line ask with hidden depth.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> cat demo/tasks/X1_v2.md</pre>
+<pre class="dim">Switch python-slugify’s transliteration backend:
+make <b>Unidecode</b> required, remove <b>text-unidecode</b>.
+Constraints: do not modify test.py · use the project venv
+· reinstall after changing setup.py.</pre></div>
+    <div class="card">
+      <h3>Why this task probes blindspots</h3>
+      <ul>
+        <li>The two backends agree on almost every input — the visible 82 tests stay green either way</li>
+        <li>They disagree on a few: <span class="mono">₹500 → "500" vs "rs500"</span> — and a slug is a URL</li>
+        <li>The task spans code + packaging + config — easy to complete <em>selectively</em></li>
+      </ul>
+    </div>
+  </div>
+  <div class="src">demo/tasks/X1_v2.md · demo/CORPUS.md</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:00 · The trap in plain words.</strong> A mechanical “swap package x for y” that a find-and-replace
+    can get subtly wrong. The existing suite cannot see the difference; behavior on currency symbols changes silently.
+    Files touched so far: none.</p>
+  </aside>
+</section>
+
+<!-- 4 ================================================================ -->
+<section class="slide" data-stage="bench">
+  <span class="stepno">02</span>
+  <div class="kicker">Step 2 · baseline</div>
+  <h2>Green before, or nothing after means anything.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> python3 demo.py reset</pre>
+<pre><span class="ok">82 passed</span> in 0.04s
+reset: release-gate-demo-base</pre></div>
+    <div class="card">
+      <h3>What now exists on disk</h3>
+      <ul>
+        <li><span class="mono">workbench/python-slugify/</span> — clean clone at commit <span class="mono">42e5e792</span></li>
+        <li><span class="mono">workbench/task-venv/</span> — isolated interpreter</li>
+        <li>zero modified files — <span class="mono">git status</span> is empty</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card warn" style="margin-top:.9rem"><h3>The rule</h3>
+    <p>If the baseline is red, a later FAIL could mean “the AI broke it” <em>or</em> “it was already broken” —
+    and no one can tell which. Green-before is the precondition for every verdict.</p></div>
+  <div class="src">demo/python-slugify/demo.py · workbench/</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:00 · Baseline discipline.</strong> 12 of 25 well-known open-source repos failed this rule from a
+    clean clone when the corpus was measured. Never assume green; verify it at the pinned commit in the gate’s own
+    environment.</p>
+  </aside>
+</section>
+
+<!-- 5 ================================================================ -->
+<section class="slide" data-stage="exec">
+  <span class="stepno">03</span>
+  <div class="kicker">Step 3 · the candidate</div>
+  <h2>A candidate is just a diff nobody accepted yet.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> python3 demo.py control pass   <span class="dim"># scripted candidate</span></pre>
+<pre class="dim">M README.md · M setup.py · M slugify/slugify.py · M tox.ini
+control ready: pass</pre>
+<pre>
+<span class="diff-del">- install_requires = ['text-unidecode>=1.3']</span>
+<span class="diff-add">+ install_requires = ['Unidecode>=1.1.1']</span>
+<span class="diff-del">- try: import unidecode</span>
+<span class="diff-del">- except ImportError: import text_unidecode …</span>
+<span class="diff-add">+ import unidecode</span></pre></div>
+    <div class="card">
+      <h3>Two ways this box gets filled</h3>
+      <ul>
+        <li><b>Live runs:</b> GitHub Copilot CLI edits the code — 5 recorded runs, mean <b>88&nbsp;s</b>, ~<b>12&nbsp;AIC</b> each</li>
+        <li><b>This demo:</b> a pre-scripted patch (a lab <em>control</em>) — deterministic, so the gate’s behaviour is repeatable on stage</li>
+      </ul>
+      <p style="margin-top:.5rem">Either way the gate sees the same thing: <b>4 changed files</b>.</p>
+    </div>
+  </div>
+  <div class="src">demo/python-slugify/controls/pass.patch · demo/runs/RUNLOG.md</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:15 · Define “candidate” and “control”.</strong> Candidate = proposed change awaiting judgment.
+    Control = pre-scripted candidate with a known correct verdict, used to prove the instrument reads correctly —
+    same sense as a lab control. The AI is interchangeable here by design: the gate must not care who wrote the diff.</p>
+  </aside>
+</section>
+
+<!-- 6 ================================================================ -->
+<section class="slide" data-stage="rebuild">
+  <span class="stepno">04</span>
+  <div class="kicker">Step 4 · the gate begins</div>
+  <h2>First move: trust nothing, rebuild everything.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> release-gate run --repo . --base release-gate-demo-base</pre>
+<pre class="dim">capturing worktree… reconstructing base + candidate
+in an isolated workspace…</pre></div>
+    <div class="card">
+      <h3>Identity is pinned before judging</h3>
+      <ul>
+        <li>base commit <span class="mono">42e5e792a247</span></li>
+        <li>patch sha256 <span class="mono">7e8bd4232c58…</span> — fingerprint of <em>exactly</em> what is judged</li>
+        <li>policy sha256 <span class="mono">4c52b4fbbb8a…</span> — fingerprint of the rules used</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card accent-l" style="margin-top:.9rem"><h3>Why rebuild?</h3>
+    <p>The executor’s workspace can lie — ambient packages and cached state make incomplete work look healthy.
+    In live run-01, Copilot reported <span class="mono">“82 passed”</span> from the wrong interpreter; the gate’s clean
+    rebuild found the tests could not even run.</p></div>
+  <div class="src">.release-gate/runs/&lt;run-id&gt;/result.json → base_commit, patch_sha256, config_sha256</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:15 · Independence, made physical.</strong> The gate reconstructs both base and candidate from git
+    in its own workspace. Nothing the executor claims is carried over. The three hashes make the verdict attributable:
+    this exact diff, judged under this exact policy, from this exact base.</p>
+  </aside>
+</section>
+
+<!-- 7 ================================================================ -->
+<section class="slide" data-stage="scope">
+  <span class="stepno">05</span>
+  <div class="kicker">Step 5 · scope</div>
+  <h2>Cheapest evidence first: which files moved?</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3>The policy (from .release-gate.yaml)</h3>
+      <ul>
+        <li><b>allowed</b> · <span class="mono">/setup.py · slugify/** · /README.md · /tox.ini</span></li>
+        <li><b>forbidden</b> · <span class="mono">/test.py · .github/**</span> — the candidate must not edit its own evidence</li>
+        <li><b>review-required</b> · <span class="mono">/.release-gate.yaml · /pyproject.toml …</span> — touching the judge escalates</li>
+      </ul>
+    </div>
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre class="dim">result.json → scope</pre>
+<pre>changed_paths : README.md, setup.py,
+                slugify/slugify.py, tox.ini
+forbidden     : <span class="ok">none</span>
+outside       : <span class="ok">none</span>
+review        : <span class="ok">none</span></pre></div>
+  </div>
+  <div class="src">effective-config.json → scope · result.json → scope</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:00 · Paths are intent.</strong> Before any test runs, the gate reads intent from the file list.
+    Three path classes, three consequences: forbidden → FAIL, outside-allowed → FAIL, review-required → NEEDS_HUMAN.
+    This is Git-wildmatch matching via pathspec — the scaffolding’s broken glob matcher, fixed for real.</p>
+  </aside>
+</section>
+
+<!-- 8 ================================================================ -->
+<section class="slide" data-stage="checks">
+  <span class="stepno">06</span>
+  <div class="kicker">Step 6 · evidence checks</div>
+  <h2>Three checks, three kinds of evidence.</h2>
+  <table class="t">
+    <tr><th>check</th><th>mode</th><th>severity</th><th>what it proves</th><th>this run</th></tr>
+    <tr><td class="mono">tests-and-coverage</td><td><b>differential</b></td><td>blocking</td>
+        <td>runs the suite on base <em>and</em> candidate; asserts candidate-minus-baseline failures ≤ 0 — works even on messy repos</td>
+        <td class="v-pass">PASS</td></tr>
+    <tr><td class="mono">task-consistency</td><td>candidate</td><td>blocking</td>
+        <td>asserts <span class="mono">remaining == 0</span> leftover <span class="mono">text_unidecode</span> references — the “half-finished task” detector</td>
+        <td class="v-pass">PASS</td></tr>
+    <tr><td class="mono">types</td><td>candidate</td><td>advisory</td>
+        <td>mypy — advisory: a failure here escalates to a human, it cannot FAIL the run alone</td>
+        <td class="v-pass">PASS</td></tr>
+  </table>
+  <div class="grid g2" style="margin-top:.9rem">
+    <div class="card good"><h3>Evidence, not opinion</h3>
+      <p>Each check runs a real command, saves its report, and parses it into typed assertions — e.g.
+      <span class="mono">junit /failures · candidate-minus-baseline · lte 0 · passed: true</span>.</p></div>
+    <div class="card accent-l"><h3>A blindspot became a check</h3>
+      <p>In live runs 4–5 the AI skipped <span class="mono">tox.ini</span> and nothing could see it.
+      <span class="mono">task-consistency</span> is that exact gap, promoted into gate policy.</p></div>
+  </div>
+  <div class="src">result.json → checks[].assertions · effective-config.json → checks</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:30 · Read one assertion aloud.</strong> The differential mode is the answer to “our repo is a
+    mess”: the question is never “is everything green?” but “did this change make it worse?”. And task-consistency is
+    the improvement loop working: a real observed AI failure (runs 4–5, tox.ini left stale) became a deterministic
+    check. That is how a gate learns.</p>
+  </aside>
+</section>
+
+<!-- 9 ================================================================ -->
+<section class="slide" data-stage="verdict">
+  <span class="stepno">07</span>
+  <div class="kicker">Step 7 · the verdict</div>
+  <h2>One rule turns evidence into a decision.</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Precedence — NEEDS_HUMAN &gt; FAIL &gt; PASS</h3>
+      <ul>
+        <li>any check <b>ERROR / SKIPPED</b> → <span class="v-hum">NEEDS_HUMAN</span> — unverified work is never a pass <em>or</em> a fail</li>
+        <li>any <b>blocking</b> check fails → <span class="v-fail">FAIL</span></li>
+        <li>any <b>advisory</b> check fails → <span class="v-hum">NEEDS_HUMAN</span></li>
+        <li>otherwise → <span class="v-pass">PASS</span> · reason codes cleared</li>
+      </ul>
+    </div>
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre>VERDICT: <span class="ok">PASS</span>
+reason_codes: []            <span class="dim">exit 0</span>
+RESULT: .release-gate/runs/
+  20260827T143722Z-58368f55bad1/result.json</pre></div>
+  </div>
+  <div class="card warn" style="margin-top:.9rem"><h3>The line most gates get wrong</h3>
+    <p>A check that <em>could not run</em> is not evidence against the candidate — and not evidence for it.
+    It outranks FAIL on purpose: claiming knowledge you don’t have is how a gate becomes theatre.</p></div>
+  <div class="src">src/release_gate/policy.py → aggregate_verdict() · result.json → verdict</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:15 · Adverse vs missing, first pass.</strong> FAIL means evidence says the candidate is wrong.
+    NEEDS_HUMAN means the gate cannot verify — tool missing, timeout, check skipped, judge edited. Exit codes: 0 PASS,
+    1 FAIL, 2 NEEDS_HUMAN. This distinction returns on slide 12 with receipts.</p>
+  </aside>
+</section>
+
+<!-- 10 =============================================================== -->
+<section class="slide" data-stage="evidence">
+  <span class="stepno">08</span>
+  <div class="kicker">Step 8 · what’s on disk</div>
+  <h2>The verdict comes with receipts.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre class="dim">.release-gate/runs/20260827T143722Z-58368f55bad1/</pre>
+<pre>├ result.json            <span class="dim">verdict · checks · scope · hashes</span>
+├ trace.json             <span class="dim">12 events · what ran, when, exit codes</span>
+├ manifest.json          <span class="dim">every artifact + its sha256</span>
+├ candidate.patch        <span class="dim">the exact diff that was judged</span>
+├ effective-config.json  <span class="dim">the policy that applied</span>
+└ observability/         <span class="dim">rolling-rate snapshot</span></pre></div>
+    <div class="card">
+      <h3>Why it matters</h3>
+      <ul>
+        <li>A verdict you can’t reconstruct is an opinion. Every claim here traces to a file.</li>
+        <li><b>Tamper-evident:</b> the manifest hashes each artifact — edit one and the hashes disagree.</li>
+        <li>Weeks later, “why did this pass?” has an answer that doesn’t depend on memory.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="src">manifest.json → artifacts[].sha256 · trace.json → control_finished events</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:15 · The audit story.</strong> result.json is the decision record; trace.json is the how
+    (commands, exit codes, durations, truncation flags); manifest.json binds it together with hashes. Tamper-evident,
+    not immutable — an honest distinction the tool itself makes.</p>
+  </aside>
+</section>
+
+<!-- 11 =============================================================== -->
+<section class="slide" data-stage="oracle">
+  <span class="stepno">09</span>
+  <div class="kicker">Step 9 · offline lane</div>
+  <h2>Was the gate right? Only the answer key knows.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> python3 demo.py grade --result …/result.json</pre>
+<pre><span class="ok">16 passed</span> in 0.06s
+truth: <span class="ok">correct</span>
+classification: <span class="ok">good_pass</span></pre></div>
+    <div class="card">
+      <h3>The hidden oracle</h3>
+      <ul>
+        <li>16 asserts the gate never sees — the divergent inputs: <span class="mono">₹500→rs500 · ♥ love→hearts-love …</span></li>
+        <li>expected values were <em>observed</em> by running both backends first — never guessed</li>
+        <li><b>good_pass</b> = gate said PASS <em>and</em> the change was truly correct — “good” grades the gate, not the code</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card accent-l" style="margin-top:.9rem"><h3>Production has no oracle</h3>
+    <p>That is the whole point of the offline lane: measure the gate on known answers <em>first</em>, then trust its
+    verdicts where no answer key exists. Production can reveal a bad pass eventually — it can <em>never</em> reveal a
+    wrongly blocked good change.</p></div>
+  <div class="src">demo/python-slugify/oracle/test_x1_oracle.py · demo.py grade</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:30 · The asymmetry argument.</strong> A false release eventually surfaces in production. A false
+    block never does — the change didn’t ship, nothing happened, no trace. Only a bench with hidden answers sees both
+    error directions. This is the sharpest idea in the whole design; give it its 30 seconds.</p>
+  </aside>
+</section>
+
+<!-- 12 =============================================================== -->
+<section class="slide" data-stage="out">
+  <span class="stepno">10</span>
+  <div class="kicker">Step 10 · the controls</div>
+  <h2>Three candidates. One line of difference each.</h2>
+  <table class="t">
+    <tr><th>candidate</th><th>only difference</th><th>gate verdict</th><th>reason codes</th><th>graded</th></tr>
+    <tr><td class="mono">control pass</td><td>the correct swap, nothing else</td>
+        <td class="v-pass">PASS</td><td class="mono">—</td><td class="mono">good_pass</td></tr>
+    <tr><td class="mono">control fail</td><td>+ 1 comment line in <b>test.py</b></td>
+        <td class="v-fail">FAIL</td><td class="mono">PATH_FORBIDDEN</td><td class="mono">good_catch</td></tr>
+    <tr><td class="mono">control needs-human</td><td>+ 1 comment line in <b>.release-gate.yaml</b></td>
+        <td class="v-hum">NEEDS_HUMAN</td><td class="mono">POLICY_FILE_CHANGED</td><td class="mono">escalated</td></tr>
+  </table>
+  <div class="grid g3" style="margin-top:.9rem">
+    <div class="card bad"><h3>Blindspot A · ambient environment</h3><p>Executor’s workspace hides missing
+      dependencies. Seen live in run-01. Countered by the clean rebuild.</p></div>
+    <div class="card warn"><h3>Blindspot B · selective completion</h3><p>Code lands, config lags (tox.ini,
+      runs 4–5). Countered by task-consistency.</p></div>
+    <div class="card accent-l"><h3>Blindspot C · trust boundary</h3><p>Edit the tests or the policy and everything
+      looks green. Countered by scope + policy-change escalation.</p></div>
+  </div>
+  <div class="src">controls/{pass,fail,needs-human}.patch · runs 20260827T1437…/1438…</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:30 · The punchline slide.</strong> All three candidates contain the same correct code change.
+    One extra comment line flips the verdict — because the gate reads intent from paths, not from whether the code
+    “looks right”. Then map A/B/C to the live runs: these blindspots were observed first, encoded second.</p>
+  </aside>
+</section>
+
+<!-- 13 =============================================================== -->
+<section class="slide" data-stage="verdict">
+  <span class="stepno">11</span>
+  <div class="kicker">Step 11 · the distinction that matters</div>
+  <h2>“Evidence of failure” ≠ “failure to get evidence.”</h2>
+  <div class="grid g2">
+    <div class="card bad">
+      <h3>FAIL — adverse evidence</h3>
+      <p>A check <em>ran</em> and found the candidate wrong. Receipt:
+      <span class="mono">control fail → PATH_FORBIDDEN · forbidden: test.py</span>.
+      The evidence argues against release.</p>
+    </div>
+    <div class="card warn">
+      <h3>NEEDS_HUMAN — insufficient evidence</h3>
+      <p>Checks <em>never ran</em>. Receipt: <span class="mono">control needs-human → checks SKIPPED
+      (POLICY_FILE_CHANGED)</span>. The gate refuses to judge on evidence it doesn’t have.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:.9rem">
+    <h3>The live-run proof · run-01 → run-01b</h3>
+    <p>Copilot: <span class="mono">“82 passed.”</span> The gate’s clean rebuild: pytest <b>exit 2</b> — tests could not
+    run (missing dependency). Verdict <span class="v-hum">NEEDS_HUMAN</span>, <em>not</em> FAIL. One human
+    <span class="mono">pip install</span> later, re-gated: <span class="v-pass">PASS</span>, oracle 15/15,
+    <span class="mono">good_pass</span>. The task never “failed” — the gate briefly couldn’t verify it.</p>
+  </div>
+  <div class="src">demo/runs/RUNLOG.md · run-01 tests.log (pytest exit 2)</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:30 · K’s core teaching point.</strong> Never translate gate ≠ PASS into “the engineering task
+    failed”. Four different states hide behind a red light: the candidate is wrong; evidence is missing; a check
+    itself broke; a human is required. The gate names which one — read the reason codes, not the color.</p>
+  </aside>
+</section>
+
+<!-- 14 =============================================================== -->
+<section class="slide" data-stage="log">
+  <span class="stepno">12</span>
+  <div class="kicker">Step 12 · the numbers, honestly</div>
+  <h2>What we can measure today — and what we can’t yet.</h2>
+  <div class="grid g3">
+    <div class="card good">
+      <h3>Verdict rates · built</h3>
+      <p>Every run feeds a dashboard: rolling <b>10</b> and <b>100</b>-run windows of
+      release / fail / human-review rates, with config-change markers.</p>
+    </div>
+    <div class="card good">
+      <h3>Cost · measured live</h3>
+      <p>5 Copilot runs on X1: mean <b>88 s</b>, ~<b>12 AIC</b> each. 5/5 correct — but 0 fails in 4 runs still
+      allows a true failure rate up to <b>49%</b> (Wilson). Five runs size the bill; they don’t qualify a pipeline.</p>
+    </div>
+    <div class="card warn">
+      <h3>Not built yet</h3>
+      <p>No token-budget loop (<span class="mono">MORE_EVIDENCE_REQUIRED</span>), no cost-vs-review saturation curve,
+      and the diversity mapper never lit up. Naming the gaps is part of the evidence.</p>
+    </div>
+  </div>
+  <div class="card accent-l" style="margin-top:.9rem">
+    <h3>The one-sentence takeaway</h3>
+    <p>evidence&nbsp;→&nbsp;sufficiency&nbsp;→&nbsp;policy&nbsp;→&nbsp;verdict.
+    The gate is an <b>assurance system</b>, not another test runner — it turns “the agent says it’s done”
+    into a decision you can audit.</p>
+  </div>
+  <div class="src">.release-gate/runs/_observability/index.html · demo/runs/RUNLOG.md</div>
+  <aside class="speaker-notes">
+    <p><strong>0:00–1:30 · Close with honesty.</strong> Show the dashboard live if there’s time. Then the gaps —
+    K’s token/evidence saturation curve needs a budgeted evidence loop that doesn’t exist yet; the mapper is a design.
+    Ending on the dashed box is what makes the solid boxes believable.</p>
+    <p><strong>Transition:</strong> “Questions — and if you want, we run all three controls live. It takes ninety seconds.”</p>
+  </aside>
+</section>
+
+</main>
+
+<!-- notes drawer -->
+<div class="drawer" id="drawer">
+  <button class="close" id="drawerClose">✕</button>
+  <h4 id="drawerTitle">Notes</h4>
+  <div class="body" id="drawerBody"></div>
+</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll("section.slide"));
+  const counter = document.getElementById("counter");
+  const progress = document.getElementById("progress");
+  const dots = document.getElementById("navdots");
+  const pipeline = document.getElementById("pipeline");
+  const drawer = document.getElementById("drawer");
+  const drawerBody = document.getElementById("drawerBody");
+  const drawerTitle = document.getElementById("drawerTitle");
+  let current = 0;
+
+  const STAGE_NODES = {
+    map: [],
+    task: ["n-task"],
+    bench: ["n-bench"],
+    exec: ["n-exec", "n-cand"],
+    rebuild: ["n-rebuild"],
+    scope: ["n-scope"],
+    checks: ["n-checks"],
+    verdict: ["n-verdict"],
+    evidence: ["n-verdict", "n-out"],
+    oracle: ["n-oracle", "n-grade"],
+    out: ["n-out"],
+    log: ["n-log"]
+  };
+  const GATE_STAGES = new Set(["rebuild", "scope", "checks", "verdict", "evidence"]);
+
+  slides.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.setAttribute("aria-label", "Go to slide " + (i + 1));
+    b.addEventListener("click", () => goTo(i));
+    dots.appendChild(b);
+  });
+
+  function updateChrome(i) {
+    counter.textContent = String(i + 1).padStart(2, "0") + " / " + String(slides.length).padStart(2, "0");
+    progress.style.width = ((i + 1) / slides.length * 100) + "%";
+    Array.from(dots.children).forEach((d, di) => d.classList.toggle("on", di === i));
+    const stage = slides[i].dataset.stage;
+    pipeline.classList.toggle("show", !!stage);
+    document.querySelectorAll(".pn").forEach(n => n.classList.remove("on"));
+    document.getElementById("g-gate").classList.remove("on");
+    if (stage && STAGE_NODES[stage]) {
+      STAGE_NODES[stage].forEach(id => document.getElementById(id)?.classList.add("on"));
+      if (GATE_STAGES.has(stage)) document.getElementById("g-gate").classList.add("on");
+    }
+    if (drawer.classList.contains("open")) renderNotes(i);
+  }
+
+  function goTo(i) {
+    current = Math.max(0, Math.min(i, slides.length - 1));
+    slides[current].scrollIntoView({ behavior: "smooth" });
+    updateChrome(current);
+    history.replaceState(null, "", "#slide-" + (current + 1));
+  }
+
+  function renderNotes(i) {
+    const aside = slides[i].querySelector("aside.speaker-notes");
+    drawerTitle.textContent = (i + 1) + ". " + (slides[i].querySelector("h1,h2")?.textContent || "").trim().slice(0, 60);
+    drawerBody.innerHTML = aside ? aside.innerHTML : "<p>No notes for this slide.</p>";
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.isContentEditable || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
+    else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) { e.preventDefault(); goTo(current - 1); }
+    else if (e.key === "f" || e.key === "F") {
+      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    } else if (e.key === "n" || e.key === "N") {
+      drawer.classList.toggle("open");
+      if (drawer.classList.contains("open")) renderNotes(current);
+    } else if (e.key === "Escape") drawer.classList.remove("open");
+  });
+  document.getElementById("drawerClose").addEventListener("click", () => drawer.classList.remove("open"));
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      if (en.isIntersecting && en.intersectionRatio > 0.55) {
+        current = slides.indexOf(en.target);
+        updateChrome(current);
+      }
+    });
+  }, { threshold: [0.6] });
+  slides.forEach(s => io.observe(s));
+
+  const m = location.hash.match(/^#slide-(\d+)$/);
+  if (m) setTimeout(() => goTo(Number(m[1]) - 1), 0);
+  updateChrome(0);
+})();
+</script>
+</body>
+</html>
