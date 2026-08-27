@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autonomous Release Gate — Architecture & Executive Overview</title>
+<title>Rate Limiter — Behind the Scenes</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230075be'/%3E%3Cpath d='M8 8h16v5H13v6h11v5H8z' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --paper: #f5f6f7; --paper-deep: #e6f9fe; --white: #fefefe;
@@ -46,19 +46,22 @@
   .navdots button { width:8px; height:8px; border-radius:50%; border:1px solid var(--muted-dark); background:transparent; cursor:pointer; padding:0; transition:all .2s; }
   .navdots button.on { background:var(--blue); border-color:var(--blue); transform:scale(1.25); }
 
-  /* ---------- top architecture strip ---------- */
+  /* ---------- pipeline strip (Demo 2: Gauntlet + Bounded Repair) ---------- */
   .pipeline { position:fixed; top:2.2rem; left:50%; transform:translateX(-50%); z-index:35;
     background:var(--white); border:1px solid var(--line); border-radius:10px;
-    padding:.5rem .9rem; display:flex; align-items:center; gap:.4rem;
+    padding:.5rem .9rem; display:flex; flex-direction:column; gap:.28rem;
     font-family:var(--font-mono); font-size:var(--micro-size);
     box-shadow:0 6px 22px rgba(0,25,40,.08); opacity:0; pointer-events:none; transition:opacity .3s var(--ease);
     max-width:min(96vw, 1140px); }
   .pipeline.show { opacity:1; }
-  .pn { border:1px solid var(--line); border-radius:5px; padding:.15rem .45rem; color:var(--muted);
+  .lane { display:flex; align-items:center; gap:.32rem; flex-wrap:wrap; }
+  .lane-label { color:var(--muted-dark); letter-spacing:.16em; margin-right:.2rem; min-width:5.2em; font-weight:600; }
+  .pn { border:1px solid var(--line); border-radius:5px; padding:.13rem .42rem; color:var(--muted);
     background:var(--paper); white-space:nowrap; transition:all .25s var(--ease); }
   .arrow { color:var(--muted-dark); }
   .pgroup { display:flex; align-items:center; gap:.28rem; border:1px dashed var(--line); border-radius:7px; padding:.16rem .4rem; }
   .pgroup > b { color:var(--muted); font-weight:600; letter-spacing:.1em; font-size:.92em; }
+  .pn.dashed { border-style:dashed; color:var(--muted-dark); }
   .pn.on { background:var(--terminal); color:#fff; border-color:var(--terminal); font-weight:600; }
   .pn.on.verdict-pass { background:var(--green); border-color:var(--green); }
   .pgroup.on { border-color:var(--blue); background:var(--blue-soft); }
@@ -66,7 +69,7 @@
   /* ---------- slides base ---------- */
   main { height:100vh; overflow-y:auto; scroll-snap-type:y mandatory; }
   section.slide { min-height:100vh; height:100vh; height:100dvh; scroll-snap-align:start; display:flex; flex-direction:column;
-    justify-content:center; padding:calc(var(--pad) + 3.8rem) var(--pad) calc(var(--pad) * .8); position:relative; overflow:hidden; }
+    justify-content:center; padding:calc(var(--pad) + 4rem) var(--pad) calc(var(--pad) * .8); position:relative; overflow:hidden; }
   .kicker { display:flex; align-items:center; gap:.6rem; font-family:var(--font-mono);
     font-size:var(--small-size); letter-spacing:.22em; text-transform:uppercase; color:var(--blue); margin-bottom:.6rem; }
   .kicker::before { content:""; width:2rem; height:2px; background:var(--blue); }
@@ -74,11 +77,11 @@
   h2 { font-size:var(--h2-size); font-weight:700; line-height:1.08; letter-spacing:-.015em; margin-bottom:1rem; }
   .stepno { position:absolute; right:var(--pad); top:38%; font-size:clamp(3rem,8vw,7rem); font-weight:300;
     color:rgba(0,25,40,.07); font-family:var(--font-mono); pointer-events:none; }
-  .lead { font-size:var(--body-size); color:var(--muted); max-width:60ch; line-height:1.6; }
+  .lead { font-size:var(--body-size); color:var(--muted); max-width:58ch; }
   .grid { display:grid; gap:.9rem; margin-top:1rem; }
-  .g2 { grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
-  .g3 { grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
-  .card { background:var(--white); border:1px solid var(--soft-line); border-radius:10px; padding:.9rem 1.05rem; box-shadow:0 4px 16px rgba(0,25,40,.03); }
+  .g2 { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+  .g3 { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+  .card { background:var(--white); border:1px solid var(--soft-line); border-radius:10px; padding:.85rem .95rem; box-shadow:0 4px 16px rgba(0,25,40,.03); }
   .card h3 { font-family:var(--font-mono); font-size:var(--micro-size); letter-spacing:.18em;
     text-transform:uppercase; color:var(--muted); margin-bottom:.45rem; }
   .card p, .card li { font-size:var(--small-size); color:var(--ink); line-height:1.55; }
@@ -97,6 +100,7 @@
   .term .ok { color:var(--green); } .term .er { color:var(--red); } .term .wn { color:var(--amber); }
   .term .dim { color:#7d93a3; }
   .term pre { white-space:pre; font-family:inherit; }
+  .diff-del { color:#ff8ba0; } .diff-add { color:#5fe3bd; }
 
   table.t { width:100%; border-collapse:collapse; font-size:var(--small-size); background:var(--white);
     border:1px solid var(--soft-line); border-radius:10px; overflow:hidden; }
@@ -109,68 +113,178 @@
   .v-hum { color:var(--amber); font-weight:600; }
   .src { margin-top:.9rem; font-family:var(--font-mono); font-size:var(--micro-size); color:var(--muted-dark); }
   .src::before { content:"source · "; color:var(--blue); }
+  .pill { display:inline-block; font-family:var(--font-mono); font-size:var(--micro-size); border:1px solid var(--line);
+    border-radius:99px; padding:.1rem .55rem; color:var(--muted); margin:.12rem .18rem 0 0; }
 
-  /* ---------- Track Comparison Cards ---------- */
-  .track-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.2rem;
-    margin-top: 1rem;
-  }
-  .track-card {
+  /* ---------- Timeline & Operator styles ---------- */
+  .timeline-shell {
     background: var(--white);
     border: 1px solid var(--soft-line);
     border-radius: 12px;
-    padding: 1.2rem 1.4rem;
-    box-shadow: 0 4px 20px rgba(0,25,40,.04);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 0.9rem;
-    position: relative;
-    overflow: hidden;
+    padding: clamp(1rem, 2vw, 1.8rem);
+    box-shadow: 0 4px 18px rgba(0, 25, 40, 0.05);
+    margin-top: clamp(0.8rem, 2vh, 1.4rem);
   }
-  .track-card::before {
+  .timeline-axis {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    padding: 1.8rem 1.2rem;
+    margin-bottom: 1.2rem;
+  }
+  .timeline-axis::before {
     content: "";
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: var(--blue);
+    top: 50%;
+    left: 2rem;
+    right: 2rem;
+    height: 3px;
+    background: linear-gradient(90deg, var(--green), var(--cyan), var(--red));
+    z-index: 0;
   }
-  .track-card:nth-child(2)::before { background: var(--green); }
-  .track-badge {
+  .time-point {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--white);
+    padding: 0 0.5rem;
+  }
+  .time-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--blue);
+    border: 3px solid var(--white);
+    box-shadow: 0 0 0 2px var(--blue);
+  }
+  .time-label {
     font-family: var(--font-mono);
-    font-size: var(--micro-size);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+    font-size: var(--small-size);
     font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .operator-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  .operator-card {
+    background: var(--paper);
+    border: 1px solid var(--soft-line);
+    border-radius: 8px;
+    padding: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .operator {
+    font-family: var(--font-mono);
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .operator.red { color: var(--red); }
+  .operator.amber { color: var(--amber); }
+  .operator.green { color: var(--green); }
+
+  /* ---------- Gauntlet Grid styles ---------- */
+  .gauntlet-layout {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1.5rem;
+    align-items: center;
+    margin-top: 1rem;
+  }
+  .gauntlet-core {
+    background: var(--terminal);
+    color: #fff;
+    border-radius: 12px;
+    padding: 1.4rem 1.6rem;
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.25;
+    border: 2px solid var(--blue-bright);
+    box-shadow: 0 8px 24px rgba(0, 117, 190, 0.25);
+  }
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.8rem;
+  }
+  .metric {
+    background: var(--white);
+    border: 1px solid var(--soft-line);
+    border-radius: 8px;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .metric-value {
+    font-family: var(--font-mono);
+    font-size: 1.15rem;
+    font-weight: 700;
     color: var(--blue);
   }
-  .track-card:nth-child(2) .track-badge { color: var(--green); }
-  .track-title {
-    font-size: clamp(1.1rem, 1.8vw, 1.45rem);
-    font-weight: 700;
-    color: var(--ink);
-    line-height: 1.2;
+  .metric-label {
+    font-size: var(--micro-size);
+    color: var(--muted);
+    line-height: 1.35;
   }
-  .track-desc {
+
+  /* ---------- Repair Flow styles ---------- */
+  .repair-flow {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+  .repair-node {
+    background: var(--white);
+    border: 1px solid var(--soft-line);
+    border-radius: 8px;
+    padding: 0.8rem 0.65rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    text-align: center;
+    box-shadow: 0 3px 12px rgba(0, 25, 40, 0.04);
+  }
+  .repair-node .label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--muted-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .repair-state {
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+  .repair-state.red { color: var(--red); }
+  .repair-state.amber { color: var(--amber); }
+  .repair-state.green { color: var(--green); }
+  .repair-state.accent { color: var(--blue); }
+  .repair-node p { font-size: var(--micro-size); color: var(--muted); line-height: 1.3; }
+  .repair-note {
+    margin-top: 1rem;
+    padding: 0.65rem 1rem;
+    border-left: 3px solid var(--blue);
+    background: var(--white);
+    border-radius: 0 8px 8px 0;
     color: var(--muted);
     font-size: var(--small-size);
-    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
   }
-  .track-link {
-    font-family: var(--font-mono);
-    font-size: var(--micro-size);
-    color: var(--blue);
-    text-decoration: none;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-  }
-  .track-link:hover { text-decoration: underline; }
 
   /* ---------- notes drawer (Non-fullscreen) ---------- */
   .drawer { position:fixed; inset:0 0 0 auto; width:min(440px,94vw); background:var(--terminal); color:#dfe9f0;
@@ -198,331 +312,448 @@
   @media (max-width: 900px){
     .pipeline{ display:none; }
     .stepno{ display:none; }
-    .track-grid { grid-template-columns: 1fr; }
+    .operator-grid { grid-template-columns: 1fr; }
+    .gauntlet-layout { grid-template-columns: 1fr; }
+    .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    .repair-flow { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
 <body>
 
 <div class="progress" id="progress"></div>
-<div class="topbar"><span>BMO · Applied AI · AI Powered SDLC</span><span>Executive Overview · Release Gate</span></div>
-<div class="counter" id="counter">01 / 10</div>
+<div class="topbar"><span>BMO · Applied AI · AI Powered SDLC · X2 Walkthrough</span><span>Behind the Scenes · rate-limiter</span></div>
+<div class="counter" id="counter">01 / 14</div>
 <div class="hints">← → navigate · F fullscreen · N notes (Screen 2 popup in fullscreen)</div>
 <div class="navdots" id="navdots"></div>
 
-<!-- ======= persistent pipeline map ======= -->
+<!-- ======= persistent pipeline map — the "where are we" strip ======= -->
 <div class="pipeline" id="pipeline">
-  <span class="pn" id="n-cand">01 candidate</span><span class="arrow">→</span>
-  <span class="pn" id="n-rebuild">02 rebuild</span><span class="arrow">→</span>
-  <span class="pn" id="n-policy">03 policy</span><span class="arrow">→</span>
-  <span class="pn" id="n-evidence">04 evidence</span><span class="arrow">→</span>
-  <span class="pn" id="n-verdict">05 verdict</span><span class="arrow">→</span>
-  <span class="pn" id="n-oracle">06 oracle</span>
+  <div class="lane">
+    <span class="lane-label">GAUNTLET</span>
+    <span class="pn" id="n-bench">workbench</span><span class="arrow">→</span>
+    <span class="pn" id="n-spec">spec</span><span class="arrow">→</span>
+    <span class="pn" id="n-cand">candidate</span><span class="arrow">→</span>
+    <span class="pgroup" id="g-gate"><b>RELEASE GATE</b>
+      <span class="pn" id="n-rebuild">rebuild</span>
+      <span class="pn" id="n-scope">scope</span>
+      <span class="pn" id="n-gauntlet">gauntlet · 8/8 mutants</span>
+      <span class="pn" id="n-verdict">verdict</span>
+    </span><span class="arrow">→</span>
+    <span class="pn" id="n-out">PASS · FAIL · HUMAN</span>
+  </div>
+  <div class="lane">
+    <span class="lane-label">REPAIR</span>
+    <span class="pn" id="n-defect">C0 defect</span><span class="arrow">→</span>
+    <span class="pn" id="n-app1">approval</span><span class="arrow">→</span>
+    <span class="pn" id="n-retry">C1 retry</span><span class="arrow">→</span>
+    <span class="pn" id="n-fix">C2 fix</span><span class="arrow">→</span>
+    <span class="pn" id="n-app2">final approval</span><span class="arrow">→</span>
+    <span class="pn" id="n-apply">apply</span><span class="arrow">→</span>
+    <span class="pn" id="n-oracle">oracle (11 asserts)</span>
+  </div>
 </div>
 
 <main id="deck">
 
 <!-- 1 ================================================================ -->
-<section class="slide" id="slide-1" data-title="Autonomous Release Gate">
-  <div class="kicker">AI Powered SDLC · Architecture &amp; Executive Overview</div>
-  <h1>Autonomous<br>Release Gate.</h1>
-  <p class="lead" style="margin-top:1rem">Closing the enterprise AI SDLC blindspot: transforming “the agent claims it is done” into an independent, tamper-evident release decision.</p>
-  <p class="lead" style="margin-top:.6rem">A high-level synthesis of repository breadth (Demo 01) and behavioral depth with bounded repair (Demo 02).</p>
-  <div class="src">release-gate 0.6.0 · BMO Applied AI · 2026</div>
+<section class="slide" id="slide-1" data-title="Rate Limiter, behind the scenes">
+  <div class="kicker">AI Engineering · Demo 02 Walkthrough</div>
+  <h1>Rate Limiter, behind<br>the scenes.</h1>
+  <p class="lead" style="margin-top:1rem">Deep behavioral assurance, 10-layer quality gauntlet, 8/8 mutation kills, and cryptographic bounded repair flow traced end-to-end.</p>
+  <p class="lead" style="margin-top:.6rem">Every number and state transition comes from recorded run <code>rep-20260824203527-f0cfe322</code>.</p>
+  <div class="src">release-gate/demo/rate-limiter · run rep-20260824203527-f0cfe322</div>
   <aside class="speaker-notes" data-duration="01:30">
-    <p><strong>0:00–0:45 · Framing the Challenge.</strong> As AI code assistants and autonomous agents enter enterprise workflows, their speed generates a new bottleneck: release confidence. An agent declaring "all tests passed" is not evidence for release.</p>
-    <p><strong>0:45–1:30 · The Release Gate Objective.</strong> Release Gate sits between candidate generation and the release pipeline as an independent, deterministic evaluator that proves repository consistency, behavioral correctness, and human-bounded governance.</p>
-    <p><strong>Transition:</strong> “Let’s look at the foundational blindspot that necessitates this architecture.”</p>
+    <p><strong>0:00–0:45 · Set the frame.</strong> Welcome to Demo 02: Rate Limiter. Where Demo 01 showed breadth across packaging, dependencies, and configuration, Demo 02 is about deep algorithmic behavior and stateful verification.</p>
+    <p><strong>0:45–1:30 · What we will trace.</strong> We will walk through exact sliding-window boundaries, 8/8 production mutants, the 10-layer Quality Gauntlet, and the complete bounded repair flow from C0 failure to cryptographic approval and transactional apply.</p>
+    <p><strong>Transition:</strong> “Let’s start with the central blindspot: why green test suites fail on stateful code.”</p>
   </aside>
 </section>
 
 <!-- 2 ================================================================ -->
-<section class="slide" id="slide-2" data-title="The Enterprise Blindspot">
+<section class="slide" id="slide-2" data-title="The Blindspot: Behavioral Depth">
   <div class="kicker">The blindspot</div>
-  <h2>Green tests are not a release decision.</h2>
+  <h2>Green tests are not behavioral truth.</h2>
   <div class="grid g3">
     <article class="card accent-l">
-      <h3>01 / CONTEXT</h3>
-      <p><b>The assistant sees its dirty workspace.</b> Cached bytecode and ambient host packages make incomplete work look healthy. When tested from a clean clone, it breaks.</p>
+      <h3>01 / BOUNDARY</h3>
+      <p><b>Exact window boundaries hide inside state.</b> A request at $t=0.0$ dropped at $t=60.0$ vs $t > 60.0$ passes standard tests but violates SLA contracts in production.</p>
     </article>
     <article class="card warn">
-      <h3>02 / COVERAGE</h3>
-      <p><b>Real tasks span more than happy-path code.</b> Agents easily miss packaging configs (<span class="mono">setup.py</span>), test matrices (<span class="mono">tox.ini</span>), documentation, or peripheral dependencies.</p>
+      <h3>02 / VACUITY</h3>
+      <p><b>100% coverage can be vacuous.</b> Code can execute every line without asserting invariant correctness. Only mutation testing proves tests detect subtle defects.</p>
     </article>
     <article class="card bad">
-      <h3>03 / AUTHORITY</h3>
-      <p><b>The candidate cannot grade itself.</b> A candidate change must never have the authority to edit its own judging criteria, weaken test assertions, or bypass security rules.</p>
+      <h3>03 / GOVERNANCE</h3>
+      <p><b>Automated repair must be bounded.</b> An AI assistant must never loop indefinitely, edit its own evaluation tests, or modify source code without human cryptographic authorization.</p>
     </article>
   </div>
   <div class="card good" style="margin-top:.9rem">
-    <h3>Core Architectural Invariant</h3>
-    <p>Release Gate reconstructs all verification from a reviewed git base in isolated sandboxes — independent of the agent’s subjective confidence.</p>
+    <h3>The Release Gate Invariant</h3>
+    <p>Release Gate enforces behavioral depth through mutation gauntlets and ensures automated repair remains inside strict human-approved budgets in disposable sandboxes.</p>
   </div>
-  <aside class="speaker-notes" data-duration="02:00">
-    <p><strong>0:00–0:45 · Context Blindspot.</strong> Dev machines and assistant environments carry state. In real runs, Copilot reported "82 passed" on python-slugify from the wrong host interpreter; clean rebuild showed it couldn't run.</p>
-    <p><strong>0:45–1:30 · Coverage Blindspot.</strong> Incomplete migrations: code imports updated, but tox.ini and setup.py left stale. Standard CI runs only happy paths.</p>
-    <p><strong>1:30–2:00 · Authority Boundary.</strong> If an agent modifies a test file or gate policy, the gate must not accept it blindly; it must escalate directly to human review.</p>
-    <p><strong>Transition:</strong> “Here is the 6-stage proof pipeline that enforces this invariant.”</p>
+  <aside class="speaker-notes" data-duration="01:30">
+    <p><strong>0:00–0:50 · The Three Defect Traps.</strong> (1) Off-by-one boundary bugs that evade standard unit tests; (2) False confidence from 100% line coverage that doesn't actually assert invariants; (3) Unbounded AI agents that hallucinate or rewrite tests to force green checkmarks.</p>
+    <p><strong>0:50–1:30 · The Solution.</strong> A 10-layer Quality Gauntlet backed by mutation testing and an auditable, bounded repair loop.</p>
+    <p><strong>Transition:</strong> “Let’s look at the navigation map: two operational lanes.”</p>
   </aside>
 </section>
 
 <!-- 3 ================================================================ -->
-<section class="slide" id="slide-3" data-stage="pipeline" data-title="Proof Pipeline">
-  <div class="kicker">The architecture</div>
-  <h2>One candidate. Six stages of independent proof.</h2>
-  <div class="grid g3">
-    <div class="card">
-      <span class="mono" style="color:var(--blue); font-size:var(--micro-size);">STAGE 01</span>
-      <h3 style="margin-top:.2rem;">Candidate Intake</h3>
-      <p>Fingerprints the candidate patch SHA-256 and base commit SHA before touching disk.</p>
+<section class="slide" id="slide-3" data-stage="map" data-title="The map">
+  <div class="kicker">The map</div>
+  <h2>Two lanes. One unified release policy.</h2>
+  <div class="grid g2">
+    <div class="card accent-l">
+      <h3>Lane 1: Online Quality Gauntlet</h3>
+      <p>Reconstructs isolated workspaces, enforces strict wildmatch scope, executes 10 defense-in-depth layers including 100% coverage and 8/8 mutants, and assigns PASS/FAIL/NEEDS_HUMAN.</p>
     </div>
-    <div class="card">
-      <span class="mono" style="color:var(--blue); font-size:var(--micro-size);">STAGE 02</span>
-      <h3 style="margin-top:.2rem;">Clean Rebuild</h3>
-      <p>Reconstructs base and candidate in pristine, isolated virtual environments.</p>
-    </div>
-    <div class="card">
-      <span class="mono" style="color:var(--blue); font-size:var(--micro-size);">STAGE 03</span>
-      <h3 style="margin-top:.2rem;">Reviewed Policy</h3>
-      <p>Enforces wildmatch path scoping: allowed, forbidden (<span class="mono">test.py</span>), and review-required.</p>
-    </div>
-    <div class="card">
-      <span class="mono" style="color:var(--amber); font-size:var(--micro-size);">STAGE 04</span>
-      <h3 style="margin-top:.2rem;">Evidence Ledger</h3>
-      <p>Differential tests, task consistency checks, and 10-layer quality gauntlets.</p>
-    </div>
-    <div class="card">
-      <span class="mono" style="color:var(--green); font-size:var(--micro-size);">STAGE 05</span>
-      <h3 style="margin-top:.2rem;">Three-Way Verdict</h3>
-      <p>Deterministic evaluation: <span class="v-pass">PASS</span>, <span class="v-fail">FAIL</span>, or <span class="v-hum">NEEDS_HUMAN</span> with reason codes.</p>
-    </div>
-    <div class="card">
-      <span class="mono" style="color:var(--purple); font-size:var(--micro-size);">STAGE 06</span>
-      <h3 style="margin-top:.2rem;">External Oracle</h3>
-      <p>Offline grading against hidden truth models to measure the gate’s precision.</p>
+    <div class="card accent-l">
+      <h3>Lane 2: Bounded Repair State Machine</h3>
+      <p>When defects occur (C0 FAIL), manages human approval, attempt budgets (max 2), disposable repair worktrees, and transactional application only after cryptographic verification.</p>
     </div>
   </div>
-  <aside class="speaker-notes" data-duration="02:00">
-    <p><strong>0:00–1:00 · Stages 1 through 3.</strong> Every run begins with cryptographic pinning of git base and patch digest. Both environments are reconstructed from scratch, and file scope is validated against policy.</p>
-    <p><strong>1:00–2:00 · Stages 4 through 6.</strong> Real command executions produce parsed assertion evidence. A deterministic precedence rule produces the verdict before any external oracle or merge occurs.</p>
-    <p><strong>Transition:</strong> “To validate this architecture, we created two distinct demonstration tracks.”</p>
+  <div class="card" style="margin-top:.9rem">
+    <h3>Attributable State Transitions</h3>
+    <p class="mono">C0 FAIL → approval requested → approval granted → C1 FAIL → C2 PASS → final approval → applied → oracle (11 passed)</p>
+  </div>
+  <aside class="speaker-notes" data-duration="01:00">
+    <p><strong>0:00–1:00 · The Two Lanes.</strong> Point to the top strip. The top lane evaluates candidate patches against the Quality Gauntlet. The bottom lane governs automated repair when defects arise, ensuring the source worktree remains immutable until final approval.</p>
+    <p><strong>Transition:</strong> “Step 1: defining the sliding window specification.”</p>
   </aside>
 </section>
 
 <!-- 4 ================================================================ -->
-<section class="slide" id="slide-4" data-title="Two Demonstration Tracks">
-  <div class="kicker">Demonstration tracks</div>
-  <h2>Two complementary validation vectors.</h2>
-  <div class="track-grid">
-    <article class="track-card">
-      <div>
-        <span class="track-badge">Demo 01 · Breadth</span>
-        <h3 class="track-title" style="margin-top:.4rem;">python-slugify</h3>
-        <p class="track-desc" style="margin-top:.5rem;">
-          <b>Repository-wide migration consistency:</b> replacing transliteration backends across packaging (<span class="mono">setup.py</span>), code imports, test matrices (<span class="mono">tox.ini</span>), and docs.
-        </p>
-        <ul style="margin-top:.7rem; font-size:var(--small-size); color:var(--muted); line-height:1.6;">
-          <li>Clean virtual environment dependency isolation</li>
-          <li>Differential testing (candidate minus baseline)</li>
-          <li>Path scoping &amp; judge tampering escalation</li>
-        </ul>
-      </div>
-      <a href="../../docs/x1-behind-the-scenes.html" class="track-link">Explore Demo 01 Deep-Dive →</a>
-    </article>
-
-    <article class="track-card">
-      <div>
-        <span class="track-badge">Demo 02 · Depth</span>
-        <h3 class="track-title" style="margin-top:.4rem;">rate-limiter</h3>
-        <p class="track-desc" style="margin-top:.5rem;">
-          <b>Behavioral correctness &amp; bounded repair:</b> verifying stateful sliding-window algorithms under exact boundary conditions and automated human-governed repair.
-        </p>
-        <ul style="margin-top:.7rem; font-size:var(--small-size); color:var(--muted); line-height:1.6;">
-          <li>10-layer Quality Gauntlet &amp; 8/8 mutants killed</li>
-          <li>Exact boundary off-by-one detection ($t=60.0$)</li>
-          <li>Human-authorized 2-attempt repair sandbox</li>
-        </ul>
-      </div>
-      <a href="../../docs/rate-limiter-behind-the-scenes.html" class="track-link">Explore Demo 02 Deep-Dive →</a>
-    </article>
+<section class="slide" id="slide-4" data-stage="spec" data-title="Step 1 · Window Contract">
+  <span class="stepno">01</span>
+  <div class="kicker">Step 1 · specification</div>
+  <h2>One operator changes the window contract.</h2>
+  <div class="timeline-shell">
+    <div class="timeline-axis">
+      <div class="time-point"><span class="time-label">t = 0.0s · hit</span><span class="time-dot"></span></div>
+      <div class="time-point"><span class="time-label">t = 60.0s · still active</span><span class="time-dot"></span></div>
+      <div class="time-point"><span class="time-label">t &gt; 60.0s · expired</span><span class="time-dot"></span></div>
+    </div>
+    <div class="operator-grid">
+      <article class="operator-card">
+        <span class="operator red">&gt;=</span>
+        <p><strong>C0 defect:</strong> drops the hit at the exact boundary ($t = 60.0$). Prematurely resets quota.</p>
+      </article>
+      <article class="operator-card">
+        <span class="operator amber">&lt;=</span>
+        <p><strong>C1 retry:</strong> inverts the condition, dropping active hits and retaining expired ones.</p>
+      </article>
+      <article class="operator-card">
+        <span class="operator green">&gt;</span>
+        <p><strong>C2 correct:</strong> expires strictly when $\text{now} - \text{hit} > \text{window}$. Restores SLA.</p>
+      </article>
+    </div>
   </div>
-  <aside class="speaker-notes" data-duration="02:00">
-    <p><strong>0:00–1:00 · Demo 01 Focus.</strong> python-slugify demonstrates repository breadth. A small migration task touches dependencies, tox matrices, and policy files. It tests whether the gate catches incomplete work across the whole codebase.</p>
-    <p><strong>1:00–2:00 · Demo 02 Focus.</strong> rate-limiter demonstrates behavioral depth and bounded repair. It tests whether the gate can detect subtle boundary bugs with mutation testing, and guide automated repair inside strict human authority.</p>
-    <p><strong>Transition:</strong> “Let’s summarize the key insights from Demo 01.”</p>
+  <div class="src">spec.md · src/ratelimiter/__init__.py (_prune)</div>
+  <aside class="speaker-notes" data-duration="01:30">
+    <p><strong>0:00–0:50 · The Mathematical Contract.</strong> In a sliding window rate limiter, a hit recorded at t=0 remains active across the entire closed interval [0, 60]. It must only expire when age strictly exceeds 60 seconds (<code>t > 60</code>).</p>
+    <p><strong>0:50–1:30 · The Defect Operators.</strong> Changing <code>></code> to <code>>=</code> drops requests at the exact 60.000s boundary. Changing to <code><=</code> inverts the queue. We will see how the gate catches both.</p>
+    <p><strong>Transition:</strong> “Step 2: establishing the clean baseline.”</p>
   </aside>
 </section>
 
 <!-- 5 ================================================================ -->
-<section class="slide" id="slide-5" data-title="Demo 01 · python-slugify (Breadth)">
-  <div class="kicker">Demo 01 · python-slugify · Breadth</div>
-  <div style="margin-bottom:0.6rem;">
-    <span class="pill" style="background:var(--blue-soft); border-color:var(--blue); color:var(--blue); font-weight:600; font-size:var(--micro-size);">TRACK 1: REPOSITORY BREADTH (MIGRATION CONSISTENCY)</span>
-  </div>
-  <h2>Release confidence comes from controlled context.</h2>
+<section class="slide" id="slide-5" data-stage="bench" data-title="Step 2 · clean baseline">
+  <span class="stepno">02</span>
+  <div class="kicker">Step 2 · baseline</div>
+  <h2>Green before, or nothing after means anything.</h2>
   <div class="grid g2">
-    <div class="card accent-l">
-      <h3>Clean Environments vs Ambient State</h3>
-      <p>In live run-01, Copilot reported <span class="mono">“82 passed”</span> because the dev host had ambient packages. The gate’s clean rebuild revealed tests failed immediately (exit 2). Rebuilding from git is essential.</p>
-    </div>
-    <div class="card warn">
-      <h3>Task-Consistency Invariant</h3>
-      <p>In runs 4–5, the AI updated python code but forgot <span class="mono">tox.ini</span>. The gate introduced a deterministic <span class="mono">task-consistency</span> check: 0 residual references allowed across the entire tree.</p>
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> python demo.py verify</pre>
+<pre class="dim">INITIALIZED: .../workbench/rate-limiter/.release-gate.yaml
+Using CPython 3.12.3 interpreter</pre>
+<pre><span class="ok">BASELINE GREEN at 8c84597f1e26acb1233cf6abb6c2fda120331c96</span>
+trusted base: release-gate-rate-limiter-base</pre></div>
+    <div class="card">
+      <h3>What now exists on disk</h3>
+      <ul>
+        <li><span class="mono">workbench/rate-limiter/</span> — clean repo at commit <span class="mono">8c84597f</span></li>
+        <li><span class="mono">workbench/task-venv/</span> — isolated Python 3.12.3 environment</li>
+        <li><span class="mono">workbench/control-evidence/</span> — tamper-evident run records</li>
+        <li>Zero uncommitted modifications in the base worktree</li>
+      </ul>
     </div>
   </div>
-  <div class="card good" style="margin-top:.9rem">
-    <h3>Scope Protection</h3>
-    <p>Touching <span class="mono">test.py</span> is classified as <span class="mono">PATH_FORBIDDEN</span> (<span class="v-fail">FAIL</span>). Touching <span class="mono">.release-gate.yaml</span> triggers <span class="mono">POLICY_FILE_CHANGED</span> (<span class="v-hum">NEEDS_HUMAN</span>). Candidates cannot alter their own evaluation.</p>
+  <div class="card warn" style="margin-top:.9rem">
+    <h3>The Verification Precondition</h3>
+    <p>Before testing any candidate, the Quality Gauntlet runs against the base to ensure the testing harness, mutation engine, and type checkers are verified green.</p>
   </div>
-  <div class="src">Detailed Walkthrough: docs/x1-behind-the-scenes.html</div>
-  <aside class="speaker-notes" data-duration="02:00">
-    <p><strong>0:00–1:00 · The Ambient Environment Trap (Demo 01).</strong> Rebuilding base and candidate from git eliminates the "works on my machine" failure mode that plagues AI coding tools.</p>
-    <p><strong>1:00–2:00 · The Improvement Loop.</strong> Notice how an observed AI failure in early testing (stale tox.ini) became a permanent gate policy check. That is how the gate continuously learns and strengthens enterprise guardrails.</p>
-    <p><strong>Transition:</strong> “Now let’s look at Demo 02: deep algorithmic assurance and mutation testing.”</p>
+  <div class="src">logs/RUN-LOG-2026-08-24-automated-verification.md</div>
+  <aside class="speaker-notes" data-duration="01:00">
+    <p><strong>0:00–1:00 · Baseline Integrity.</strong> Clean clone pinned at commit <code>8c84597f</code>. The gate establishes the trusted base tag <code>release-gate-rate-limiter-base</code> before judging any diffs.</p>
+    <p><strong>Transition:</strong> “Step 3: executing the 10-layer Quality Gauntlet.”</p>
   </aside>
 </section>
 
 <!-- 6 ================================================================ -->
-<section class="slide" id="slide-6" data-title="Demo 02 · rate-limiter (Depth)">
-  <div class="kicker">Demo 02 · rate-limiter · Depth</div>
-  <div style="margin-bottom:0.6rem;">
-    <span class="pill" style="background:rgba(0,184,140,0.12); border-color:var(--green); color:var(--green); font-weight:600; font-size:var(--micro-size);">TRACK 2: BEHAVIORAL DEPTH (10-LAYER QUALITY GAUNTLET)</span>
-  </div>
-  <h2>Testing behavior, not line coverage.</h2>
-  <div class="grid g3">
-    <div class="card">
-      <h3 style="color:var(--blue);">Exact Window Boundary</h3>
-      <p>A request at $t=0.0$ must remain active through $t=60.0$ and expire only when $\text{age} > 60$. Using <span class="mono">&gt;=</span> drops hits at 60.000s, violating SLAs.</p>
-    </div>
-    <div class="card">
-      <h3 style="color:var(--green);">100% Statement &amp; Branch</h3>
-      <p>The Quality Gauntlet enforces 100% coverage (29/29 statements, 10/10 branches), strict Mypy types across 8 files, and clean supply-chain scans.</p>
-    </div>
-    <div class="card">
-      <h3 style="color:var(--purple);">8 / 8 Mutants Killed</h3>
-      <p>Eight subtle defects injected into pruning, timestamping, and quota logic were all killed by genuine JUnit test assertions, proving test non-vacuity.</p>
+<section class="slide" id="slide-6" data-stage="gauntlet" data-title="Step 3 · quality gauntlet">
+  <span class="stepno">03</span>
+  <div class="kicker">Step 3 · deep assurance</div>
+  <h2>The gauntlet tests behavior, not confidence.</h2>
+  <div class="gauntlet-layout">
+    <div class="gauntlet-core">QUALITY<br>GAUNTLET<br><span style="font-size:0.75rem; color:var(--green-bright);">10 LAYERS</span></div>
+    <div class="metric-grid">
+      <article class="metric"><span class="metric-value">17 passed</span><span class="metric-label">tests + coverage suite (3.56s)</span></article>
+      <article class="metric"><span class="metric-value">100%</span><span class="metric-label">statement (29/29) &amp; branch (10/10)</span></article>
+      <article class="metric"><span class="metric-value">8 / 8</span><span class="metric-label">production mutants killed</span></article>
+      <article class="metric"><span class="metric-value">5 / 5</span><span class="metric-label">orchestration control checks</span></article>
+      <article class="metric"><span class="metric-value">0 issues</span><span class="metric-label">strict types across 8 files</span></article>
+      <article class="metric"><span class="metric-value">Clean</span><span class="metric-label">Ruff lint + format + supply chain</span></article>
     </div>
   </div>
-  <div class="term" style="margin-top:.9rem"><div class="cbar"><i></i><i></i><i></i></div>
-<pre>=== gauntlet: all 10 layers green ===
-17 passed in 3.56s · 100% coverage · 8/8 mutants killed · strict types 0 issues</pre></div>
-  <div class="src">Detailed Walkthrough: docs/rate-limiter-behind-the-scenes.html</div>
+  <div class="card good" style="margin-top:.9rem">
+    <h3>Real Execution Invariant</h3>
+    <p class="mono">burst 5 from 'alice' (limit 3/s): [True, True, True, False, False] · 'bob' unaffected: True · after window: True</p>
+  </div>
+  <div class="src">tools/gauntlet.py · evidence.md</div>
   <aside class="speaker-notes" data-duration="02:00">
-    <p><strong>0:00–1:00 · Beyond Coverage (Demo 02).</strong> Standard coverage numbers can be deceptive. A test suite can touch 100% of lines while missing subtle state-machine flaws.</p>
-    <p><strong>1:00–2:00 · Mutation Testing as Proof.</strong> By generating 8 synthetic mutants (e.g. changing <code>></code> to <code>>=</code>, altering quota increments), the gate proves tests actively detect functional regressions.</p>
-    <p><strong>Transition:</strong> “When a defect is detected in Demo 02, how does Release Gate safely automate repair?”</p>
+    <p><strong>0:00–1:00 · 10-Layer Defense.</strong> Walk through the layers: orchestration controls (5/5), checker self-tests, 17 unit/integration tests with 100% statement and branch coverage, strict Mypy typing, Ruff linting, zero known supply-chain vulnerabilities, and must-not wall-clock scans.</p>
+    <p><strong>1:00–2:00 · Real Burst Execution.</strong> The gauntlet actually runs a burst scenario to ensure functional correctness, key isolation between users, and quota resets.</p>
+    <p><strong>Transition:</strong> “Step 4: why mutation testing is the real proof.”</p>
   </aside>
 </section>
 
 <!-- 7 ================================================================ -->
-<section class="slide" id="slide-7" data-title="Demo 02 · rate-limiter (Bounded Repair)">
-  <div class="kicker">Demo 02 · rate-limiter · Bounded Repair</div>
-  <div style="margin-bottom:0.6rem;">
-    <span class="pill" style="background:rgba(217,145,0,0.12); border-color:var(--amber); color:var(--amber); font-weight:600; font-size:var(--micro-size);">TRACK 2: BOUNDED REPAIR GOVERNANCE &amp; HUMAN GATE</span>
-  </div>
-  <h2>Automation can repair — inside explicit authority.</h2>
-  <div class="grid g3">
-    <div class="card accent-l">
-      <h3>Human Authorization Gate</h3>
-      <p>When C0 fails (<span class="v-fail">FAIL</span>), the gate halts immediately at <span class="mono">awaiting_approval</span>. The agent cannot proceed without explicit human signoff.</p>
-    </div>
-    <div class="card warn">
-      <h3>Strict Attempt Budget</h3>
-      <p>Human approval permits exactly <b>2 paths</b> and caps repair at <b>2 attempts</b>. If C1 and C2 fail, the session aborts to prevent runaway agent loops.</p>
-    </div>
+<section class="slide" id="slide-7" data-stage="gauntlet" data-title="Step 4 · mutation assurance">
+  <span class="stepno">04</span>
+  <div class="kicker">Step 4 · mutation testing</div>
+  <h2>Why 100% coverage is only the starting line.</h2>
+  <table class="t">
+    <tr><th>mutant id</th><th>operator injected</th><th>location</th><th>test failure caught</th><th>result</th></tr>
+    <tr><td class="mono">M1–M2</td><td><code>&gt; → &gt;=</code> and <code>&gt; → &lt;=</code></td><td><code>_prune()</code> boundary</td><td><code>test_exact_window_boundary</code></td><td class="v-pass">KILLED</td></tr>
+    <tr><td class="mono">M3–M4</td><td><code>count + 1 → count</code></td><td>quota increment</td><td><code>test_burst_limit_enforced</code></td><td class="v-pass">KILLED</td></tr>
+    <tr><td class="mono">M5–M6</td><td><code>now → now - 1</code></td><td>timestamp capture</td><td><code>test_clock_monotonicity</code></td><td class="v-pass">KILLED</td></tr>
+    <tr><td class="mono">M7–M8</td><td><code>key isolation bypass</code></td><td>storage dictionary</td><td><code>test_isolated_tenants</code></td><td class="v-pass">KILLED</td></tr>
+  </table>
+  <div class="grid g2" style="margin-top:.85rem">
     <div class="card good">
-      <h3>Disposable Sandbox</h3>
-      <p>C1 and C2 are evaluated in isolated temporary worktrees. The primary source repository remains byte-for-byte at C0 until final approval.</p>
+      <h3>Negative Controls Proven</h3>
+      <p><b>C1 killer:</b> KILLED · <b>C2 equivalent edit:</b> SURVIVED. Proves the mutation engine is non-vacuous and isolates bytecode caches.</p>
+    </div>
+    <div class="card accent-l">
+      <h3>No Flaky False Passes</h3>
+      <p>Requires genuine JUnit test failures for a kill. Collection and tool errors are marked as harness errors.</p>
     </div>
   </div>
-  <div class="term" style="margin-top:.9rem"><div class="cbar"><i></i><i></i><i></i></div>
-<pre class="dim">state machine: C0 FAIL -&gt; approval -&gt; C1 FAIL -&gt; C2 PASS -&gt; final approval -&gt; applied</pre>
-<pre><span class="ok">verify-repair: C0 FAIL -&gt; C1 FAIL -&gt; C2 PASS -&gt; applied (total 4m12s)</span></pre></div>
-  <div class="src">Detailed Walkthrough: docs/rate-limiter-behind-the-scenes.html</div>
-  <aside class="speaker-notes" data-duration="02:30">
-    <p><strong>0:00–1:00 · The Governance Challenge (Demo 02).</strong> Autonomous coding agents can easily enter infinite loops, generate compounding errors, or silently edit tests. Bounded repair solves this with explicit human bounds.</p>
-    <p><strong>1:00–2:30 · Cryptographic Transactional Apply.</strong> The passing C2 patch is applied to the source worktree only once, after a final human approval bound to the patch SHA-256 digest, session ID, and timestamp.</p>
-    <p><strong>Transition:</strong> “Let’s look at how verdicts are determined and audited.”</p>
+  <div class="src">tools/mutants.py · evidence.md</div>
+  <aside class="speaker-notes" data-duration="02:00">
+    <p><strong>0:00–1:00 · The Mutants.</strong> Eight synthetic defects injected into the codebase: boundary off-by-one, quota skip, timestamp corruption, and tenant leakage. Every single mutant caused a specific JUnit assertion to fail.</p>
+    <p><strong>1:00–2:00 · Negative Controls.</strong> The engine also ran negative controls: an equivalent refactoring survived, while a deliberate breaking killer was caught. This proves the test suite is deep and discerning.</p>
+    <p><strong>Transition:</strong> “Step 5: running the three calibrated controls.”</p>
   </aside>
 </section>
 
 <!-- 8 ================================================================ -->
-<section class="slide" id="slide-8" data-title="Three-Way Verdict & Audit Ledger">
-  <div class="kicker">The verdict rule</div>
-  <h2>“Evidence of failure” ≠ “failure to get evidence.”</h2>
-  <div class="grid g2">
-    <div class="card bad">
-      <h3>FAIL — Adverse Evidence</h3>
-      <p>A configured check <em>ran</em> and proved the candidate incorrect. The evidence argues decisively against release.</p>
-    </div>
-    <div class="card warn">
-      <h3>NEEDS_HUMAN — Insufficient Evidence</h3>
-      <p>Checks <em>never completed</em> — tool missing, timeout, policy modified, or scope violated. The gate refuses to judge without evidence.</p>
-    </div>
-  </div>
-  <div class="card" style="margin-top:.9rem">
-    <h3>Precedence Rule &amp; Tamper-Evident Receipts</h3>
-    <p><span class="mono">NEEDS_HUMAN &gt; FAIL &gt; PASS</span>. Every run records <span class="mono">result.json</span>, <span class="mono">trace.json</span>, and <span class="mono">manifest.json</span> (SHA-256 of every artifact) for complete auditability.</p>
-  </div>
-  <aside class="speaker-notes" data-duration="02:00">
-    <p><strong>0:00–1:00 · Precedence Rule.</strong> NEEDS_HUMAN outranks FAIL because claiming knowledge you don't have is how a gate becomes security theatre. If a tool crashes or policy is touched, it must escalate.</p>
-    <p><strong>1:00–2:00 · Receipts on Disk.</strong> All decisions produce tamper-evident manifest hashes. Six months later, you can prove exactly why a commit passed or failed.</p>
-    <p><strong>Transition:</strong> “What does enterprise observability and telemetry look like?”</p>
+<section class="slide" id="slide-8" data-stage="verdict" data-title="Step 5 · calibrated controls">
+  <span class="stepno">05</span>
+  <div class="kicker">Step 5 · recorded decisions</div>
+  <h2>Three candidates. Three distinct outcomes.</h2>
+  <table class="t">
+    <tr><th>control</th><th>diff evaluated</th><th>gate verdict</th><th>check status</th><th>oracle</th><th>graded</th></tr>
+    <tr><td class="mono">pass</td><td><code>README.md</code> documentation note</td><td class="v-pass">PASS</td><td class="mono">quality-gauntlet: PASS</td><td class="v-pass">correct</td><td class="mono">good_pass</td></tr>
+    <tr><td class="mono">fail</td><td><code>src/ratelimiter/__init__.py</code> boundary defect</td><td class="v-fail">FAIL</td><td class="mono">COMMAND_FAILED</td><td class="v-fail">wrong</td><td class="mono">good_catch</td></tr>
+    <tr><td class="mono">needs-human</td><td><code>.release-gate.yaml</code> policy modification</td><td class="v-hum">NEEDS_HUMAN</td><td class="mono">SKIPPED (POLICY_FILE_CHANGED)</td><td class="mono">correct</td><td class="mono">escalated</td></tr>
+  </table>
+  <div class="term" style="margin-top:.85rem"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> python demo.py verify
+verify: <span class="ok">PASS, FAIL, and NEEDS_HUMAN controls matched expectations</span></pre></div>
+  <div class="src">controls/{pass,fail,needs-human}.patch · demo.py verify</div>
+  <aside class="speaker-notes" data-duration="01:30">
+    <p><strong>0:00–1:00 · The Three Controls.</strong> PASS: non-code README update passes cleanly. FAIL: boundary operator change fails the quality gauntlet immediately. NEEDS_HUMAN: touching gate policy skips checks and escalates to a human.</p>
+    <p><strong>1:00–1:30 · Calibrated Instrument.</strong> Just like calibrating a lab instrument with known controls before running patient samples, the gate is proven calibrated.</p>
+    <p><strong>Transition:</strong> “Step 6: entering the bounded repair workflow with candidate C0.”</p>
   </aside>
 </section>
 
 <!-- 9 ================================================================ -->
-<section class="slide" id="slide-9" data-title="Enterprise Telemetry & Gaps">
-  <div class="kicker">Telemetry &amp; honesty</div>
-  <h2>What we measure today — and what comes next.</h2>
-  <div class="grid g3">
-    <div class="card good">
-      <h3>Rolling Rate Dashboard</h3>
-      <p>Live telemetry dashboard tracking 10-run and 100-run rolling windows of PASS, FAIL, and HUMAN review rates with config-change markers.</p>
-    </div>
-    <div class="card good">
-      <h3>Measured AI Cost</h3>
-      <p>5 live Copilot runs on X1: mean <b>88s</b>, ~<b>12 AIC</b> per run. 5/5 correct candidates verified end-to-end.</p>
-    </div>
-    <div class="card warn">
-      <h3>Honest Unbuilt Gaps</h3>
-      <p>Token-budgeted loop (<span class="mono">MORE_EVIDENCE_REQUIRED</span>), cost-vs-review saturation curves, and multi-repo diversity mapping.</p>
+<section class="slide" id="slide-9" data-stage="defect" data-title="Step 6 · seeded defect C0">
+  <span class="stepno">06</span>
+  <div class="kicker">Step 6 · seeded defect</div>
+  <h2>Candidate C0: The exact-boundary defect.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> python demo.py prepare-repair</pre>
+<pre class="dim">M README.md · M src/ratelimiter/__init__.py
+repair candidate ready: C0</pre>
+<pre>
+<span class="diff-del">- while hits and now - hits[0] &gt; self._window:</span>
+<span class="diff-add">+ while hits and now - hits[0] &gt;= self._window:</span></pre></div>
+    <div class="card bad">
+      <h3>The Failure Receipt</h3>
+      <p>The gate runs against C0 in a clean reconstruction. The boundary test fails:</p>
+      <p class="mono" style="margin-top:.4rem; color:var(--red);">AssertionError: hit at 60.000s expired prematurely</p>
+      <p style="margin-top:.5rem;"><b>Verdict:</b> <span class="v-fail">FAIL</span>. The gate halts and transitions to repair intake.</p>
     </div>
   </div>
-  <div class="card accent-l" style="margin-top:.9rem">
-    <h3>Credibility from Honesty</h3>
-    <p>A gate that claims zero gaps is untrustworthy. Explicitly naming unbuilt layers is what gives developers confidence in the built layers.</p>
-  </div>
+  <div class="term" style="margin-top:.85rem"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="er">REPAIR_STAGE: C0 FAIL -&gt; approval requested (1m03s)</span>
+REPAIR_SESSION: rep-20260824203527-f0cfe322 · REPAIR_STATE: <span class="wn">awaiting_approval</span></pre></div>
+  <div class="src">repairs/C0.patch · logs/RUN-LOG-2026-08-24-repair-success.md</div>
   <aside class="speaker-notes" data-duration="01:30">
-    <p><strong>0:00–1:30 · Operational Metrics.</strong> Observability dashboards give engineering leadership real-time visibility into agent success rates, human review burdens, and unit economic costs.</p>
-    <p><strong>Transition:</strong> “Let’s conclude with the enterprise release standard.”</p>
+    <p><strong>0:00–0:50 · The C0 Patch.</strong> Candidate C0 introduces a documentation note and the <code>>=</code> off-by-one defect. The Quality Gauntlet fails in 1m03s.</p>
+    <p><strong>0:50–1:30 · Awaiting Approval.</strong> Notice the state machine halts immediately: <code>REPAIR_STATE: awaiting_approval</code>. No automated agent can proceed without human authorization.</p>
+    <p><strong>Transition:</strong> “Step 7: human authorization and the bounded repair contract.”</p>
   </aside>
 </section>
 
 <!-- 10 =============================================================== -->
-<section class="slide" id="slide-10" data-title="The Enterprise Release Standard">
-  <div class="kicker">Conclusion</div>
-  <h2>The unified enterprise release standard.</h2>
-  <div class="grid g2">
+<section class="slide" id="slide-10" data-stage="app1" data-title="Step 7 · repair authorization">
+  <span class="stepno">07</span>
+  <div class="kicker">Step 7 · governance gate</div>
+  <h2>Automation can repair — inside explicit authority.</h2>
+  <div class="grid g3">
     <div class="card accent-l">
-      <h3>Demo 01: Repository Breadth</h3>
-      <p>Proves consistency across packaging, environments, docs, test matrices, and wildmatch scope boundaries.</p>
+      <h3>Approved Paths Only</h3>
+      <p>Authority is restricted to exactly <span class="mono">README.md</span> and <span class="mono">src/ratelimiter/__init__.py</span>. Editing tests or policy triggers immediate termination.</p>
+    </div>
+    <div class="card warn">
+      <h3>Attempt Cap Budget</h3>
+      <p>The repair session is strictly limited to <b>2 attempts</b>. If C1 and C2 both fail, the session aborts and escalates to engineering.</p>
     </div>
     <div class="card good">
-      <h3>Demo 02: Behavioral Depth</h3>
-      <p>Proves exact-boundary correctness, 8/8 mutation kills, and human-authorized bounded repair sandboxes.</p>
+      <h3>Disposable Sandbox</h3>
+      <p>All repair attempts execute in an isolated temp workspace (<span class="mono">release-gate-repair-ws-...</span>). The source worktree remains immutable at C0.</p>
     </div>
   </div>
-  <div class="card" style="margin-top:.9rem; text-align:center; border:2px solid var(--blue);">
-    <h3 style="color:var(--blue); font-size:1.15rem; letter-spacing:0.04em;">evidence → sufficiency → policy → verdict</h3>
-    <p class="mono" style="margin-top:.4rem; color:var(--ink); font-weight:600;">
-      Release Gate transforms AI assistance from subjective claim into auditable release confidence.
-    </p>
-  </div>
-  <div class="src">BMO Applied AI · Demo Hub: presentations.html</div>
+  <div class="term" style="margin-top:.85rem"><div class="cbar"><i></i><i></i><i></i></div>
+<pre>REPAIR_REQUEST: .../approval-request.json
+<span class="ok">REPAIR_STAGE: approval granted (0m01s)</span> · REPAIR_STATE: <span class="p">repairing</span> · NEXT_ACTION: edit_workspace</pre></div>
+  <div class="src">workbench/approvals/ · logs/RUN-LOG-2026-08-24-repair-success.md</div>
   <aside class="speaker-notes" data-duration="01:30">
-    <p><strong>0:00–1:30 · Final Synthesis.</strong> Release Gate is not another test runner; it is an enterprise assurance architecture. It enables development teams to deploy autonomous AI agents at scale while maintaining strict governance, auditability, and release integrity.</p>
-    <p><strong>Close:</strong> “Thank you — let’s open for Q&A and dive into the live walkthroughs.”</p>
+    <p><strong>0:00–1:00 · The Governance Contract.</strong> Human grants approval with 3 constraints: strictly 2 paths, capped at 2 attempts, in a disposable sandbox.</p>
+    <p><strong>1:00–1:30 · Worktree Isolation.</strong> The primary source tree remains byte-for-byte at C0 while the AI edits the disposable sandbox.</p>
+    <p><strong>Transition:</strong> “Step 8: attempt 01 (C1) and handling an over-correction.”</p>
+  </aside>
+</section>
+
+<!-- 11 =============================================================== -->
+<section class="slide" id="slide-11" data-stage="retry" data-title="Step 8 · attempt 01 C1">
+  <span class="stepno">08</span>
+  <div class="kicker">Step 8 · attempt 01</div>
+  <h2>Attempt C1: The inverted pruning defect.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> release-gate repair-evaluate --attempt 1</pre>
+<pre>
+<span class="diff-del">- while hits and now - hits[0] &gt;= self._window:</span>
+<span class="diff-add">+ while hits and now - hits[0] &lt;= self._window:</span></pre>
+<pre><span class="er">FAILED_CHECKS: quality-gauntlet</span>
+<span class="er">REPAIR_STAGE: C1 FAIL (1m42s)</span></pre></div>
+    <div class="card bad">
+      <h3>Over-Correction Caught</h3>
+      <p>Attempt C1 inverts the prune condition, dropping active timestamps and retaining expired ones. The gauntlet catches it in 1m42s.</p>
+      <div style="margin-top:.6rem; padding:.5rem; background:var(--paper); border-radius:6px; font-size:var(--micro-size);">
+        <b>Source Isolation Verified:</b> Source worktree re-hashed and confirmed byte-for-byte unchanged at C0 (<span class="mono">0968d357...</span>).
+      </div>
+    </div>
+  </div>
+  <div class="card warn" style="margin-top:.85rem">
+    <h3>Budget Counter</h3>
+    <p>Attempt 1 of 2 consumed. 1 attempt remaining before mandatory session termination.</p>
+  </div>
+  <div class="src">repairs/C1.patch · RUN-LOG-2026-08-24-repair-success.md (Stage 4)</div>
+  <aside class="speaker-notes" data-duration="01:00">
+    <p><strong>0:00–1:00 · C1 Evaluation.</strong> The AI agent attempts a fix but over-corrects with <code><=</code>. Release Gate evaluates C1 in the sandbox, marks it FAIL, and preserves the source repository intact.</p>
+    <p><strong>Transition:</strong> “Step 9: attempt 02 (C2) and successful repair.”</p>
+  </aside>
+</section>
+
+<!-- 12 =============================================================== -->
+<section class="slide" id="slide-12" data-stage="fix" data-title="Step 9 · attempt 02 C2">
+  <span class="stepno">09</span>
+  <div class="kicker">Step 9 · attempt 02</div>
+  <h2>Attempt C2: Correct boundary &amp; scope preservation.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> release-gate repair-evaluate --attempt 2</pre>
+<pre>
+<span class="diff-del">- while hits and now - hits[0] &lt;= self._window:</span>
+<span class="diff-add">+ while hits and now - hits[0] &gt; self._window:</span></pre>
+<pre><span class="ok">=== gauntlet: all layers green ===</span>
+<span class="ok">REPAIR_STAGE: C2 PASS (1m24s)</span></pre></div>
+    <div class="card good">
+      <h3>The Passing Candidate</h3>
+      <ul>
+        <li>Boundary condition restored to <span class="mono">&gt;</span></li>
+        <li>Approved non-code usage note in <span class="mono">README.md</span> preserved</li>
+        <li>17 tests passed · 100% coverage · 8/8 mutants killed</li>
+      </ul>
+      <p style="margin-top:.5rem;"><b>State Transition:</b> Moves to <span class="v-hum">awaiting_final_approval</span>. Does <em>not</em> apply automatically!</p>
+    </div>
+  </div>
+  <div class="term" style="margin-top:.85rem"><div class="cbar"><i></i><i></i><i></i></div>
+<pre>REPAIR_STATE: <span class="wn">awaiting_final_approval</span> · NEXT_ACTION: <span class="ok">final_approval_and_apply</span></pre></div>
+  <div class="src">repairs/C2.patch · RUN-LOG-2026-08-24-repair-success.md (Stage 5)</div>
+  <aside class="speaker-notes" data-duration="01:30">
+    <p><strong>0:00–1:00 · The C2 Solution.</strong> Attempt C2 restores the strict <code>&gt;</code> operator and preserves the README documentation note. All 10 gauntlet layers pass in 1m24s.</p>
+    <p><strong>1:00–1:30 · Mandatory Final Gate.</strong> Even though C2 is completely green, the gate does NOT automatically merge or apply it. It halts for final cryptographic human approval before applying.</p>
+    <p><strong>Transition:</strong> “Step 10: independent external oracle verification.”</p>
+  </aside>
+</section>
+
+<!-- 13 =============================================================== -->
+<section class="slide" id="slide-13" data-stage="oracle" data-title="Step 10 · external oracle">
+  <span class="stepno">10</span>
+  <div class="kicker">Step 10 · ground truth</div>
+  <h2>Truth checked last: 11 independent assertions.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> python demo.py verify-repair  <span class="dim"># oracle phase</span></pre>
+<pre class="dim">Creating virtual environment at workbench/oracle-venv
+Running oracle/test_ratelimiter_oracle.py…</pre>
+<pre><span class="ok">11 passed</span> in 0.05s
+truth: <span class="ok">correct</span>
+classification: <span class="ok">good_pass</span></pre></div>
+    <div class="card">
+      <h3>The External Oracle Invariant</h3>
+      <ul>
+        <li>Lives entirely outside the candidate repository</li>
+        <li>Uses an oracle-owned mock clock, never system clock</li>
+        <li>Checks brute-force reference models across 11 edge cases</li>
+        <li>Proven non-vacuous by killing all 8 mutants before repair</li>
+      </ul>
+    </div>
+  </div>
+  <div class="term" style="margin-top:.85rem"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="ok">verify-repair: C0 FAIL -&gt; C1 FAIL -&gt; C2 PASS -&gt; applied (total 4m12s)</span></pre></div>
+  <div class="src">oracle/test_ratelimiter_oracle.py · RUN-LOG-2026-08-24-repair-success.md</div>
+  <aside class="speaker-notes" data-duration="01:00">
+    <p><strong>0:00–1:00 · The External Oracle.</strong> The oracle runs in its own isolated venv against the applied source. 11 reference assertions pass in 0.05s, confirming behavioral perfection.</p>
+    <p><strong>Transition:</strong> “Step 11: reviewing the audit receipts on disk.”</p>
+  </aside>
+</section>
+
+<!-- 14 =============================================================== -->
+<section class="slide" id="slide-14" data-stage="log" data-title="Step 11 · receipts on disk">
+  <span class="stepno">11</span>
+  <div class="kicker">Step 11 · auditability</div>
+  <h2>Every transition is visible and attributable.</h2>
+  <div class="grid g2">
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre class="dim">workbench/control-evidence/_repairs/rep-20260824203527-f0cfe322/</pre>
+<pre>├ approval-request.json   <span class="dim">bounded scope &amp; attempt budget</span>
+├ approval.json           <span class="dim">cryptographic start approval</span>
+├ attempt-1/              <span class="dim">C1 evaluation &amp; failure logs</span>
+├ attempt-2/              <span class="dim">C2 evaluation &amp; passing metrics</span>
+├ final-approval.json     <span class="dim">digest-bound final human signoff</span>
+└ repair-summary.md       <span class="dim">human-readable audit log</span></pre></div>
+    <div class="card good">
+      <h3>The Four Audit Guarantees</h3>
+      <ul>
+        <li><b>Isolation proven:</b> C1/C2 evaluated outside source worktree</li>
+        <li><b>Authority bounded:</b> 2 approved paths, 2-attempt budget</li>
+        <li><b>Apply is transactional:</b> single commit after final approval</li>
+        <li><b>Truth checked last:</b> independent 11-test external oracle</li>
+      </ul>
+    </div>
+  </div>
+  <div class="src">control-evidence/_repairs/ · RUN-LOG-2026-08-24-repair-success.md</div>
+    <p><strong>Transition:</strong> “Thank you — open for questions and live control verification.”</p>
   </aside>
 </section>
 
@@ -566,8 +797,21 @@
   let current = 0;
 
   const STAGE_NODES = {
-    pipeline: ["n-cand", "n-rebuild", "n-policy", "n-evidence", "n-verdict", "n-oracle"]
+    map: [],
+    spec: ["n-spec"],
+    bench: ["n-bench"],
+    cand: ["n-cand"],
+    gauntlet: ["n-rebuild", "n-scope", "n-gauntlet"],
+    verdict: ["n-verdict", "n-out"],
+    defect: ["n-defect"],
+    app1: ["n-app1"],
+    retry: ["n-retry"],
+    fix: ["n-fix"],
+    apply: ["n-app2", "n-apply"],
+    oracle: ["n-oracle"],
+    log: ["n-out", "n-oracle"]
   };
+  const GATE_STAGES = new Set(["gauntlet", "verdict"]);
 
   slides.forEach((s, i) => {
     const b = document.createElement("button");
@@ -587,8 +831,10 @@
     const stage = slides[i].dataset.stage;
     pipeline.classList.toggle("show", !!stage);
     document.querySelectorAll(".pn").forEach(n => n.classList.remove("on"));
+    document.getElementById("g-gate").classList.remove("on");
     if (stage && STAGE_NODES[stage]) {
       STAGE_NODES[stage].forEach(id => document.getElementById(id)?.classList.add("on"));
+      if (GATE_STAGES.has(stage)) document.getElementById("g-gate").classList.add("on");
     }
     if (drawer.classList.contains("open")) renderDrawerNotes(i);
     speakerNotes.render(i);
@@ -947,7 +1193,7 @@
       const features = `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
 
       try {
-        this.popupWindow = window.open("", "ExecutiveOverviewSpeakerNotes", features);
+        this.popupWindow = window.open("", "RateLimiterSpeakerNotes", features);
       } catch (e) {
         console.warn("Popup window opening failed", e);
       }
@@ -987,7 +1233,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Speaker Notes — Release Gate Executive Overview</title>
+  <title>Speaker Notes — Rate Limiter Behind the Scenes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -1278,7 +1524,7 @@
     <section class="notes-pane">
       <div class="slide-meta-bar">
         <div class="slide-meta-info">
-          <span class="slide-eyebrow" id="popupSlideEyebrow">Executive Overview</span>
+          <span class="slide-eyebrow" id="popupSlideEyebrow">Demo 02 Walkthrough</span>
           <h1 class="slide-heading" id="popupSlideTitle">Slide Title</h1>
         </div>
         <div class="font-controls">

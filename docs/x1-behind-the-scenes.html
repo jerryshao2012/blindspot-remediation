@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>X1 — Behind the Scenes</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230075be'/%3E%3Cpath d='M8 8h16v5H13v6h11v5H8z' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -14,20 +15,24 @@
     --line: rgba(0,25,40,.16); --soft-line: rgba(0,25,40,.09);
     --terminal: #001928; --terminal-soft: #003552;
     --blue: #0075be; --blue-bright: #38a5e8; --blue-soft: rgba(0,117,190,.12);
-    --cyan: #009ec9; --green: #00b88c; --amber: #d99100; --red: #e9425f;
-    --purple: #835ec2;
+    --cyan: #009ec9; --green: #00b88c; --green-bright: #00e7b4;
+    --amber: #d99100; --amber-bright: #ffc827; --red: #e9425f;
+    --sky: #73c3eb; --purple: #835ec2;
     --font-display: "Heebo", Arial, sans-serif;
     --font-mono: "IBM Plex Mono", monospace;
-    --h2-size: clamp(1.5rem, 3.4vw, 3.2rem);
+    --title-size: clamp(2.2rem, 5.8vw, 5.2rem);
+    --h2-size: clamp(1.45rem, 3.2vw, 3.1rem);
+    --h3-size: clamp(0.95rem, 1.6vw, 1.4rem);
     --body-size: clamp(.78rem, 1.1vw, 1.02rem);
     --small-size: clamp(.64rem, .86vw, .82rem);
     --micro-size: clamp(.56rem, .72vw, .7rem);
     --pad: clamp(1.1rem, 4vw, 4.2rem);
     --ease: cubic-bezier(.16,1,.3,1);
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html { scroll-behavior:smooth; }
-  body { font-family:var(--font-display); background:var(--paper); color:var(--ink); }
+  html { scroll-behavior:smooth; height:100%; overflow-x:hidden; scroll-snap-type:y mandatory; }
+  body { font-family:var(--font-display); background:var(--paper); color:var(--ink); height:100%; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
 
   /* ---------- chrome ---------- */
   .topbar { position:fixed; inset:0 0 auto 0; z-index:40; display:flex; justify-content:space-between;
@@ -38,8 +43,8 @@
   .counter { position:fixed; right:var(--pad); bottom:.7rem; font-family:var(--font-mono); font-size:var(--micro-size); color:var(--muted); z-index:40; }
   .hints { position:fixed; left:var(--pad); bottom:.7rem; font-family:var(--font-mono); font-size:var(--micro-size); color:var(--muted-dark); z-index:40; }
   .navdots { position:fixed; right:.9rem; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:.45rem; z-index:40; }
-  .navdots button { width:8px; height:8px; border-radius:50%; border:1px solid var(--muted-dark); background:transparent; cursor:pointer; padding:0; }
-  .navdots button.on { background:var(--blue); border-color:var(--blue); }
+  .navdots button { width:8px; height:8px; border-radius:50%; border:1px solid var(--muted-dark); background:transparent; cursor:pointer; padding:0; transition:all .2s; }
+  .navdots button.on { background:var(--blue); border-color:var(--blue); transform:scale(1.25); }
 
   /* ---------- pipeline strip ---------- */
   .pipeline { position:fixed; top:2.2rem; left:50%; transform:translateX(-50%); z-index:35;
@@ -61,22 +66,22 @@
   .pn.on.verdict-pass { background:var(--green); border-color:var(--green); }
   .pgroup.on { border-color:var(--blue); background:var(--blue-soft); }
 
-  /* ---------- slides ---------- */
+  /* ---------- slides base ---------- */
   main { height:100vh; overflow-y:auto; scroll-snap-type:y mandatory; }
-  section.slide { min-height:100vh; scroll-snap-align:start; display:flex; flex-direction:column;
-    justify-content:center; padding:calc(var(--pad) + 4.4rem) var(--pad) calc(var(--pad) * .8); position:relative; }
+  section.slide { min-height:100vh; height:100vh; height:100dvh; scroll-snap-align:start; display:flex; flex-direction:column;
+    justify-content:center; padding:calc(var(--pad) + 4rem) var(--pad) calc(var(--pad) * .8); position:relative; overflow:hidden; }
   .kicker { display:flex; align-items:center; gap:.6rem; font-family:var(--font-mono);
-    font-size:var(--small-size); letter-spacing:.22em; text-transform:uppercase; color:var(--blue); margin-bottom:.7rem; }
+    font-size:var(--small-size); letter-spacing:.22em; text-transform:uppercase; color:var(--blue); margin-bottom:.6rem; }
   .kicker::before { content:""; width:2rem; height:2px; background:var(--blue); }
-  h1 { font-size:clamp(2.2rem,6vw,5.4rem); font-weight:700; line-height:1.04; letter-spacing:-.02em; }
-  h2 { font-size:var(--h2-size); font-weight:700; line-height:1.08; letter-spacing:-.015em; margin-bottom:1.1rem; }
+  h1 { font-size:var(--title-size); font-weight:700; line-height:1.04; letter-spacing:-.02em; }
+  h2 { font-size:var(--h2-size); font-weight:700; line-height:1.08; letter-spacing:-.015em; margin-bottom:1rem; }
   .stepno { position:absolute; right:var(--pad); top:38%; font-size:clamp(3rem,8vw,7rem); font-weight:300;
-    color:rgba(0,25,40,.07); font-family:var(--font-mono); }
-  .lead { font-size:var(--body-size); color:var(--muted); max-width:56ch; }
-  .grid { display:grid; gap:.9rem; margin-top:1.1rem; }
+    color:rgba(0,25,40,.07); font-family:var(--font-mono); pointer-events:none; }
+  .lead { font-size:var(--body-size); color:var(--muted); max-width:58ch; }
+  .grid { display:grid; gap:.9rem; margin-top:1rem; }
   .g2 { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
   .g3 { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
-  .card { background:var(--white); border:1px solid var(--soft-line); border-radius:10px; padding:.85rem .95rem; }
+  .card { background:var(--white); border:1px solid var(--soft-line); border-radius:10px; padding:.85rem .95rem; box-shadow:0 4px 16px rgba(0,25,40,.03); }
   .card h3 { font-family:var(--font-mono); font-size:var(--micro-size); letter-spacing:.18em;
     text-transform:uppercase; color:var(--muted); margin-bottom:.45rem; }
   .card p, .card li { font-size:var(--small-size); color:var(--ink); line-height:1.55; }
@@ -111,26 +116,335 @@
   .pill { display:inline-block; font-family:var(--font-mono); font-size:var(--micro-size); border:1px solid var(--line);
     border-radius:99px; padding:.1rem .55rem; color:var(--muted); margin:.12rem .18rem 0 0; }
 
-  /* ---------- notes drawer ---------- */
-  .drawer { position:fixed; inset:0 0 0 auto; width:min(430px,92vw); background:var(--terminal); color:#dfe9f0;
+  /* ---------- Slide 02 Blindspot styles ---------- */
+  .blindspot-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.55rem, 1.4vw, 1.2rem);
+    margin-top: clamp(0.8rem, 2vh, 1.5rem);
+  }
+  .blindspot-card {
+    position: relative;
+    padding: clamp(0.85rem, 1.6vw, 1.4rem);
+    background: var(--white);
+    color: var(--ink);
+    border: 1px solid var(--soft-line);
+    border-top: 4px solid var(--blue);
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0, 25, 40, 0.05);
+  }
+  .blindspot-card:nth-child(2) { border-top-color: var(--amber); }
+  .blindspot-card:nth-child(3) { border-top-color: var(--red); }
+  .blindspot-card .number {
+    margin-bottom: 0.4rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: 0.12em;
+    font-weight: 600;
+  }
+  .blindspot-card h3 {
+    font-size: clamp(0.95rem, 1.4vw, 1.25rem);
+    font-weight: 600;
+    line-height: 1.25;
+    margin-bottom: 0.45rem;
+    color: var(--ink);
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .blindspot-card p {
+    color: var(--muted);
+    font-size: var(--small-size);
+    line-height: 1.5;
+  }
+  .blindspot-caption {
+    margin-top: clamp(0.7rem, 1.8vh, 1.4rem);
+    padding: 0.6rem 0.9rem;
+    border-left: 3px solid var(--blue);
+    background: var(--white);
+    border-radius: 0 8px 8px 0;
+    color: var(--muted);
+    font-size: var(--small-size);
+  }
+
+  /* ---------- Slide 03 Pipeline nodes styles ---------- */
+  .pipeline-flow {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: clamp(0.35rem, 0.9vw, 0.8rem);
+    margin-top: clamp(0.8rem, 2vh, 1.6rem);
+  }
+  .pipeline-node {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: clamp(6.5rem, 16vh, 9.5rem);
+    padding: clamp(0.65rem, 1.1vw, 1rem);
+    background: var(--white);
+    border: 1px solid var(--soft-line);
+    border-bottom: 3px solid var(--blue);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 25, 40, 0.04);
+  }
+  .pipeline-node:nth-child(4) { border-bottom-color: var(--amber); }
+  .pipeline-node:nth-child(5) { border-bottom-color: var(--blue-bright); }
+  .pipeline-node:nth-child(6) { border-bottom-color: var(--green); }
+  .pipeline-node .node-index {
+    color: var(--muted-dark);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    font-weight: 600;
+  }
+  .pipeline-node h3 {
+    font-size: clamp(0.85rem, 1.15vw, 1.05rem);
+    font-weight: 600;
+    margin: 0.3rem 0;
+    color: var(--ink);
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .pipeline-node p {
+    color: var(--muted);
+    font-size: var(--micro-size);
+    line-height: 1.4;
+  }
+  .pipeline-footnote {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-top: clamp(0.7rem, 1.8vh, 1.3rem);
+    color: var(--muted);
+    font-size: var(--small-size);
+  }
+  .accent-tag {
+    font-family: var(--font-mono);
+    color: var(--blue);
+    font-weight: 600;
+  }
+
+  /* ---------- Slide 04 Scenario Split & Blindspot signals ---------- */
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: clamp(0.8rem, 2vw, 1.8rem);
+    margin-top: clamp(0.8rem, 2vh, 1.4rem);
+    align-items: stretch;
+  }
+  .task-card {
+    position: relative;
+    padding: clamp(0.9rem, 1.8vw, 1.5rem);
+    background: var(--white);
+    color: var(--ink);
+    border: 1px solid var(--soft-line);
+    border-radius: 10px;
+    box-shadow: 6px 6px 0 var(--blue-soft), 0 6px 20px rgba(0, 25, 40, 0.05);
+  }
+  .task-card::before {
+    content: "X1";
+    position: absolute;
+    top: 0.8rem;
+    right: 1rem;
+    color: var(--blue);
+    font-family: var(--font-mono);
+    font-size: clamp(1.4rem, 3vw, 2.5rem);
+    font-weight: 600;
+    opacity: 0.45;
+  }
+  .task-card .label {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    color: var(--blue);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+    font-weight: 600;
+  }
+  .task-card h3 {
+    font-size: clamp(1.1rem, 2vw, 1.6rem);
+    line-height: 1.15;
+    color: var(--ink);
+    margin-bottom: 0.5rem;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .task-card p {
+    color: var(--muted);
+    font-size: var(--small-size);
+    line-height: 1.6;
+  }
+  .blindspot-list {
+    display: grid;
+    gap: clamp(0.45rem, 1vh, 0.75rem);
+  }
+  .blindspot-row {
+    display: grid;
+    grid-template-columns: clamp(2rem, 3.5vw, 3rem) 1fr;
+    gap: clamp(0.5rem, 1vw, 0.9rem);
+    align-items: center;
+    padding: clamp(0.55rem, 1vw, 0.85rem);
+    background: var(--white);
+    border: 1px solid var(--soft-line);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 25, 40, 0.03);
+  }
+  .blindspot-row .signal {
+    color: var(--blue);
+    font-family: var(--font-mono);
+    font-size: clamp(1.1rem, 2vw, 1.6rem);
+    font-weight: 600;
+    text-align: center;
+  }
+  .blindspot-row h3 {
+    font-size: var(--small-size);
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 0.15rem;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .blindspot-row p {
+    color: var(--muted);
+    font-size: var(--micro-size);
+    line-height: 1.45;
+  }
+
+  /* ---------- Slide 05 Diff Shell styles ---------- */
+  .diff-shell {
+    background: var(--terminal);
+    border: 1px solid rgba(0, 25, 40, 0.2);
+    border-top: 3px solid var(--blue);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 8px 28px rgba(0, 25, 40, 0.14);
+  }
+  .diff-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.85rem;
+    background: var(--terminal-soft);
+    color: var(--sky);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .diff-code {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 clamp(0.5rem, 1vw, 0.8rem);
+    padding: clamp(0.55rem, 1vw, 0.9rem);
+    font-family: var(--font-mono);
+    font-size: clamp(0.56rem, 0.88vw, 0.78rem);
+    line-height: 1.45;
+  }
+  .diff-code .file {
+    grid-column: 1 / -1;
+    margin-block: 0.25rem 0.15rem;
+    color: var(--sky);
+    font-weight: 600;
+  }
+  .diff-code .minus, .diff-code .plus { display: contents; }
+  .diff-code .minus > * { color: #ffb3b8; background: rgba(233, 66, 95, 0.16); }
+  .diff-code .plus > * { color: #a7f0ba; background: rgba(0, 231, 180, 0.14); }
+  .diff-code .sign { padding-inline: 0.3rem; text-align: center; }
+  .diff-code .code-line { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .diff-callout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: clamp(0.6rem, 1.5vh, 1rem);
+    padding: 0.55rem 0.85rem;
+    background: var(--white);
+    border: 1px solid var(--soft-line);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: var(--small-size);
+  }
+  .diff-callout strong { color: var(--blue); font-weight: 600; }
+
+  /* ---------- Slide 06 Verdict layout styles ---------- */
+  .verdict-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: clamp(0.8rem, 2vw, 1.8rem);
+    align-items: stretch;
+    margin-top: clamp(0.8rem, 2vh, 1.4rem);
+  }
+  .verdict-stack {
+    display: grid;
+    gap: clamp(0.45rem, 1vh, 0.75rem);
+  }
+  .verdict-card {
+    display: grid;
+    grid-template-columns: clamp(4.4rem, 8vw, 6.5rem) 1fr;
+    align-items: center;
+    gap: clamp(0.5rem, 1vw, 0.9rem);
+    padding: clamp(0.6rem, 1.1vw, 0.95rem);
+    background: var(--white);
+    border: 1px solid var(--soft-line);
+    border-left: 4px solid currentColor;
+    border-radius: 8px;
+    box-shadow: 0 3px 12px rgba(0, 25, 40, 0.04);
+  }
+  .verdict-card.pass { color: var(--green); }
+  .verdict-card.fail { color: var(--red); }
+  .verdict-card.human { color: var(--amber); }
+  .verdict-card .verdict-name {
+    font-family: var(--font-mono);
+    font-size: var(--small-size);
+    font-weight: 600;
+  }
+  .verdict-card p {
+    color: var(--ink);
+    font-size: var(--small-size);
+    line-height: 1.45;
+  }
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+  .amber { color: var(--amber); }
+
+  /* ---------- notes drawer (Non-fullscreen) ---------- */
+  .drawer { position:fixed; inset:0 0 0 auto; width:min(440px,94vw); background:var(--terminal); color:#dfe9f0;
     z-index:60; transform:translateX(102%); transition:transform .35s var(--ease); padding:1.2rem 1.3rem;
-    overflow-y:auto; box-shadow:-12px 0 40px rgba(0,25,40,.35); }
+    overflow-y:auto; box-shadow:-12px 0 40px rgba(0,25,40,.35); display:flex; flex-direction:column; gap:0.9rem; }
   .drawer.open { transform:none; }
-  .drawer h4 { font-family:var(--font-mono); font-size:var(--small-size); color:var(--blue-bright); margin-bottom:.9rem; }
+  .drawer-header { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--terminal-soft); padding-bottom:.7rem; }
+  .drawer-header h4 { font-family:var(--font-mono); font-size:var(--small-size); color:var(--blue-bright); }
+  .drawer-actions { display:flex; align-items:center; gap:.5rem; }
+  .drawer .popout-btn { background:var(--terminal-soft); border:1px solid rgba(115,195,235,.3); color:var(--sky);
+    border-radius:5px; padding:.2rem .55rem; cursor:pointer; font-family:var(--font-mono); font-size:var(--micro-size); transition:all .2s; }
+  .drawer .popout-btn:hover { background:var(--blue); color:#fff; }
+  .drawer .close { background:none; border:1px solid var(--terminal-soft);
+    color:#dfe9f0; border-radius:5px; padding:.15rem .5rem; cursor:pointer; font-family:var(--font-mono); font-size:var(--micro-size); }
+  .drawer-timer-bar { display:flex; align-items:center; justify-content:space-between; background:rgba(0,0,0,.35);
+    padding:.35rem .65rem; border-radius:6px; border:1px solid var(--terminal-soft); font-family:var(--font-mono); font-size:var(--micro-size); }
+  .drawer-timer-bar .timer-display { color:var(--green-bright); font-weight:600; }
+  .btn-sm { background:var(--terminal-soft); border:1px solid rgba(255,255,255,.1); color:#dfe9f0; padding:.15rem .45rem; border-radius:4px; cursor:pointer; font-family:inherit; font-size:inherit; }
+  .btn-sm:hover { background:var(--blue); color:#fff; }
   .drawer .body p { font-size:var(--small-size); line-height:1.7; margin-bottom:.8rem; color:#c6d4de; }
   .drawer .body strong { color:#fff; }
-  .drawer .close { position:absolute; top:.9rem; right:.9rem; background:none; border:1px solid var(--terminal-soft);
-    color:#dfe9f0; border-radius:6px; padding:.15rem .5rem; cursor:pointer; font-family:var(--font-mono); }
+  .drawer .body code { font-family:var(--font-mono); color:var(--cyan); background:rgba(0,158,201,.15); padding:0.1rem 0.3rem; border-radius:3px; }
   aside.speaker-notes { display:none; }
-  @media (max-width: 900px){ .pipeline{ display:none; } .stepno{ display:none; } }
+
+  @media (max-width: 900px){
+    .pipeline{ display:none; }
+    .stepno{ display:none; }
+    .blindspot-grid { grid-template-columns: 1fr; }
+    .pipeline-flow { grid-template-columns: repeat(2, 1fr); }
+    .split, .verdict-layout { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 
 <div class="progress" id="progress"></div>
-<div class="topbar"><span>BMO · Applied AI · AI Powered SDLC · X1 Walkthrough</span><span>Behind the Scenes</span></div>
-<div class="counter" id="counter">01 / 14</div>
-<div class="hints">← → navigate · F fullscreen · N notes</div>
+<div class="topbar"><span>BMO · Applied AI · AI Powered SDLC · X1 Walkthrough</span><span>Behind the Scenes · python-slugify</span></div>
+<div class="counter" id="counter">01 / 16</div>
+<div class="hints">← → navigate · F fullscreen · N notes (Screen 2 popup in fullscreen)</div>
 <div class="navdots" id="navdots"></div>
 
 <!-- ======= persistent pipeline map — the "where are we" strip ======= -->
@@ -161,7 +475,7 @@
 <main id="deck">
 
 <!-- 1 ================================================================ -->
-<section class="slide">
+<section class="slide" id="slide-1" data-title="X1, behind the scenes">
   <div class="kicker">AI Engineering · Homework Walkthrough</div>
   <h1>X1, behind<br>the scenes.</h1>
   <p class="lead" style="margin-top:1rem">One small task, traced end to end: every command, every file it
@@ -169,16 +483,96 @@
   <p class="lead" style="margin-top:.6rem">Every number on these slides comes from a recorded run of the
   Release&nbsp;Gate 0.6.0 demo. Nothing is invented.</p>
   <div class="src">release-gate/demo/python-slugify · run 20260827T143722Z-58368f55bad1</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="00:40">
     <p><strong>0:00–0:40 · Set the frame.</strong> This is not a slideware pipeline — every verdict, hash and
     reason code on these slides was produced by a real gate run on this laptop. When someone doubts a number,
     open the file named at the bottom of the slide.</p>
-    <p><strong>Transition:</strong> “First, the map — so we always know where we are.”</p>
+    <p><strong>Transition:</strong> “First, the fundamental blindspot of AI-generated code.”</p>
   </aside>
 </section>
 
 <!-- 2 ================================================================ -->
-<section class="slide" data-stage="map">
+<section class="slide" id="slide-2" data-title="The Blindspot">
+  <div class="kicker">The blindspot</div>
+  <h2>Green tests are not a release decision.</h2>
+  <div class="blindspot-grid">
+    <article class="blindspot-card">
+      <div class="number">01 / CONTEXT</div>
+      <h3>The assistant sees its workspace.</h3>
+      <p>Ambient packages and cached state can make incomplete work appear healthy.</p>
+    </article>
+    <article class="blindspot-card">
+      <div class="number">02 / COVERAGE</div>
+      <h3>The task spans more than code.</h3>
+      <p>Packaging, configuration, policy, and scope can fail outside the happy path.</p>
+    </article>
+    <article class="blindspot-card">
+      <div class="number">03 / AUTHORITY</div>
+      <h3>The candidate cannot grade itself.</h3>
+      <p>Tests and policy inside the change need an independent trust boundary.</p>
+    </article>
+  </div>
+  <div class="blindspot-caption">
+    <strong>Core Principle:</strong> Release Gate reconstructs the decision from a reviewed base, not from the assistant’s confidence.
+  </div>
+  <aside class="speaker-notes" data-duration="02:00">
+    <p><strong>0:00–0:40 · Context Blindspot.</strong> An assistant operates in its own dirty workspace with cached state and ambient packages. What works on the dev machine often fails in clean environments.</p>
+    <p><strong>0:40–1:20 · Coverage Blindspot.</strong> Real tasks span packaging, tox environments, docs, and configurations. AI agents frequently miss non-code files or peripheral configs.</p>
+    <p><strong>1:20–2:00 · Authority Boundary.</strong> A candidate change must never grade itself. If an agent weakens the test suite or modifies gate policy, it must be caught by an independent trust boundary.</p>
+    <p><strong>Transition:</strong> “Here is how Release Gate architectures this independent proof pipeline.”</p>
+  </aside>
+</section>
+
+<!-- 3 ================================================================ -->
+<section class="slide" id="slide-3" data-title="Proof Pipeline">
+  <div class="kicker">Proof pipeline</div>
+  <h2>One candidate. Independent evidence.</h2>
+  <div class="pipeline-flow">
+    <article class="pipeline-node">
+      <span class="node-index">01</span>
+      <h3>Candidate</h3>
+      <p>Patch + trusted base</p>
+    </article>
+    <article class="pipeline-node">
+      <span class="node-index">02</span>
+      <h3>Clean workspace</h3>
+      <p>Base and candidate rebuilt</p>
+    </article>
+    <article class="pipeline-node">
+      <span class="node-index">03</span>
+      <h3>Reviewed policy</h3>
+      <p>Scope + checks + limits</p>
+    </article>
+    <article class="pipeline-node">
+      <span class="node-index">04</span>
+      <h3>Evidence</h3>
+      <p>Recorded and bounded</p>
+    </article>
+    <article class="pipeline-node">
+      <span class="node-index">05</span>
+      <h3>Verdict</h3>
+      <p>PASS · FAIL · HUMAN</p>
+    </article>
+    <article class="pipeline-node">
+      <span class="node-index">06</span>
+      <h3>Oracle</h3>
+      <p>Truth after verdict</p>
+    </article>
+  </div>
+  <div class="pipeline-footnote">
+    <span>The gate records the verdict before the external oracle runs.</span>
+    <span class="accent-tag">evidence ≠ self-attestation</span>
+  </div>
+  <aside class="speaker-notes" data-duration="02:30">
+    <p><strong>0:00–0:50 · Clean Reconstruction.</strong> Every run starts from a clean base and applies the candidate patch in isolation. We rebuild both base and candidate workspaces from scratch.</p>
+    <p><strong>0:50–1:40 · Reviewed Policy & Evidence.</strong> Configured policies define allowed scope, required checks, and strict resource limits. Every command execution and result is recorded into tamper-evident evidence.</p>
+    <p><strong>1:40–2:30 · Verdict & External Oracle.</strong> The gate records an authoritative three-way verdict (PASS, FAIL, NEEDS_HUMAN) before any external oracle or merge action can occur.</p>
+    <p><strong>Transition:</strong> “Now let’s look at the navigation map: two lanes, one lit box at a time.”</p>
+  </aside>
+</section>
+
+<!-- 4 ================================================================ -->
+<section class="slide" id="slide-4" data-stage="map" data-title="The map">
   <div class="kicker">The map</div>
   <h2>Two lanes. One lit box at a time.</h2>
   <div class="grid g2">
@@ -199,44 +593,56 @@
     <p>The strip above stays on screen. The <b>dark box is where we are</b> at each step.
     The dashed box — the Evidence Diversity Mapper — is designed but not built; it will never light up. That is honest, not an omission.</p>
   </div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:00">
     <p><strong>0:00–1:00 · Anchor the two lanes.</strong> Online = the product (the guardrail on every change).
     Offline = the clinical trial (known-answer tasks that measure the guardrail). Point at the dashed mapper box
     and say out loud that it is not built — credibility comes from the dashed box.</p>
+    <p><strong>Transition:</strong> “Let’s begin at Step 1: the task card.”</p>
   </aside>
 </section>
 
-<!-- 3 ================================================================ -->
-<section class="slide" data-stage="task">
+<!-- 5 ================================================================ -->
+<section class="slide" id="slide-5" data-stage="task" data-title="Step 1 · python-slugify task">
   <span class="stepno">01</span>
-  <div class="kicker">Step 1 · the task</div>
-  <h2>A two-line ask with hidden depth.</h2>
-  <div class="grid g2">
-    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
-<pre><span class="p">$</span> cat demo/tasks/X1_v2.md</pre>
-<pre class="dim">Switch python-slugify’s transliteration backend:
-make <b>Unidecode</b> required, remove <b>text-unidecode</b>.
-Constraints: do not modify test.py · use the project venv
-· reinstall after changing setup.py.</pre></div>
-    <div class="card">
-      <h3>Why this task probes blindspots</h3>
-      <ul>
-        <li>The two backends agree on almost every input — the visible 82 tests stay green either way</li>
-        <li>They disagree on a few: <span class="mono">₹500 → "500" vs "rs500"</span> — and a slug is a URL</li>
-        <li>The task spans code + packaging + config — easy to complete <em>selectively</em></li>
-      </ul>
+  <div class="kicker">Demo 01 · python-slugify · Step 1</div>
+  <h2>A small migration with a wide blast radius.</h2>
+  <div class="split">
+    <article class="task-card">
+      <span class="label">Task card · demo/tasks/X1_v2.md</span>
+      <h3>Switch the transliteration backend.</h3>
+      <p>
+        Make <span class="mono">Unidecode</span> required, remove <span class="mono">text-unidecode</span>, preserve the API, and keep the change small.
+      </p>
+      <div style="margin-top:.8rem; font-size:var(--micro-size); color:var(--muted);">
+        Constraints: do not modify test.py · use task venv · reinstall after changing setup.py
+      </div>
+    </article>
+    <div class="blindspot-list">
+      <article class="blindspot-row">
+        <span class="signal">A</span>
+        <div><h3>Ambient environment</h3><p>A host package can hide a missing clean-environment dependency.</p></div>
+      </article>
+      <article class="blindspot-row">
+        <span class="signal">B</span>
+        <div><h3>Selective completion</h3><p>Code changes land; peripheral <span class="mono">tox.ini</span> coverage is easy to omit.</p></div>
+      </article>
+      <article class="blindspot-row">
+        <span class="signal">C</span>
+        <div><h3>Trust boundary</h3><p>Edits to <span class="mono">test.py</span> or gate policy cannot silently pass.</p></div>
+      </article>
     </div>
   </div>
   <div class="src">demo/tasks/X1_v2.md · demo/CORPUS.md</div>
-  <aside class="speaker-notes">
-    <p><strong>0:00–1:00 · The trap in plain words.</strong> A mechanical “swap package x for y” that a find-and-replace
-    can get subtly wrong. The existing suite cannot see the difference; behavior on currency symbols changes silently.
-    Files touched so far: none.</p>
+  <aside class="speaker-notes" data-duration="02:00">
+    <p><strong>0:00–0:45 · The Task.</strong> Migrate transliteration backend from <code>text-unidecode</code> to <code>Unidecode</code>. Simple in appearance, but with wide blast radius.</p>
+    <p><strong>0:45–1:30 · The Blindspots in Action.</strong> (A) Missing dependencies hidden by host environment. (B) Incomplete migration omitting <code>tox.ini</code> or <code>setup.py</code>. (C) Illegitimate edits to tests or gate policy.</p>
+    <p><strong>1:30–2:00 · Key Takeaway.</strong> The gate enforces complete repository consistency, not just happy-path code imports.</p>
+    <p><strong>Transition:</strong> “Step 2: verifying the baseline before touching anything.”</p>
   </aside>
 </section>
 
-<!-- 4 ================================================================ -->
-<section class="slide" data-stage="bench">
+<!-- 6 ================================================================ -->
+<section class="slide" id="slide-6" data-stage="bench" data-title="Step 2 · baseline">
   <span class="stepno">02</span>
   <div class="kicker">Step 2 · baseline</div>
   <h2>Green before, or nothing after means anything.</h2>
@@ -258,48 +664,48 @@ reset: release-gate-demo-base</pre></div>
     <p>If the baseline is red, a later FAIL could mean “the AI broke it” <em>or</em> “it was already broken” —
     and no one can tell which. Green-before is the precondition for every verdict.</p></div>
   <div class="src">demo/python-slugify/demo.py · workbench/</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:00">
     <p><strong>0:00–1:00 · Baseline discipline.</strong> 12 of 25 well-known open-source repos failed this rule from a
     clean clone when the corpus was measured. Never assume green; verify it at the pinned commit in the gate’s own
     environment.</p>
+    <p><strong>Transition:</strong> “Step 3: creating candidate diffs.”</p>
   </aside>
 </section>
 
-<!-- 5 ================================================================ -->
-<section class="slide" data-stage="exec">
+<!-- 7 ================================================================ -->
+<section class="slide" id="slide-7" data-stage="exec" data-title="Step 3 · the candidate diff">
   <span class="stepno">03</span>
-  <div class="kicker">Step 3 · the candidate</div>
-  <h2>A candidate is just a diff nobody accepted yet.</h2>
-  <div class="grid g2">
-    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
-<pre><span class="p">$</span> python3 demo.py control pass   <span class="dim"># scripted candidate</span></pre>
-<pre class="dim">M README.md · M setup.py · M slugify/slugify.py · M tox.ini
-control ready: pass</pre>
-<pre>
-<span class="diff-del">- install_requires = ['text-unidecode>=1.3']</span>
-<span class="diff-add">+ install_requires = ['Unidecode>=1.1.1']</span>
-<span class="diff-del">- try: import unidecode</span>
-<span class="diff-del">- except ImportError: import text_unidecode …</span>
-<span class="diff-add">+ import unidecode</span></pre></div>
-    <div class="card">
-      <h3>Two ways this box gets filled</h3>
-      <ul>
-        <li><b>Live runs:</b> GitHub Copilot CLI edits the code — 5 recorded runs, mean <b>88&nbsp;s</b>, ~<b>12&nbsp;AIC</b> each</li>
-        <li><b>This demo:</b> a pre-scripted patch (a lab <em>control</em>) — deterministic, so the gate’s behaviour is repeatable on stage</li>
-      </ul>
-      <p style="margin-top:.5rem">Either way the gate sees the same thing: <b>4 changed files</b>.</p>
+  <div class="kicker">Step 3 · code evidence</div>
+  <h2>The migration is more than one import.</h2>
+  <div class="diff-shell">
+    <div class="diff-toolbar"><span>python-slugify · X1 Candidate</span><span>4 files changed</span></div>
+    <div class="diff-code">
+      <div class="file">setup.py</div>
+      <div class="minus"><span class="sign">−</span><span class="code-line">install_requires = ['text-unidecode&gt;=1.3']</span></div>
+      <div class="plus"><span class="sign">+</span><span class="code-line">install_requires = ['Unidecode&gt;=1.1.1']</span></div>
+      <div class="file">slugify/slugify.py</div>
+      <div class="minus"><span class="sign">−</span><span class="code-line">try: import unidecode</span></div>
+      <div class="minus"><span class="sign">−</span><span class="code-line">except ImportError: import text_unidecode as unidecode</span></div>
+      <div class="plus"><span class="sign">+</span><span class="code-line">import unidecode</span></div>
+      <div class="file">tox.ini</div>
+      <div class="minus"><span class="sign">−</span><span class="code-line">py{3.10,3.11,3.12,3.13,3.14}-{unidecode,text_unidecode}</span></div>
+      <div class="plus"><span class="sign">+</span><span class="code-line">py{3.10,3.11,3.12,3.13,3.14}-unidecode</span></div>
     </div>
   </div>
-  <div class="src">demo/python-slugify/controls/pass.patch · demo/runs/RUNLOG.md</div>
-  <aside class="speaker-notes">
-    <p><strong>0:00–1:15 · Define “candidate” and “control”.</strong> Candidate = proposed change awaiting judgment.
-    Control = pre-scripted candidate with a known correct verdict, used to prove the instrument reads correctly —
-    same sense as a lab control. The AI is interchangeable here by design: the gate must not care who wrote the diff.</p>
+  <div class="diff-callout">
+    <span><strong>Gate invariant:</strong> no legacy dependency names remain across packaging, docs, code, or tox.</span>
+    <span class="mono">README.md · setup.py · slugify.py · tox.ini</span>
+  </div>
+  <div class="src">controls/pass.patch · live runs 1–5 (mean 88s, ~12 AIC)</div>
+  <aside class="speaker-notes" data-duration="02:00">
+    <p><strong>0:00–1:00 · Walk the 4 Files.</strong> Show <code>setup.py</code> (package requires), <code>slugify/slugify.py</code> (clean import without fallback), <code>tox.ini</code> (test matrix update), and <code>README.md</code>.</p>
+    <p><strong>1:00–2:00 · Gate Invariant Check.</strong> Point out the strict policy check: no legacy dependency references may linger anywhere across packaging, docs, or test matrices.</p>
+    <p><strong>Transition:</strong> “Step 4: the gate starts its clean rebuild.”</p>
   </aside>
 </section>
 
-<!-- 6 ================================================================ -->
-<section class="slide" data-stage="rebuild">
+<!-- 8 ================================================================ -->
+<section class="slide" id="slide-8" data-stage="rebuild" data-title="Step 4 · rebuild">
   <span class="stepno">04</span>
   <div class="kicker">Step 4 · the gate begins</div>
   <h2>First move: trust nothing, rebuild everything.</h2>
@@ -322,15 +728,16 @@ in an isolated workspace…</pre></div>
     In live run-01, Copilot reported <span class="mono">“82 passed”</span> from the wrong interpreter; the gate’s clean
     rebuild found the tests could not even run.</p></div>
   <div class="src">.release-gate/runs/&lt;run-id&gt;/result.json → base_commit, patch_sha256, config_sha256</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:15">
     <p><strong>0:00–1:15 · Independence, made physical.</strong> The gate reconstructs both base and candidate from git
     in its own workspace. Nothing the executor claims is carried over. The three hashes make the verdict attributable:
     this exact diff, judged under this exact policy, from this exact base.</p>
+    <p><strong>Transition:</strong> “Step 5: scoping which files moved.”</p>
   </aside>
 </section>
 
-<!-- 7 ================================================================ -->
-<section class="slide" data-stage="scope">
+<!-- 9 ================================================================ -->
+<section class="slide" id="slide-9" data-stage="scope" data-title="Step 5 · scope">
   <span class="stepno">05</span>
   <div class="kicker">Step 5 · scope</div>
   <h2>Cheapest evidence first: which files moved?</h2>
@@ -352,15 +759,16 @@ outside       : <span class="ok">none</span>
 review        : <span class="ok">none</span></pre></div>
   </div>
   <div class="src">effective-config.json → scope · result.json → scope</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:00">
     <p><strong>0:00–1:00 · Paths are intent.</strong> Before any test runs, the gate reads intent from the file list.
     Three path classes, three consequences: forbidden → FAIL, outside-allowed → FAIL, review-required → NEEDS_HUMAN.
     This is Git-wildmatch matching via pathspec — the scaffolding’s broken glob matcher, fixed for real.</p>
+    <p><strong>Transition:</strong> “Step 6: executing evidence checks.”</p>
   </aside>
 </section>
 
-<!-- 8 ================================================================ -->
-<section class="slide" data-stage="checks">
+<!-- 10 =============================================================== -->
+<section class="slide" id="slide-10" data-stage="checks" data-title="Step 6 · evidence checks">
   <span class="stepno">06</span>
   <div class="kicker">Step 6 · evidence checks</div>
   <h2>Three checks, three kinds of evidence.</h2>
@@ -385,16 +793,17 @@ review        : <span class="ok">none</span></pre></div>
       <span class="mono">task-consistency</span> is that exact gap, promoted into gate policy.</p></div>
   </div>
   <div class="src">result.json → checks[].assertions · effective-config.json → checks</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:30">
     <p><strong>0:00–1:30 · Read one assertion aloud.</strong> The differential mode is the answer to “our repo is a
     mess”: the question is never “is everything green?” but “did this change make it worse?”. And task-consistency is
     the improvement loop working: a real observed AI failure (runs 4–5, tox.ini left stale) became a deterministic
     check. That is how a gate learns.</p>
+    <p><strong>Transition:</strong> “Step 7: aggregating evidence into a verdict.”</p>
   </aside>
 </section>
 
-<!-- 9 ================================================================ -->
-<section class="slide" data-stage="verdict">
+<!-- 11 =============================================================== -->
+<section class="slide" id="slide-11" data-stage="verdict" data-title="Step 7 · the verdict">
   <span class="stepno">07</span>
   <div class="kicker">Step 7 · the verdict</div>
   <h2>One rule turns evidence into a decision.</h2>
@@ -418,15 +827,16 @@ RESULT: .release-gate/runs/
     <p>A check that <em>could not run</em> is not evidence against the candidate — and not evidence for it.
     It outranks FAIL on purpose: claiming knowledge you don’t have is how a gate becomes theatre.</p></div>
   <div class="src">src/release_gate/policy.py → aggregate_verdict() · result.json → verdict</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:15">
     <p><strong>0:00–1:15 · Adverse vs missing, first pass.</strong> FAIL means evidence says the candidate is wrong.
     NEEDS_HUMAN means the gate cannot verify — tool missing, timeout, check skipped, judge edited. Exit codes: 0 PASS,
-    1 FAIL, 2 NEEDS_HUMAN. This distinction returns on slide 12 with receipts.</p>
+    1 FAIL, 2 NEEDS_HUMAN.</p>
+    <p><strong>Transition:</strong> “Step 8: inspecting the run directory on disk.”</p>
   </aside>
 </section>
 
-<!-- 10 =============================================================== -->
-<section class="slide" data-stage="evidence">
+<!-- 12 =============================================================== -->
+<section class="slide" id="slide-12" data-stage="evidence" data-title="Step 8 · what’s on disk">
   <span class="stepno">08</span>
   <div class="kicker">Step 8 · what’s on disk</div>
   <h2>The verdict comes with receipts.</h2>
@@ -449,15 +859,16 @@ RESULT: .release-gate/runs/
     </div>
   </div>
   <div class="src">manifest.json → artifacts[].sha256 · trace.json → control_finished events</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:15">
     <p><strong>0:00–1:15 · The audit story.</strong> result.json is the decision record; trace.json is the how
     (commands, exit codes, durations, truncation flags); manifest.json binds it together with hashes. Tamper-evident,
     not immutable — an honest distinction the tool itself makes.</p>
+    <p><strong>Transition:</strong> “Step 9: the offline oracle that grades the judge.”</p>
   </aside>
 </section>
 
-<!-- 11 =============================================================== -->
-<section class="slide" data-stage="oracle">
+<!-- 13 =============================================================== -->
+<section class="slide" id="slide-13" data-stage="oracle" data-title="Step 9 · offline lane">
   <span class="stepno">09</span>
   <div class="kicker">Step 9 · offline lane</div>
   <h2>Was the gate right? Only the answer key knows.</h2>
@@ -481,45 +892,61 @@ classification: <span class="ok">good_pass</span></pre></div>
     verdicts where no answer key exists. Production can reveal a bad pass eventually — it can <em>never</em> reveal a
     wrongly blocked good change.</p></div>
   <div class="src">demo/python-slugify/oracle/test_x1_oracle.py · demo.py grade</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:30">
     <p><strong>0:00–1:30 · The asymmetry argument.</strong> A false release eventually surfaces in production. A false
     block never does — the change didn’t ship, nothing happened, no trace. Only a bench with hidden answers sees both
-    error directions. This is the sharpest idea in the whole design; give it its 30 seconds.</p>
+    error directions.</p>
+    <p><strong>Transition:</strong> “Step 10: running the three calibrated controls.”</p>
   </aside>
 </section>
 
-<!-- 12 =============================================================== -->
-<section class="slide" data-stage="out">
+<!-- 14 =============================================================== -->
+<section class="slide" id="slide-14" data-stage="out" data-title="Step 10 · the controls">
   <span class="stepno">10</span>
-  <div class="kicker">Step 10 · the controls</div>
-  <h2>Three candidates. One line of difference each.</h2>
-  <table class="t">
-    <tr><th>candidate</th><th>only difference</th><th>gate verdict</th><th>reason codes</th><th>graded</th></tr>
-    <tr><td class="mono">control pass</td><td>the correct swap, nothing else</td>
-        <td class="v-pass">PASS</td><td class="mono">—</td><td class="mono">good_pass</td></tr>
-    <tr><td class="mono">control fail</td><td>+ 1 comment line in <b>test.py</b></td>
-        <td class="v-fail">FAIL</td><td class="mono">PATH_FORBIDDEN</td><td class="mono">good_catch</td></tr>
-    <tr><td class="mono">control needs-human</td><td>+ 1 comment line in <b>.release-gate.yaml</b></td>
-        <td class="v-hum">NEEDS_HUMAN</td><td class="mono">POLICY_FILE_CHANGED</td><td class="mono">escalated</td></tr>
-  </table>
-  <div class="grid g3" style="margin-top:.9rem">
-    <div class="card bad"><h3>Blindspot A · ambient environment</h3><p>Executor’s workspace hides missing
-      dependencies. Seen live in run-01. Countered by the clean rebuild.</p></div>
-    <div class="card warn"><h3>Blindspot B · selective completion</h3><p>Code lands, config lags (tox.ini,
-      runs 4–5). Countered by task-consistency.</p></div>
-    <div class="card accent-l"><h3>Blindspot C · trust boundary</h3><p>Edit the tests or the policy and everything
-      looks green. Countered by scope + policy-change escalation.</p></div>
+  <div class="kicker">Recorded decisions · Step 10</div>
+  <h2>Three candidates. Three distinct outcomes.</h2>
+  <div class="verdict-layout">
+    <div class="verdict-stack">
+      <article class="verdict-card pass">
+        <strong class="verdict-name">PASS</strong>
+        <p>Reviewed X1 paths only · <span class="green mono">good_pass</span></p>
+      </article>
+      <article class="verdict-card fail">
+        <strong class="verdict-name">FAIL</strong>
+        <p><span class="mono">test.py</span> is forbidden · <span class="red mono">good_catch</span></p>
+      </article>
+      <article class="verdict-card human">
+        <strong class="verdict-name">NEEDS_<br>HUMAN</strong>
+        <p>Policy changed · configured checks skipped · <span class="amber mono">escalated</span></p>
+      </article>
+    </div>
+    <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
+<pre><span class="p">$</span> demo.py control pass
+verdict: <span class="ok">PASS</span> · reason codes: none
+<span class="dim">changed paths: README.md, setup.py, slugify.py, tox.ini</span>
+
+<span class="p">$</span> demo.py control fail
+verdict: <span class="er">FAIL</span> · forbidden: test.py
+
+<span class="p">$</span> demo.py control needs-human
+verdict: <span class="wn">NEEDS_HUMAN</span> · POLICY_FILE_CHANGED</pre></div>
+  </div>
+  <div class="grid g3" style="margin-top:.85rem">
+    <div class="card bad"><h3>Blindspot A · ambient environment</h3><p>Executor workspace hides missing dependencies. Fixed by clean rebuild.</p></div>
+    <div class="card warn"><h3>Blindspot B · selective completion</h3><p>Code lands, tox.ini skipped. Caught by task-consistency.</p></div>
+    <div class="card accent-l"><h3>Blindspot C · trust boundary</h3><p>Touching test.py or policy escalates immediately.</p></div>
   </div>
   <div class="src">controls/{pass,fail,needs-human}.patch · runs 20260827T1437…/1438…</div>
-  <aside class="speaker-notes">
-    <p><strong>0:00–1:30 · The punchline slide.</strong> All three candidates contain the same correct code change.
-    One extra comment line flips the verdict — because the gate reads intent from paths, not from whether the code
-    “looks right”. Then map A/B/C to the live runs: these blindspots were observed first, encoded second.</p>
+  <aside class="speaker-notes" data-duration="03:00">
+    <p><strong>0:00–1:00 · PASS Candidate.</strong> Reviewing only allowed X1 paths with clean environments produces a verified PASS verdict with zero reason codes.</p>
+    <p><strong>1:00–2:00 · FAIL Candidate.</strong> Modifying forbidden test files like <code>test.py</code> is immediately caught as an out-of-scope violation (FAIL).</p>
+    <p><strong>2:00–3:00 · NEEDS_HUMAN Candidate.</strong> When policy files themselves are touched, the gate does not fail silently or pass blindly; it escalates directly to human review (NEEDS_HUMAN).</p>
+    <p><strong>Transition:</strong> “Step 11: adverse evidence vs insufficient evidence.”</p>
   </aside>
 </section>
 
-<!-- 13 =============================================================== -->
-<section class="slide" data-stage="verdict">
+<!-- 15 =============================================================== -->
+<section class="slide" id="slide-15" data-stage="verdict" data-title="Step 11 · adverse vs missing">
   <span class="stepno">11</span>
   <div class="kicker">Step 11 · the distinction that matters</div>
   <h2>“Evidence of failure” ≠ “failure to get evidence.”</h2>
@@ -544,15 +971,16 @@ classification: <span class="ok">good_pass</span></pre></div>
     <span class="mono">good_pass</span>. The task never “failed” — the gate briefly couldn’t verify it.</p>
   </div>
   <div class="src">demo/runs/RUNLOG.md · run-01 tests.log (pytest exit 2)</div>
-  <aside class="speaker-notes">
-    <p><strong>0:00–1:30 · K’s core teaching point.</strong> Never translate gate ≠ PASS into “the engineering task
-    failed”. Four different states hide behind a red light: the candidate is wrong; evidence is missing; a check
-    itself broke; a human is required. The gate names which one — read the reason codes, not the color.</p>
+  <aside class="speaker-notes" data-duration="01:30">
+    <p><strong>0:00–1:30 · Core distinction.</strong> Never translate gate ≠ PASS into “the engineering task
+    failed”. Four different states hide behind a red light: candidate wrong, evidence missing, check broken, or
+    policy edited. Read reason codes, not just color.</p>
+    <p><strong>Transition:</strong> “Step 12: what we can measure today, and what comes next.”</p>
   </aside>
 </section>
 
-<!-- 14 =============================================================== -->
-<section class="slide" data-stage="log">
+<!-- 16 =============================================================== -->
+<section class="slide" id="slide-16" data-stage="log" data-title="Step 12 · the numbers, honestly">
   <span class="stepno">12</span>
   <div class="kicker">Step 12 · the numbers, honestly</div>
   <h2>What we can measure today — and what we can’t yet.</h2>
@@ -580,7 +1008,7 @@ classification: <span class="ok">good_pass</span></pre></div>
     into a decision you can audit.</p>
   </div>
   <div class="src">.release-gate/runs/_observability/index.html · demo/runs/RUNLOG.md</div>
-  <aside class="speaker-notes">
+  <aside class="speaker-notes" data-duration="01:30">
     <p><strong>0:00–1:30 · Close with honesty.</strong> Show the dashboard live if there’s time. Then the gaps —
     K’s token/evidence saturation curve needs a budgeted evidence loop that doesn’t exist yet; the mapper is a design.
     Ending on the dashed box is what makes the solid boxes believable.</p>
@@ -590,10 +1018,22 @@ classification: <span class="ok">good_pass</span></pre></div>
 
 </main>
 
-<!-- notes drawer -->
-<div class="drawer" id="drawer">
-  <button class="close" id="drawerClose">✕</button>
-  <h4 id="drawerTitle">Notes</h4>
+<!-- notes drawer (Non-fullscreen slide-in from right) -->
+<div class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-header">
+    <h4 id="drawerTitle">Notes</h4>
+    <div class="drawer-actions">
+      <button class="popout-btn" id="drawerPopoutBtn" type="button" title="Pop out notes into a separate window on secondary screen">↗ Pop out</button>
+      <button class="close" id="drawerClose" type="button" title="Close drawer (Esc)">✕</button>
+    </div>
+  </div>
+  <div class="drawer-timer-bar">
+    <span class="timer-display" id="drawerTimer">00:00 / 30:00</span>
+    <div style="display:flex; gap:.3rem;">
+      <button class="btn-sm" id="drawerTimerToggle" type="button">Start</button>
+      <button class="btn-sm" id="drawerTimerReset" type="button">Reset</button>
+    </div>
+  </div>
   <div class="body" id="drawerBody"></div>
 </div>
 
@@ -607,6 +1047,12 @@ classification: <span class="ok">good_pass</span></pre></div>
   const drawer = document.getElementById("drawer");
   const drawerBody = document.getElementById("drawerBody");
   const drawerTitle = document.getElementById("drawerTitle");
+  const drawerTimer = document.getElementById("drawerTimer");
+  const drawerTimerToggle = document.getElementById("drawerTimerToggle");
+  const drawerTimerReset = document.getElementById("drawerTimerReset");
+  const drawerPopoutBtn = document.getElementById("drawerPopoutBtn");
+  const drawerClose = document.getElementById("drawerClose");
+
   let current = 0;
 
   const STAGE_NODES = {
@@ -632,6 +1078,10 @@ classification: <span class="ok">good_pass</span></pre></div>
     dots.appendChild(b);
   });
 
+  function isFullscreen() {
+    return Boolean(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  }
+
   function updateChrome(i) {
     counter.textContent = String(i + 1).padStart(2, "0") + " / " + String(slides.length).padStart(2, "0");
     progress.style.width = ((i + 1) / slides.length * 100) + "%";
@@ -644,7 +1094,8 @@ classification: <span class="ok">good_pass</span></pre></div>
       STAGE_NODES[stage].forEach(id => document.getElementById(id)?.classList.add("on"));
       if (GATE_STAGES.has(stage)) document.getElementById("g-gate").classList.add("on");
     }
-    if (drawer.classList.contains("open")) renderNotes(i);
+    if (drawer.classList.contains("open")) renderDrawerNotes(i);
+    speakerNotes.render(i);
   }
 
   function goTo(i) {
@@ -654,11 +1105,870 @@ classification: <span class="ok">good_pass</span></pre></div>
     history.replaceState(null, "", "#slide-" + (current + 1));
   }
 
-  function renderNotes(i) {
+  function renderDrawerNotes(i) {
     const aside = slides[i].querySelector("aside.speaker-notes");
-    drawerTitle.textContent = (i + 1) + ". " + (slides[i].querySelector("h1,h2")?.textContent || "").trim().slice(0, 60);
+    drawerTitle.textContent = (i + 1) + ". " + (slides[i].dataset.title || slides[i].querySelector("h1,h2")?.textContent || "").trim().slice(0, 60);
     drawerBody.innerHTML = aside ? aside.innerHTML : "<p>No notes for this slide.</p>";
   }
+
+  /* ===========================================
+     SPEAKER NOTES MANAGER + SECONDARY DISPLAY
+     =========================================== */
+  class SpeakerNotesManager {
+    constructor() {
+      this.popupWindow = null;
+      this.running = false;
+      this.startedAt = null;
+      this.elapsed = 0;
+      this.interval = null;
+      this.popupFontSize = 18;
+      this.screenAccessState = "checking";
+      this.screenDetails = null;
+      this.screenPermission = null;
+      this.targetScreen = null;
+      this.targetWindowBounds = null;
+      this.screenAccessPromise = null;
+      this.screenAccessGeneration = 0;
+      this.screenAccessOperation = null;
+      this.placementCheckTimer = null;
+
+      this.handleScreenTopologyChange = () => this.recomputeTargetScreen();
+      this.handleScreenPermissionChange = () => this.onScreenPermissionChange();
+
+      drawerTimerToggle?.addEventListener("click", () => this.toggleTimer());
+      drawerTimerReset?.addEventListener("click", () => this.resetTimer());
+      drawerPopoutBtn?.addEventListener("click", () => this.handlePopupActivation());
+      drawerClose?.addEventListener("click", () => this.toggleDrawer(false));
+
+      window.addEventListener("beforeunload", () => {
+        this.screenAccessGeneration += 1;
+        this.clearPlacementCheck();
+        this.detachScreenDetails();
+        if (this.screenPermission) {
+          this.screenPermission.removeEventListener?.("change", this.handleScreenPermissionChange);
+        }
+        if (this.popupWindow && !this.popupWindow.closed) {
+          try { this.popupWindow.close(); } catch (e) {}
+        }
+      });
+
+      void this.initializeScreenAccess();
+    }
+
+    hasScreenDetailsApi() {
+      return typeof window.getScreenDetails === "function";
+    }
+
+    async initializeScreenAccess() {
+      if (!this.hasScreenDetailsApi()) {
+        this.screenAccessState = "fallback";
+        return;
+      }
+
+      let permission = null;
+      try {
+        permission = await navigator.permissions?.query?.({ name: "window-management" });
+      } catch (error) {
+        this.screenAccessState = "needs-permission";
+        return;
+      }
+
+      if (!permission) {
+        this.screenAccessState = "needs-permission";
+        return;
+      }
+
+      this.screenPermission = permission;
+      permission.addEventListener?.("change", this.handleScreenPermissionChange);
+
+      if (permission.state === "denied") {
+        this.screenAccessState = "fallback";
+      } else if (permission.state === "granted") {
+        this.startWarmScreenDetails();
+      } else {
+        this.screenAccessState = "needs-permission";
+      }
+    }
+
+    startWarmScreenDetails() {
+      if (this.screenAccessPromise) {
+        this.screenAccessState = "checking";
+        return this.screenAccessPromise;
+      }
+      this.clearScreenDetails();
+      const generation = this.screenAccessGeneration;
+      this.screenAccessState = "checking";
+      return this.loadScreenDetails(generation).catch(() => {
+        if (generation === this.screenAccessGeneration) {
+          this.screenAccessState = "fallback";
+        }
+      });
+    }
+
+    async loadScreenDetails(generation) {
+      if (this.screenAccessPromise) return this.screenAccessPromise;
+      const loadPromise = window.getScreenDetails()
+        .then(details => {
+          this.cacheScreenDetails(details, generation);
+          return details;
+        })
+        .finally(() => {
+          if (this.screenAccessPromise === loadPromise) {
+            this.screenAccessPromise = null;
+          }
+        });
+      this.screenAccessPromise = loadPromise;
+      return loadPromise;
+    }
+
+    async requestScreenAccess() {
+      if (!this.hasScreenDetailsApi()) {
+        this.screenAccessState = "fallback";
+        return null;
+      }
+      if (this.screenAccessOperation) return this.screenAccessOperation.promise;
+
+      this.clearScreenDetails();
+      const generation = this.screenAccessGeneration;
+      this.screenAccessState = "requesting";
+      const operation = {};
+      operation.generation = generation;
+      operation.promise = this.loadScreenDetails(generation)
+        .catch(() => {
+          if (generation === this.screenAccessGeneration) {
+            this.screenAccessState = "fallback";
+          }
+          return null;
+        })
+        .finally(() => {
+          if (this.screenAccessOperation === operation) this.screenAccessOperation = null;
+        });
+      this.screenAccessOperation = operation;
+      return operation.promise;
+    }
+
+    clearScreenDetails() {
+      this.detachScreenDetails();
+      this.screenDetails = null;
+      this.targetScreen = null;
+      this.targetWindowBounds = null;
+      this.screenAccessPromise = null;
+      this.screenAccessGeneration += 1;
+    }
+
+    detachScreenDetails() {
+      if (!this.screenDetails) return;
+      this.screenDetails.removeEventListener?.("screenschange", this.handleScreenTopologyChange);
+      this.screenDetails.removeEventListener?.("currentscreenchange", this.handleScreenTopologyChange);
+    }
+
+    cacheScreenDetails(details, generation) {
+      if (generation !== this.screenAccessGeneration || !details) return;
+      this.detachScreenDetails();
+      this.screenDetails = details;
+      details.addEventListener?.("screenschange", this.handleScreenTopologyChange);
+      details.addEventListener?.("currentscreenchange", this.handleScreenTopologyChange);
+      this.recomputeTargetScreen();
+    }
+
+    sameScreen(a, b) {
+      return Boolean(a && b && (a === b || (
+        a.left === b.left &&
+        a.top === b.top &&
+        a.width === b.width &&
+        a.height === b.height
+      )));
+    }
+
+    selectTargetScreen(details) {
+      const screens = Array.from(details?.screens || []);
+      const currentScreen = details?.currentScreen;
+      return screens.find(screen => !this.sameScreen(screen, currentScreen)) || null;
+    }
+
+    recomputeTargetScreen() {
+      if (!this.screenDetails) return;
+      this.targetScreen = this.selectTargetScreen(this.screenDetails);
+      if (this.targetScreen) {
+        this.targetWindowBounds = this.boundsForScreen(this.targetScreen);
+        this.screenAccessState = "ready";
+      } else {
+        this.targetWindowBounds = null;
+        this.screenAccessState = "fallback";
+      }
+    }
+
+    boundsForScreen(screen) {
+      const screenLeft = screen?.availLeft ?? screen?.left ?? 0;
+      const screenTop = screen?.availTop ?? screen?.top ?? 0;
+      const screenWidth = screen?.availWidth ?? screen?.width ?? 1040;
+      const screenHeight = screen?.availHeight ?? screen?.height ?? 800;
+      return {
+        fullLeft: screen?.left ?? screenLeft,
+        fullTop: screen?.top ?? screenTop,
+        fullWidth: screen?.width ?? screenWidth,
+        fullHeight: screen?.height ?? screenHeight,
+        left: screenLeft + 40,
+        top: screenTop + 40,
+        width: Math.min(1040, screenWidth),
+        height: Math.min(800, screenHeight)
+      };
+    }
+
+    fallbackWindowBounds() {
+      return {
+        left: (window.screen.availLeft ?? window.screenLeft ?? 0) + 40,
+        top: (window.screen.availTop ?? window.screenTop ?? 0) + 40,
+        width: Math.min(1040, window.screen.availWidth || 1040),
+        height: Math.min(800, window.screen.availHeight || 800)
+      };
+    }
+
+    clearPlacementCheck() {
+      if (this.placementCheckTimer) {
+        clearTimeout(this.placementCheckTimer);
+        this.placementCheckTimer = null;
+      }
+    }
+
+    onScreenPermissionChange() {
+      const state = this.screenPermission?.state;
+      if (state === "prompt") {
+        this.clearScreenDetails();
+        this.screenAccessState = "needs-permission";
+      } else if (state === "denied") {
+        this.clearScreenDetails();
+        this.screenAccessState = "fallback";
+      } else if (state === "granted") {
+        if (this.screenAccessOperation) {
+          this.screenAccessState = "requesting";
+        } else {
+          this.startWarmScreenDetails();
+        }
+      }
+    }
+
+    async handlePopupActivation() {
+      if (this.popupWindow && !this.popupWindow.closed) {
+        this.popupWindow.focus();
+        this.render(current);
+        return this.popupWindow;
+      }
+
+      if (this.screenAccessState === "needs-permission" || this.screenAccessState === "requesting" || this.screenAccessState === "checking") {
+        try {
+          await this.requestScreenAccess();
+        } catch (e) {}
+      }
+      return this.openPopup();
+    }
+
+    toggleDrawer(force) {
+      const open = typeof force === "boolean" ? force : !drawer.classList.contains("open");
+      drawer.classList.toggle("open", open);
+      drawer.setAttribute("aria-hidden", String(!open));
+      if (open) renderDrawerNotes(current);
+    }
+
+    milliseconds() {
+      return this.elapsed + (this.running && this.startedAt ? Date.now() - this.startedAt : 0);
+    }
+
+    resetTimer() {
+      this.elapsed = 0;
+      this.startedAt = this.running ? Date.now() : null;
+      this.renderTimer();
+    }
+
+    toggleTimer() {
+      if (this.running) {
+        this.elapsed = this.milliseconds();
+        this.running = false;
+        this.startedAt = null;
+        clearInterval(this.interval);
+        this.interval = null;
+        if (drawerTimerToggle) drawerTimerToggle.textContent = "Resume";
+      } else {
+        this.running = true;
+        this.startedAt = Date.now();
+        this.interval = setInterval(() => this.renderTimer(), 500);
+        if (drawerTimerToggle) drawerTimerToggle.textContent = "Pause";
+      }
+      this.renderTimer();
+    }
+
+    renderTimer() {
+      const total = Math.floor(this.milliseconds() / 1000);
+      const timeStr = `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")} / 30:00`;
+      if (drawerTimer) drawerTimer.textContent = timeStr;
+
+      if (this.popupWindow && !this.popupWindow.closed) {
+        try {
+          const popupTimer = this.popupWindow.document.getElementById("popupSessionTimer");
+          if (popupTimer) popupTimer.textContent = timeStr;
+          const popupBtn = this.popupWindow.document.getElementById("popupTimerToggle");
+          if (popupBtn) {
+            popupBtn.textContent = this.running ? "Pause" : (this.elapsed > 0 ? "Resume" : "Start");
+          }
+          const clockEl = this.popupWindow.document.getElementById("popupWallClock");
+          if (clockEl) {
+            const now = new Date();
+            clockEl.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          }
+        } catch (e) {}
+      }
+    }
+
+    changePopupFontSize(delta) {
+      this.popupFontSize = Math.max(14, Math.min(32, this.popupFontSize + delta * 2));
+      if (this.popupWindow && !this.popupWindow.closed) {
+        const body = this.popupWindow.document.getElementById("popupNotesBody");
+        if (body) body.style.setProperty("--notes-size", `${this.popupFontSize}px`);
+      }
+    }
+
+    async openPopup() {
+      if (this.popupWindow && !this.popupWindow.closed) {
+        this.popupWindow.focus();
+        this.render(current);
+        return this.popupWindow;
+      }
+
+      if (this.screenAccessState === "needs-permission") {
+        try {
+          await this.requestScreenAccess();
+        } catch (e) {}
+      }
+
+      if (this.screenDetails && !this.targetWindowBounds) {
+        this.recomputeTargetScreen();
+      }
+
+      const readyPlacement = this.targetWindowBounds;
+      const bounds = readyPlacement ? this.targetWindowBounds : this.fallbackWindowBounds();
+      const { left, top, width, height } = bounds;
+
+      const features = `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
+
+      try {
+        this.popupWindow = window.open("", "X1SpeakerNotes", features);
+      } catch (e) {
+        console.warn("Popup window opening failed", e);
+      }
+
+      if (!this.popupWindow || this.popupWindow.closed || typeof this.popupWindow.closed === "undefined") {
+        this.toggleDrawer(true);
+        alert("Popup window was blocked by your browser. Please allow popups for speaker notes.");
+        return null;
+      }
+
+      const popup = this.popupWindow;
+      const moveWindow = () => {
+        if (!popup || popup.closed || this.popupWindow !== popup) return;
+        try {
+          popup.moveTo(left, top);
+          popup.resizeTo(width, height);
+        } catch (e) {
+          console.debug("moveTo error:", e);
+        }
+      };
+
+      moveWindow();
+      setTimeout(moveWindow, 80);
+      setTimeout(moveWindow, 250);
+      setTimeout(moveWindow, 600);
+
+      this.initPopupDocument();
+      this.popupWindow.focus();
+      return this.popupWindow;
+    }
+
+    initPopupDocument() {
+      const doc = this.popupWindow.document;
+      doc.open();
+      doc.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Speaker Notes — X1 Behind the Scenes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #001928;
+      --panel: #00253d;
+      --card: #002e47;
+      --card-alt: #003a59;
+      --ink: #f5f6f7;
+      --muted: #8fa0b0;
+      --line: rgba(255, 255, 255, 0.08);
+      --line-bright: rgba(115, 195, 235, 0.36);
+      --blue: #0075be;
+      --blue-bright: #73c3eb;
+      --cyan: #009ec9;
+      --green: #00e7b4;
+      --amber: #ffc827;
+      --red: #e9425f;
+      --font-display: "Heebo", Arial, sans-serif;
+      --font-mono: "IBM Plex Mono", monospace;
+      --notes-size: 18px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-display);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    header.speaker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem 1.4rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 0.85rem; }
+    .deck-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      background: rgba(15, 98, 254, 0.22);
+      border: 1px solid var(--line-bright);
+      padding: 0.22rem 0.55rem;
+      border-radius: 999px;
+    }
+    .deck-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+    .slide-badge {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .header-center { display: flex; align-items: center; gap: 0.75rem; }
+    .clock-pill, .target-pill {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.4);
+      color: var(--muted);
+    }
+    .clock-pill strong, .target-pill strong { color: #fff; }
+    .target-pill strong { color: var(--amber); }
+    .header-right { display: flex; align-items: center; gap: 0.6rem; }
+    .timer-display {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--green);
+      background: rgba(0, 0, 0, 0.5);
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      min-width: 7.2rem;
+      text-align: center;
+    }
+    .btn {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 0.35rem 0.75rem;
+      border: 1px solid var(--line-bright);
+      border-radius: 6px;
+      background: var(--card);
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: 160ms ease;
+    }
+    .btn:hover { background: var(--blue); border-color: var(--blue-bright); color: #fff; }
+    .btn-nav { font-weight: 600; padding: 0.4rem 0.9rem; font-size: 0.78rem; }
+    .btn-nav.primary { background: var(--blue); border-color: var(--blue-bright); }
+    .btn-nav.primary:hover { background: #0043ce; }
+    .btn-icon { padding: 0.35rem 0.55rem; font-weight: bold; }
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 0.95fr);
+      flex: 1;
+      gap: 1.25rem;
+      padding: 1.25rem 1.4rem;
+    }
+    .notes-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.4rem;
+    }
+    .slide-meta-bar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding-bottom: 0.9rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .slide-meta-info { display: flex; flex-direction: column; gap: 0.3rem; }
+    .slide-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--cyan);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .slide-heading { font-size: 1.35rem; font-weight: 600; line-height: 1.25; color: #fff; }
+    .font-controls { display: flex; align-items: center; gap: 0.3rem; }
+    .notes-body {
+      font-size: var(--notes-size, 18px);
+      line-height: 1.68;
+      color: #e0e0e0;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .notes-body p { margin-bottom: 1rem; }
+    .notes-body p:last-child { margin-bottom: 0; }
+    .notes-body strong { color: #ffffff; font-weight: 600; }
+    .notes-body code {
+      font-family: var(--font-mono);
+      color: var(--cyan);
+      background: rgba(61, 219, 217, 0.12);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .sidebar-pane { display: flex; flex-direction: column; gap: 1rem; }
+    .side-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .side-card-title {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .next-slide-card {
+      background: linear-gradient(145deg, var(--card), var(--panel));
+      border: 1px solid var(--line-bright);
+    }
+    .next-title { font-size: 1.05rem; font-weight: 600; color: #fff; line-height: 1.25; }
+    .next-preview {
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.45;
+      max-height: 5.5rem;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+    .slide-nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      max-height: 18rem;
+      overflow-y: auto;
+    }
+    .slide-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.45rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: var(--card);
+      color: var(--muted);
+      font-size: 0.78rem;
+      cursor: pointer;
+      text-align: left;
+      transition: 160ms;
+    }
+    .slide-nav-item:hover { background: var(--card-alt); color: #fff; border-color: var(--line); }
+    .slide-nav-item.active {
+      background: rgba(15, 98, 254, 0.28);
+      border-color: var(--blue-bright);
+      color: #fff;
+      font-weight: 500;
+    }
+    .slide-nav-num {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.35);
+      color: var(--cyan);
+    }
+    .slide-nav-item.active .slide-nav-num { background: var(--blue); color: #fff; }
+    .shortcuts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 0.25rem 0.45rem;
+      border-radius: 4px;
+    }
+    .shortcut-key { color: var(--cyan); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header class="speaker-header">
+    <div class="header-left">
+      <span class="deck-badge">Speaker View</span>
+      <span class="slide-badge" id="popupSlideBadge">SLIDE 1 OF ${slides.length}</span>
+    </div>
+    <div class="header-center">
+      <div class="clock-pill">Clock: <strong id="popupWallClock">--:--:--</strong></div>
+      <div class="target-pill">Target: <strong id="popupTargetDuration">01:30</strong></div>
+    </div>
+    <div class="header-right">
+      <div class="timer-display" id="popupSessionTimer">00:00 / 30:00</div>
+      <button class="btn" id="popupTimerToggle" type="button">Start</button>
+      <button class="btn" id="popupTimerReset" type="button">Reset</button>
+      <button class="btn" id="popupMoveScreenBtn" type="button" title="Move to secondary monitor">⤢ Screen 2</button>
+      <button class="btn btn-nav" id="popupBtnPrev" type="button">◀ Prev</button>
+      <button class="btn btn-nav primary" id="popupBtnNext" type="button">Next ▶</button>
+    </div>
+  </header>
+
+  <main class="main-grid">
+    <section class="notes-pane">
+      <div class="slide-meta-bar">
+        <div class="slide-meta-info">
+          <span class="slide-eyebrow" id="popupSlideEyebrow">X1 Walkthrough</span>
+          <h1 class="slide-heading" id="popupSlideTitle">Slide Title</h1>
+        </div>
+        <div class="font-controls">
+          <button class="btn btn-icon" id="popupFontMinus" title="Decrease font size" type="button">A-</button>
+          <button class="btn btn-icon" id="popupFontPlus" title="Increase font size" type="button">A+</button>
+        </div>
+      </div>
+      <div class="notes-body" id="popupNotesBody"></div>
+    </section>
+
+    <aside class="sidebar-pane">
+      <div class="side-card next-slide-card">
+        <div class="side-card-title">
+          <span>Up Next</span>
+          <span id="popupNextDuration" style="color:var(--amber);">02:00</span>
+        </div>
+        <div class="next-title" id="popupNextTitle">Next Slide Title</div>
+        <div class="next-preview" id="popupNextPreview">Next slide preview content...</div>
+      </div>
+
+      <div class="side-card">
+        <div class="side-card-title">Slide Navigation</div>
+        <div class="slide-nav-list" id="popupSlideList"></div>
+      </div>
+
+      <div class="side-card">
+        <div class="side-card-title">Keyboard Shortcuts</div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-row"><span>Next</span><span class="shortcut-key">→ / Space</span></div>
+          <div class="shortcut-row"><span>Prev</span><span class="shortcut-key">←</span></div>
+          <div class="shortcut-row"><span>Timer</span><span class="shortcut-key">T</span></div>
+          <div class="shortcut-row"><span>Reset</span><span class="shortcut-key">R</span></div>
+          <div class="shortcut-row"><span>Jump</span><span class="shortcut-key">1–9, 0</span></div>
+          <div class="shortcut-row"><span>Font</span><span class="shortcut-key">+ / -</span></div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>`);
+      doc.close();
+
+      const win = this.popupWindow;
+      win.addEventListener("beforeunload", () => { this.popupWindow = null; });
+
+      doc.getElementById("popupBtnNext")?.addEventListener("click", () => goTo(current + 1));
+      doc.getElementById("popupBtnPrev")?.addEventListener("click", () => goTo(current - 1));
+      doc.getElementById("popupTimerToggle")?.addEventListener("click", () => this.toggleTimer());
+      doc.getElementById("popupTimerReset")?.addEventListener("click", () => this.resetTimer());
+      doc.getElementById("popupFontPlus")?.addEventListener("click", () => this.changePopupFontSize(1));
+      doc.getElementById("popupFontMinus")?.addEventListener("click", () => this.changePopupFontSize(-1));
+
+      doc.getElementById("popupMoveScreenBtn")?.addEventListener("click", () => {
+        if (this.targetWindowBounds) {
+          try {
+            win.moveTo(this.targetWindowBounds.left, this.targetWindowBounds.top);
+            win.resizeTo(this.targetWindowBounds.width, this.targetWindowBounds.height);
+          } catch (e) {
+            console.warn("Manual screen move constrained:", e);
+          }
+        } else {
+          this.recomputeTargetScreen();
+          if (this.targetWindowBounds) {
+            try {
+              win.moveTo(this.targetWindowBounds.left, this.targetWindowBounds.top);
+              win.resizeTo(this.targetWindowBounds.width, this.targetWindowBounds.height);
+            } catch (e) {}
+          }
+        }
+      });
+
+      // Populate slide navigator list
+      const listEl = doc.getElementById("popupSlideList");
+      if (listEl) {
+        listEl.innerHTML = "";
+        slides.forEach((slide, idx) => {
+          const item = doc.createElement("button");
+          item.type = "button";
+          item.className = "slide-nav-item";
+          item.dataset.slideIdx = String(idx);
+          item.innerHTML = `<span class="slide-nav-num">${String(idx + 1).padStart(2, "0")}</span> <span>${slide.dataset.title || slide.querySelector("h1, h2")?.textContent || `Slide ${idx + 1}`}</span>`;
+          item.addEventListener("click", () => goTo(idx));
+          listEl.appendChild(item);
+        });
+      }
+
+      // Keyboard navigation inside popup
+      doc.addEventListener("keydown", (event) => {
+        const key = event.key;
+        if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(key)) {
+          event.preventDefault();
+          goTo(current + 1);
+        } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(key)) {
+          event.preventDefault();
+          goTo(current - 1);
+        } else if (key === "Home") {
+          event.preventDefault();
+          goTo(0);
+        } else if (key === "End") {
+          event.preventDefault();
+          goTo(slides.length - 1);
+        } else if (["1", "2", "3", "4", "5", "6", "7", "8", "9"].includes(key)) {
+          event.preventDefault();
+          goTo(Number(key) - 1);
+        } else if (key === "0") {
+          event.preventDefault();
+          goTo(9);
+        } else if (key.toLowerCase() === "t") {
+          event.preventDefault();
+          this.toggleTimer();
+        } else if (key.toLowerCase() === "r") {
+          event.preventDefault();
+          this.resetTimer();
+        } else if (key === "+" || key === "=") {
+          event.preventDefault();
+          this.changePopupFontSize(1);
+        } else if (key === "-" || key === "_") {
+          event.preventDefault();
+          this.changePopupFontSize(-1);
+        }
+      });
+
+      this.render(current);
+      this.renderTimer();
+    }
+
+    render(index) {
+      const slide = slides[index];
+      const notes = slide?.querySelector(".speaker-notes");
+      if (!notes) return;
+
+      if (this.popupWindow && !this.popupWindow.closed) {
+        try {
+          const doc = this.popupWindow.document;
+          const total = slides.length;
+          const badge = doc.getElementById("popupSlideBadge");
+          if (badge) badge.textContent = `SLIDE ${index + 1} OF ${total}`;
+
+          const targetDur = doc.getElementById("popupTargetDuration");
+          if (targetDur) targetDur.textContent = notes.dataset.duration || "01:30";
+
+          const eyebrowEl = doc.getElementById("popupSlideEyebrow");
+          const kicker = slide.querySelector(".kicker");
+          if (eyebrowEl) eyebrowEl.textContent = kicker ? kicker.textContent : (slide.dataset.title || `Slide ${index + 1}`);
+
+          const titleEl = doc.getElementById("popupSlideTitle");
+          if (titleEl) titleEl.textContent = `${index + 1}. ${slide.dataset.title || slide.querySelector("h1, h2")?.textContent || `Slide ${index + 1}`}`;
+
+          const bodyEl = doc.getElementById("popupNotesBody");
+          if (bodyEl) {
+            bodyEl.style.setProperty("--notes-size", `${this.popupFontSize}px`);
+            bodyEl.innerHTML = notes.innerHTML;
+          }
+
+          // Up Next
+          const nextIndex = index + 1;
+          const nextTitleEl = doc.getElementById("popupNextTitle");
+          const nextDurEl = doc.getElementById("popupNextDuration");
+          const nextPrevEl = doc.getElementById("popupNextPreview");
+
+          if (nextIndex < total) {
+            const nextSlide = slides[nextIndex];
+            const nextNotes = nextSlide.querySelector(".speaker-notes");
+            if (nextTitleEl) nextTitleEl.textContent = `${nextIndex + 1}. ${nextSlide.dataset.title || nextSlide.querySelector("h1, h2")?.textContent || `Slide ${nextIndex + 1}`}`;
+            if (nextDurEl) nextDurEl.textContent = nextNotes?.dataset.duration || "";
+            if (nextPrevEl) {
+              const firstP = nextNotes?.querySelector("p");
+              nextPrevEl.textContent = firstP ? firstP.textContent : "Ready for next slide.";
+            }
+          } else {
+            if (nextTitleEl) nextTitleEl.textContent = "Presentation Complete";
+            if (nextDurEl) nextDurEl.textContent = "Q&A";
+            if (nextPrevEl) nextPrevEl.textContent = "End of slides. Open floor for questions and live control execution.";
+          }
+
+          // Update active state in sidebar list
+          doc.querySelectorAll(".slide-nav-item").forEach((item) => {
+            const active = Number(item.dataset.slideIdx) === index;
+            item.classList.toggle("active", active);
+          });
+        } catch (e) {}
+      }
+    }
+  }
+
+  const speakerNotes = new SpeakerNotesManager();
 
   document.addEventListener("keydown", (e) => {
     if (e.target.isContentEditable || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
@@ -667,11 +1977,16 @@ classification: <span class="ok">good_pass</span></pre></div>
     else if (e.key === "f" || e.key === "F") {
       document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
     } else if (e.key === "n" || e.key === "N") {
-      drawer.classList.toggle("open");
-      if (drawer.classList.contains("open")) renderNotes(current);
-    } else if (e.key === "Escape") drawer.classList.remove("open");
+      e.preventDefault();
+      if (isFullscreen()) {
+        speakerNotes.handlePopupActivation();
+      } else {
+        speakerNotes.toggleDrawer();
+      }
+    } else if (e.key === "Escape") {
+      speakerNotes.toggleDrawer(false);
+    }
   });
-  document.getElementById("drawerClose").addEventListener("click", () => drawer.classList.remove("open"));
 
   const io = new IntersectionObserver((entries) => {
     entries.forEach(en => {

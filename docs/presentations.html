@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Presentation Hub — Local Server</title>
+  <title>Presentation Hub</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23001928'/%3E%3Ccircle cx='24' cy='32' r='8' fill='%230075be'/%3E%3Ccircle cx='40' cy='32' r='8' fill='%2300a6ff'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -339,32 +339,7 @@
     </header>
 
     <section class="decks-grid">
-      <!-- Deck 1 -->
-      <a href="./x1-behind-the-scenes.html" class="deck-card">
-        <div style="display: flex; flex-direction: column; gap: 0.9rem;">
-          <div class="deck-header">
-            <span class="deck-tag">Step-by-Step Walkthrough</span>
-            <span class="deck-slides-count">14 Slides · 20m</span>
-          </div>
-          <h2 class="deck-title">X1 — Behind the Scenes</h2>
-          <p class="deck-desc">
-            One task traced end to end with real run artifacts: every command, every file touched,
-            every piece of evidence, and a live pipeline map that highlights which stage you are in
-            — workbench, executor, gate, oracle — at every step.
-          </p>
-          <div class="deck-features">
-            <span class="feature-pill">✦ Live Pipeline Map</span>
-            <span class="feature-pill">✦ Real Run Artifacts</span>
-            <span class="feature-pill">✦ Speaker Notes (N)</span>
-            <span class="feature-pill">✦ Keyboard Navigation</span>
-          </div>
-        </div>
-        <div class="deck-action">
-          <span>Launch Presentation</span>
-          <span>↗</span>
-        </div>
-      </a>
-
+      <!-- Deck 1: Skills & Plugins -->
       <a href="./code-assistant-skill-plugin-development.html" class="deck-card">
         <div style="display: flex; flex-direction: column; gap: 0.9rem;">
           <div class="deck-header">
@@ -388,22 +363,73 @@
         </div>
       </a>
 
-      <!-- Deck 2 -->
+      <!-- Deck 2: Autonomous Release Gate Executive Overview -->
       <a href="../release-gate/demo/release-gate-demo.html" class="deck-card">
         <div style="display: flex; flex-direction: column; gap: 0.9rem;">
           <div class="deck-header">
-            <span class="deck-tag">Live Demonstration</span>
-            <span class="deck-slides-count">12 Slides · 30m</span>
+            <span class="deck-tag">Executive Overview</span>
+            <span class="deck-slides-count">10 Slides · 20m</span>
           </div>
-          <h2 class="deck-title">Autonomous Release Gate Execution</h2>
+          <h2 class="deck-title">Autonomous Release Gate</h2>
           <p class="deck-desc">
-            Live interactive pipeline demonstration showcasing task intake, test analysis, patch generation, automated verification, evidence ledger, and gate decisioning.
+            Executive architecture synthesis closing the AI SDLC blindspot: 6-stage proof pipeline,
+            repository breadth vs behavioral depth, bounded repair governance, and tamper-evident release decisions.
           </p>
           <div class="deck-features">
-            <span class="feature-pill">✦ Standalone Speaker View</span>
-            <span class="feature-pill">✦ Interactive Execution Steps</span>
-            <span class="feature-pill">✦ Real-time Synchronized Notes</span>
+            <span class="feature-pill">✦ 6-Stage Proof Pipeline</span>
+            <span class="feature-pill">✦ Dual Track Demo Synthesis</span>
+            <span class="feature-pill">✦ Bounded Repair Governance</span>
+            <span class="feature-pill">✦ Multi-Screen Notes (N)</span>
+          </div>
+        </div>
+        <div class="deck-action">
+          <span>Launch Presentation</span>
+          <span>↗</span>
+        </div>
+      </a>
+
+      <!-- Deck 3: Demo 01 (python-slugify) -->
+      <a href="./x1-behind-the-scenes.html" class="deck-card">
+        <div style="display: flex; flex-direction: column; gap: 0.9rem;">
+          <div class="deck-header">
+            <span class="deck-tag">Demo 01 Walkthrough</span>
+            <span class="deck-slides-count">16 Slides · 20m</span>
+          </div>
+          <h2 class="deck-title">X1 — Behind the Scenes</h2>
+          <p class="deck-desc">
+            One migration task traced end-to-end with real run artifacts: packaging dependencies, tox matrix consistency,
+            wildmatch scope protection, and an interactive two-lane pipeline map.<br/><br/>
+          </p>
+          <div class="deck-features">
+            <span class="feature-pill">✦ Live Pipeline Map</span>
+            <span class="feature-pill">✦ Real Run Artifacts</span>
+            <span class="feature-pill">✦ Multi-Screen Notes (N)</span>
             <span class="feature-pill">✦ Keyboard Navigation</span>
+          </div>
+        </div>
+        <div class="deck-action">
+          <span>Launch Presentation</span>
+          <span>↗</span>
+        </div>
+      </a>
+
+      <!-- Deck 4: Demo 02 (rate-limiter) -->
+      <a href="./rate-limiter-behind-the-scenes.html" class="deck-card">
+        <div style="display: flex; flex-direction: column; gap: 0.9rem;">
+          <div class="deck-header">
+            <span class="deck-tag">Demo 02 Walkthrough</span>
+            <span class="deck-slides-count">14 Slides · 20m</span>
+          </div>
+          <h2 class="deck-title">Rate Limiter — Behind the Scenes</h2>
+          <p class="deck-desc">
+            Deep behavioral assurance and bounded repair traced end-to-end: exact-boundary sliding window contract,
+            10-layer Quality Gauntlet, 8/8 mutation kills, and cryptographic human authorization receipts.
+          </p>
+          <div class="deck-features">
+            <span class="feature-pill">✦ Quality Gauntlet (10 Layers)</span>
+            <span class="feature-pill">✦ 8/8 Mutation Assurance</span>
+            <span class="feature-pill">✦ Bounded Repair State Machine</span>
+            <span class="feature-pill">✦ Multi-Screen Notes (N)</span>
           </div>
         </div>
         <div class="deck-action">
