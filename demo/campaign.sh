@@ -65,7 +65,19 @@ try: d=json.load(open('$OUT'))
 except Exception: print('unknown'); sys.exit()
 c=d.get('total_cost_usd')
 print(f'{c:.4f}' if isinstance(c,(int,float)) else 'unknown')")
-  [[ $EXEC_RC -ne 0 ]] && echo "  executor exit $EXEC_RC (recorded; continuing to gate)"
+  EXEC_ERR=$(python3 -c "
+import json
+try: d=json.load(open('$OUT'))
+except Exception: print('unreadable'); raise SystemExit
+print('error' if d.get('is_error') or d.get('subtype') not in (None,'success') else 'ok')")
+  # Executor infrastructure failure (rate limit, auth, network) must NOT be
+  # gated: an unchanged tree would grade as a fake candidate outcome. Same
+  # invariant as the gate's own error!=fail rule, applied one stage earlier.
+  if [[ $EXEC_RC -ne 0 || "$EXEC_ERR" != "ok" ]]; then
+    echo "  executor infra failure (rc=$EXEC_RC, json=$EXEC_ERR) — row recorded, gate skipped"
+    echo "$RUN,$(date -u +%F' '%T),python-slugify,X1,release-gate 0.6.0,claude -p,$MODEL,v3,EXEC_ERROR,\"rc=$EXEC_RC $EXEC_ERR\",not graded,-,none,$WALL,$COST," >> "$CSV"
+    continue
+  fi
 
   GOUT=$( cd "$WB" && release-gate run --repo . --base "$BASE" 2>&1 )
   GATE_RC=$?
