@@ -1,0 +1,2 @@
+run_id,date_utc,repo,task,gate,executor,model,card,verdict,reason_codes,truth,classification,human_step,wall_s,cost_usd,result_path
+live-20260827T173505Z,2026-08-27 17:36:52,python-slugify,X1,release-gate 0.6.0,claude -p,claude-haiku-4-5-20251001,v3,PASS,"-",correct,good_pass,none,89,0.1819,/Users/jjahanzad/Code/Career/blindspot-remediation/release-gate/demo/python-slugify/workbench/python-slugify/.release-gate/runs/20260827T173636Z-d4d20350383c/result.json

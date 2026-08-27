@@ -9,6 +9,7 @@ specifications) done with git and a table instead of a registry.
 |---|---|---|---|---|
 | v1 | `X1_v1.md` | `a47f02f` | run-01, run-01b | Original card. |
 | v2 | `X1_v2.md` | `d1d7d5f` | run-02 onward | Added an **Environment** section; "Done when" now names the venv interpreter and requires a reinstall. |
+| v3 | `X1_v3.md` | (this commit) | campaign runs (release-gate 0.6.0, Claude Code executor) | Same task; Environment retargeted from the legacy `demo/workbench` venv to the release-gate workbench `task-venv`; adds "do not modify .release-gate.yaml" and "stop when done". Needed because the campaign runs against the release-gate product, whose gate self-provisions its own env during reconstruction — the executor self-check still needs the reinstall. |
 
 `X1.md` is always the live card (identical to the newest frozen copy). The
 frozen copies are byte-for-byte what the AI saw on those runs — `X1_v1.md`
