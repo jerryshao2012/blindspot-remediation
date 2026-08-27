@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architecture Maps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:#f5f6f7; --white:#fefefe; --ink:#001928; --muted:#646c76; --muted-dark:#8b949e;
+    --line:rgba(0,25,40,.16); --soft-line:rgba(0,25,40,.09);
+    --terminal:#001928; --blue:#0075be; --blue-bright:#38a5e8; --blue-soft:rgba(0,117,190,.12);
+    --green:#00b88c; --green-soft:rgba(0,184,140,.1); --amber:#d99100; --amber-soft:rgba(217,145,0,.1);
+    --red:#e9425f; --font-d:"Heebo",Arial,sans-serif; --font-m:"IBM Plex Mono",monospace;
+    --small:clamp(.66rem,.9vw,.84rem); --micro:clamp(.56rem,.74vw,.7rem);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--font-d);background:var(--paper);color:var(--ink);padding-bottom:5rem}
+  .wrap{max-width:1150px;margin:0 auto;padding:0 clamp(1rem,4vw,3rem)}
+  header{padding:3.2rem 0 1.6rem}
+  .kicker{display:flex;align-items:center;gap:.6rem;font-family:var(--font-m);font-size:var(--small);
+    letter-spacing:.22em;text-transform:uppercase;color:var(--blue);margin-bottom:.6rem}
+  .kicker::before{content:"";width:2rem;height:2px;background:var(--blue)}
+  h1{font-size:clamp(1.9rem,4.6vw,3.6rem);font-weight:700;letter-spacing:-.02em;line-height:1.05}
+  .sub{color:var(--muted);max-width:64ch;margin-top:.7rem;font-size:clamp(.85rem,1.2vw,1.05rem)}
+  h2{font-size:clamp(1.25rem,2.6vw,2rem);font-weight:700;letter-spacing:-.015em;margin:3rem 0 .4rem}
+  .h2sub{color:var(--muted);font-size:var(--small);max-width:70ch;margin-bottom:1.1rem}
+
+  /* legend */
+  .legend{display:flex;flex-wrap:wrap;gap:.7rem;margin:1.2rem 0 0;font-family:var(--font-m);font-size:var(--micro)}
+  .legend span{display:inline-flex;align-items:center;gap:.4rem;color:var(--muted)}
+  .sw{width:.85rem;height:.85rem;border-radius:3px;display:inline-block}
+  .sw.b{background:var(--green-soft);border:1.5px solid var(--green)}
+  .sw.p{background:var(--amber-soft);border:1.5px solid var(--amber)}
+  .sw.m{background:transparent;border:1.5px dashed var(--muted-dark)}
+
+  /* diagram boxes */
+  .diagram{background:var(--white);border:1px solid var(--soft-line);border-radius:14px;
+    padding:clamp(.9rem,2.4vw,1.7rem);overflow-x:auto;box-shadow:0 8px 30px rgba(0,25,40,.05)}
+  .lane-title{font-family:var(--font-m);font-size:var(--micro);letter-spacing:.2em;text-transform:uppercase;
+    color:var(--muted);margin:.4rem 0 .7rem}
+  .flow{display:flex;align-items:stretch;gap:.55rem;flex-wrap:nowrap;min-width:900px}
+  .flow .arr{align-self:center;color:var(--muted-dark);font-family:var(--font-m);flex:0 0 auto}
+  .bx{border-radius:9px;padding:.55rem .7rem;flex:1 1 0;min-width:7.5rem;display:flex;flex-direction:column;gap:.25rem;justify-content:center}
+  .bx b{font-size:var(--small);font-weight:600;line-height:1.25}
+  .bx .who{font-family:var(--font-m);font-size:var(--micro);color:var(--muted);line-height:1.4}
+  .built{background:var(--green-soft);border:1.5px solid var(--green)}
+  .part{background:var(--amber-soft);border:1.5px solid var(--amber)}
+  .miss{background:transparent;border:1.5px dashed var(--muted-dark)}
+  .miss b{color:var(--muted)}
+  .group{border:1.5px solid var(--blue);border-radius:11px;padding:.55rem;flex:2.2 1 0;background:var(--blue-soft)}
+  .group>.glabel{font-family:var(--font-m);font-size:var(--micro);letter-spacing:.16em;text-transform:uppercase;
+    color:var(--blue);margin-bottom:.45rem;font-weight:600}
+  .ginner{display:grid;grid-template-columns:1fr 1fr;gap:.45rem}
+  .stack{display:flex;flex-direction:column;gap:.45rem;flex:1 1 0}
+  .laneRule{border:none;border-top:2px solid var(--line);margin:1.3rem 0}
+
+  /* vertical workflow */
+  .vflow{display:flex;flex-direction:column;align-items:center;gap:.4rem;position:relative}
+  .vflow .arrd{color:var(--muted-dark);font-family:var(--font-m)}
+  .vbx{width:min(680px,100%)}
+  .loop{position:absolute;right:0;top:8%;bottom:14%;width:11rem;border:2px dashed var(--red);
+    border-left:none;border-radius:0 14px 14px 0;display:flex;align-items:center;justify-content:flex-end;padding-right:.6rem}
+  .loop span{font-family:var(--font-m);font-size:var(--micro);color:var(--red);background:var(--paper);
+    padding:.3rem .4rem;text-align:right;line-height:1.5}
+  .vwrap{position:relative;padding-right:12rem}
+  @media (max-width:900px){ .vwrap{padding-right:0} .loop{display:none} .flow{min-width:760px} }
+
+  .callout{border-left:3px solid var(--red);background:var(--white);border-radius:0 10px 10px 0;
+    padding:.8rem 1rem;margin-top:1rem;font-size:var(--small);color:var(--ink);max-width:72ch}
+  .callout b{color:var(--red)}
+  .callout.blue{border-left-color:var(--blue)} .callout.blue b{color:var(--blue)}
+
+  /* evidence spread bars */
+  .spread{background:var(--white);border:1px solid var(--soft-line);border-radius:14px;padding:clamp(.9rem,2.4vw,1.6rem)}
+  .srow{display:grid;grid-template-columns:15rem 1fr 1fr;gap:.7rem;align-items:center;padding:.32rem 0;border-bottom:1px solid var(--soft-line)}
+  .srow:last-child{border-bottom:none}
+  .srow .fam{font-size:var(--small);font-weight:600}
+  .srow .fam small{display:block;font-weight:400;color:var(--muted-dark);font-family:var(--font-m);font-size:var(--micro)}
+  .bar{height:1.15rem;border-radius:4px;position:relative;background:transparent}
+  .bar i{position:absolute;inset:0 auto 0 0;border-radius:4px;background:var(--blue)}
+  .bar.rl i{background:var(--green)}
+  .bar em{position:absolute;left:.45rem;top:50%;transform:translateY(-50%);font-style:normal;
+    font-family:var(--font-m);font-size:var(--micro);color:#fff;white-space:nowrap;z-index:1}
+  .bar.empty{border:1.5px dashed var(--muted-dark)}
+  .bar.empty em{color:var(--muted-dark)}
+  .shead{font-family:var(--font-m);font-size:var(--micro);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.9rem;margin-top:1rem}
+  .card{background:var(--white);border:1px solid var(--soft-line);border-radius:10px;padding:.85rem .95rem}
+  .card h3{font-family:var(--font-m);font-size:var(--micro);letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.45rem}
+  .card p,.card li{font-size:var(--small);line-height:1.55}
+  .card ul{list-style:none}.card li{padding-left:1em;text-indent:-1em}
+  .card li::before{content:"— ";color:var(--muted-dark)}
+  .mono{font-family:var(--font-m)}
+  a.back{font-family:var(--font-m);font-size:var(--micro);color:var(--blue);text-decoration:none}
+  @media (max-width:900px){
+    .ginner{grid-template-columns:1fr 1fr !important}
+    .srow{grid-template-columns:1fr;gap:.3rem;padding:.55rem 0}
+    .srow.shead-row{display:none}
+    .bar{min-height:1.15rem}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <a class="back" href="./presentations.html">← Presentation Hub</a>
+  <div class="kicker" style="margin-top:1rem">Reference · Architecture</div>
+  <h1>The maps — what exists, what's designed.</h1>
+  <p class="sub">K's two diagrams, recreated — with every box colour-coded against what actually runs in this
+  repository today. Solid green boxes name the file that implements them. Dashed boxes are design, not code.
+  No box is coloured optimistically.</p>
+  <div class="legend">
+    <span><i class="sw b"></i> built — runs today</span>
+    <span><i class="sw p"></i> partial — some of it exists</span>
+    <span><i class="sw m"></i> designed — not built</span>
+  </div>
+</header>
+
+<!-- ============ DIAGRAM 1 · THE HLD ============ -->
+<h2>1 · Automated SDLC flows — the two lanes</h2>
+<p class="h2sub">The original HLD. <b>ONLINE</b> runs on every change and ends at a verdict.
+<b>OFFLINE</b> runs the same pipeline on known-answer tasks to measure the gate itself.</p>
+
+<div class="diagram">
+  <div class="lane-title">Online — every real or benchmark change</div>
+  <div class="flow">
+    <div class="bx part"><b>Task request</b><div class="who">markdown card · demo/tasks/X1_v2.md — no Jira/ticket intake</div></div>
+    <span class="arr">→</span>
+    <div class="bx built"><b>ChangeExecutionService</b><div class="who">live: Copilot CLI · demo: control patches — A2 code unused</div></div>
+    <span class="arr">→</span>
+    <div class="bx built"><b>Candidate patch</b><div class="who">the diff · fingerprinted as patch_sha256</div></div>
+    <span class="arr">→</span>
+    <div class="group">
+      <div class="glabel">ReleaseGateService · release-gate CLI 0.6.0</div>
+      <div class="ginner">
+        <div class="bx miss"><b>independent test synthesis</b><div class="who">not built</div></div>
+        <div class="bx built"><b>deterministic execution</b><div class="who">rebuild + checks · src/release_gate/engine.py</div></div>
+        <div class="bx part"><b>mutation / adversarial</b><div class="who">rate-limiter gauntlet only — not in slugify policy</div></div>
+        <div class="bx built"><b>gate decision</b><div class="who">NEEDS_HUMAN &gt; FAIL &gt; PASS · policy.py</div></div>
+      </div>
+    </div>
+    <span class="arr">→</span>
+    <div class="stack">
+      <div class="bx miss"><b>Release</b><div class="who">out of scope by design — ends at the verdict</div></div>
+      <div class="bx built"><b>Release or human review</b><div class="who">NEEDS_HUMAN + reason codes</div></div>
+      <div class="bx built"><b>Human review</b><div class="who">you — outside the gate, as designed</div></div>
+    </div>
+  </div>
+
+  <hr class="laneRule">
+
+  <div class="lane-title">Offline — development and qualification campaigns</div>
+  <div class="flow">
+    <div class="bx part"><b>BenchmarkFactory</b><div class="who">hand-built · demo/CORPUS.md — 25 candidates measured, 2 of 3 demos built</div></div>
+    <span class="arr">→</span>
+    <div class="bx built"><b>Validated golden benchmark</b><div class="who">pinned commit + task card + control patches + hidden oracle</div></div>
+    <span class="arr">→</span>
+    <div class="group">
+      <div class="glabel">EvaluationCampaignRunner · you + demo.py</div>
+      <div class="ginner">
+        <div class="bx built"><b>invokes ChangeExecutionService</b><div class="who">demo.py control · or you paste the task</div></div>
+        <div class="bx built"><b>invokes ReleaseGateService</b><div class="who">release-gate run</div></div>
+        <div class="bx built"><b>compares against hidden oracle</b><div class="who">demo.py grade · oracle/test_x1_oracle.py</div></div>
+        <div class="bx part"><b>computes uncertainty &amp; readiness</b><div class="who">Wilson math exists (B5 statistics.py) · no per-campaign report yet</div></div>
+      </div>
+    </div>
+    <span class="arr">→</span>
+    <div class="bx part"><b>Readiness report</b><div class="who">RUNLOG.md + rolling-rate dashboard — verdicts and cost not yet joined</div></div>
+  </div>
+</div>
+
+<div class="callout blue"><b>The one-line answer to “what do we have?”</b> —
+ONLINE today = Copilot CLI (or a control patch) + the release-gate CLI + you as human review.
+OFFLINE today = the same gate run on known-answer tasks, graded by a hidden oracle, logged to RUNLOG and a
+rolling dashboard. Everything else on this map is either partial (amber) or design (dashed).</div>
+
+<!-- ============ DIAGRAM 2 · THE EVIDENCE LOOP ============ -->
+<h2>2 · Release ServiceGate workflow — the evidence loop</h2>
+<p class="h2sub">K's second diagram: evidence is mapped, gaps are prioritized, more evidence is generated,
+and only <em>sufficient</em> evidence reaches the deterministic gate. Most of this is the design frontier —
+colour tells you exactly where the frontier is.</p>
+
+<div class="diagram">
+<div class="vwrap">
+  <div class="vflow">
+    <div class="bx built vbx"><b>Candidate patch</b><div class="who">fingerprinted diff · runs today</div></div>
+    <div class="arrd">↓</div>
+    <div class="group vbx">
+      <div class="glabel">Evidence Diversity Mapper — E1 reference code exists, integrated nowhere</div>
+      <div class="ginner" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="bx miss"><b>requirement understanding</b><div class="who">not built</div></div>
+        <div class="bx part"><b>existing tests &amp; coverage</b><div class="who">gathered by gate checks — not fed to any mapper</div></div>
+        <div class="bx part"><b>compiler artifacts (AST/CFG)</b><div class="who">Graphify hook exists in the skill — read-only, advisory, no graph built here</div></div>
+      </div>
+    </div>
+    <div class="arrd">↓</div>
+    <div class="group vbx">
+      <div class="glabel">Build evidence map</div>
+      <div class="ginner">
+        <div class="bx miss"><b>covered behavioural regions</b><div class="who">not built</div></div>
+        <div class="bx miss"><b>missing behavioural regions</b><div class="who">not built</div></div>
+      </div>
+      <div class="bx miss" style="margin-top:.45rem"><b>prioritize information gaps</b><div class="who">not built</div></div>
+    </div>
+    <div class="arrd">↓</div>
+    <div class="group vbx">
+      <div class="glabel">Evidence generation planner</div>
+      <div class="ginner" style="grid-template-columns:1fr 1fr 1fr 1fr">
+        <div class="bx miss"><b>LLM tests</b><div class="who">not built</div></div>
+        <div class="bx part"><b>mutation engine</b><div class="who">rate-limiter gauntlet: 8/8 killed</div></div>
+        <div class="bx part"><b>property generator</b><div class="who">rate-limiter: property tests run — not generated on demand</div></div>
+        <div class="bx built"><b>human review (if needed)</b><div class="who">NEEDS_HUMAN</div></div>
+      </div>
+    </div>
+    <div class="arrd">↓</div>
+    <div class="bx part vbx"><b>Evidence qualification</b><div class="who">aggregate_verdict() decides from evidence present — it cannot ask for more</div></div>
+    <div class="arrd">↓ <span class="mono" style="font-size:.65rem;color:var(--muted)">if evidence deemed sufficient</span></div>
+    <div class="bx built vbx"><b>Deterministic gate</b><div class="who">release-gate CLI · the part that runs today</div></div>
+  </div>
+  <div class="loop"><span>if evidence deemed<br>insufficient<br><b>— loop not built —</b></span></div>
+</div>
+</div>
+
+<div class="callout"><b>The biggest unbuilt piece is the red loop.</b> In K's design, insufficient evidence
+triggers <em>more evidence gathering</em> — spend budget, widen the tests, re-map, try again. In today's build,
+insufficient evidence ends the run at NEEDS_HUMAN and a person takes over. There is no
+<span class="mono">MORE_EVIDENCE_REQUIRED</span>, no evidence budget, no second round. Until that loop exists,
+K's token-vs-review saturation curve has no data behind it.</div>
+
+<!-- ============ SECTION 3 · EVIDENCE SPREAD ============ -->
+<h2>3 · The evidence spread we actually have</h2>
+<p class="h2sub">This is the Evidence Diversity Mapper's question, answered by hand for our two demos:
+<b>how many independent kinds of evidence back each verdict?</b> Real counts from recorded runs.
+Hollow bars are K's “sparse regions” — and both demos share the same empty ones.</p>
+
+<div class="spread">
+  <div class="srow shead-row"><div class="fam shead">evidence family</div><div class="shead">python-slugify gate</div><div class="shead">rate-limiter gauntlet</div></div>
+  <div class="srow"><div class="fam">Behavioural tests<small>existing suite, re-run by the gate</small></div>
+    <div class="bar"><i style="width:78%"></i><em>82 tests · differential</em></div>
+    <div class="bar rl"><i style="width:30%"></i><em>17 tests</em></div></div>
+  <div class="srow"><div class="fam">Coverage, enforced<small>floor + no-drop</small></div>
+    <div class="bar"><i style="width:55%"></i><em>90% · floor 85 · drop ≤ 0.12pt</em></div>
+    <div class="bar rl"><i style="width:62%"></i><em>100% stmt+branch · fail-under=100</em></div></div>
+  <div class="srow"><div class="fam">Property-based tests</div>
+    <div class="bar empty"><em>none — sparse region</em></div>
+    <div class="bar rl"><i style="width:35%"></i><em>scenario + property suites</em></div></div>
+  <div class="srow"><div class="fam">Mutation analysis<small>can the tests even fail?</small></div>
+    <div class="bar empty"><em>none — sparse region</em></div>
+    <div class="bar rl"><i style="width:55%"></i><em>8/8 killed + negative control</em></div></div>
+  <div class="srow"><div class="fam">Static types</div>
+    <div class="bar"><i style="width:30%"></i><em>mypy · advisory</em></div>
+    <div class="bar rl"><i style="width:40%"></i><em>strict · 8 files</em></div></div>
+  <div class="srow"><div class="fam">Task consistency<small>the “half-finished task” detector</small></div>
+    <div class="bar"><i style="width:35%"></i><em>remaining refs == 0</em></div>
+    <div class="bar empty"><em>n/a for this task</em></div></div>
+  <div class="srow"><div class="fam">Lint / format</div>
+    <div class="bar empty"><em>none in policy</em></div>
+    <div class="bar rl"><i style="width:30%"></i><em>ruff clean · 26 files</em></div></div>
+  <div class="srow"><div class="fam">Supply chain<small>dependency vulnerabilities</small></div>
+    <div class="bar empty"><em>none — sparse region</em></div>
+    <div class="bar rl"><i style="width:30%"></i><em>no known vulns</em></div></div>
+  <div class="srow"><div class="fam">Secrets / must-not scans</div>
+    <div class="bar empty"><em>none in policy</em></div>
+    <div class="bar rl"><i style="width:30%"></i><em>clock + credential patterns clean</em></div></div>
+  <div class="srow"><div class="fam">Real execution<small>does it actually run?</small></div>
+    <div class="bar empty"><em>none — sparse region</em></div>
+    <div class="bar rl"><i style="width:35%"></i><em>burst behaviour verified</em></div></div>
+  <div class="srow"><div class="fam">Checker self-controls<small>proof the checks can fire</small></div>
+    <div class="bar"><i style="width:40%"></i><em>3 control patches</em></div>
+    <div class="bar rl"><i style="width:45%"></i><em>5/5 orchestration + checker controls</em></div></div>
+  <div class="srow"><div class="fam">Independent oracle<small>offline only</small></div>
+    <div class="bar"><i style="width:35%"></i><em>16 hidden asserts</em></div>
+    <div class="bar rl"><i style="width:30%"></i><em>11 tests after apply</em></div></div>
+  <div class="srow"><div class="fam">Requirement understanding</div>
+    <div class="bar empty"><em>none — sparse region</em></div>
+    <div class="bar empty"><em>none — sparse region</em></div></div>
+  <div class="srow"><div class="fam">LLM-generated tests</div>
+    <div class="bar empty"><em>none — sparse region</em></div>
+    <div class="bar empty"><em>none — sparse region</em></div></div>
+  <div class="srow"><div class="fam">Deployment / integration evidence</div>
+    <div class="bar empty"><em>none — sparse region</em></div>
+    <div class="bar empty"><em>none — sparse region</em></div></div>
+</div>
+
+<div class="callout blue"><b>K's richness point, in one look:</b> the slugify gate would score high on
+“number of tests” (82!) yet spans only four families; the rate-limiter gauntlet has fewer tests and twice the
+span. Diversity of <em>families</em> is what makes evidence hard to fool — many tests of one kind can share one
+blindspot. Widening the span is where Graphify-style signals (AST / control-flow / data-flow) come in: they
+tell a planner <em>where behaviour exists that no evidence family currently touches</em>. The hook for that is
+already in the skill (read-only Graphify advisory); the enrichment loop that would consume it is diagram 2's
+red loop — not built.</div>
+
+<!-- ============ SECTION 4 · CONTROLS ============ -->
+<h2>4 · How controls get built</h2>
+<p class="h2sub">A control is a candidate whose correct verdict you already know, kept as a frozen patch.
+It is how you prove the gate reads correctly — the same idea as a lab control sample.</p>
+
+<div class="cards">
+  <div class="card"><h3>The recipe (any repo)</h3>
+    <ul>
+      <li>Pin a baseline commit where the suite is green</li>
+      <li>Freeze a change as a patch file with a <b>known</b> verdict</li>
+      <li>State the expected verdict <em>and reason codes</em> next to it</li>
+      <li>Run gate → compare → any mismatch is a gate bug</li>
+    </ul></div>
+  <div class="card"><h3>Where big repos get them free</h3>
+    <ul>
+      <li><b>Your git history:</b> a real bug-fix commit reversed = a known-bad candidate; the fix itself = known-good</li>
+      <li><b>Reverted PRs:</b> merged-then-reverted changes are labelled false-releases, ready made</li>
+      <li><b>Tamper controls:</b> any good change + one edit to a test, CI file, or gate policy</li>
+      <li><b>No-op control:</b> an empty change must PASS — if it doesn't, the gate is broken, not the code</li>
+    </ul></div>
+  <div class="card"><h3>The rule that keeps gates honest</h3>
+    <p>Every check ships with at least one control that makes it <b>fire</b>. A check that has never been seen
+    to fail is indistinguishable from a check that scans nothing — the scaffolding's B7 checker
+    passed for weeks while inspecting zero files.</p></div>
+  <div class="card"><h3>What ours look like</h3>
+    <p class="mono" style="font-size:.72rem">controls/pass.patch<br>controls/fail.patch&nbsp;&nbsp;(+1 line test.py)<br>
+    controls/needs-human.patch&nbsp;&nbsp;(+1 line policy)</p>
+    <p style="margin-top:.4rem">Three patches, one line of difference each — enough to exercise every verdict
+    on demand, deterministically, on stage.</p></div>
+</div>
+
+<div style="margin-top:2.5rem;font-family:var(--font-m);font-size:var(--micro);color:var(--muted-dark)">
+  Sources · release-gate/demo/python-slugify run 20260827T143722Z-58368f55bad1 · release-gate/demo/rate-limiter/evidence.md ·
+  release-gate/skills/release-gate/SKILL.md (Graphify advisory) · SCAFFOLDING-LEDGER.md · demo/runs/RUNLOG.md
+</div>
+</div>
+</body>
+</html>
