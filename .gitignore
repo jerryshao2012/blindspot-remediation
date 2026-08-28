@@ -35,6 +35,8 @@ graphify-out/
 .workspace/
 .worktrees/
 .playwright-cli
+.codex-plugins
+.agents
 update.sh
 
 # Demo workbench: a clone + venv, rebuilt by demo/setup_workbench.sh
