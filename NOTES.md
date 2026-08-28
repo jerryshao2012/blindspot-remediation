@@ -221,16 +221,60 @@ Do not give the guardrail the work of the offline measurement.
 
 ## Closed notes
 
-### N-9 — Reusable gate home (closed 2026-08-18)
+### N-11 — Separation of executor infrastructure failure from gate verdict (closed 2026-08-27)
 
-**Decision.** The reusable implementation lives in
-[`release-gate/`](release-gate/) as an independent Python CLI plus portable
-skill. Each adopting repository owns a committed `.release-gate.yaml`.
+**What we found.**
+
+When running automated campaigns (`demo/campaign.sh`), the AI executor can fail
+because of a network timeout, rate limit, or tool crash before it writes any change.
+
+**Why this is important.**
+
+If you record this as a gate FAIL or NEEDS_HUMAN, you record an infrastructure error as
+a candidate error. That makes the denominator incorrect and damages the evaluation.
+
+**Decision.**
+
+The campaign runner records executor infrastructure failures as `EXEC_ERROR`. The gate
+does not evaluate these runs. Only runs where the executor completed its work reach the gate.
+
+---
+
+### N-10 — Restoration and hardening of the rate-limiter benchmark (closed 2026-08-22)
+
+**What we found.**
+
+Task X1 on `python-slugify` tests package migrations and packaging blind spots. It does
+not test complex algorithmic invariants, boundary edge cases, or mutation analysis.
+
+**Decision.**
+
+Restore and harden the rate limiter in [`release-gate/demo/rate-limiter/`](release-gate/demo/rate-limiter/)
+as the second canonical benchmark. It tests:
+- In-process sliding-window rate limiting with an injected clock;
+- 100% branch coverage and an 8-mutant mutation gauntlet;
+- A differential brute-force oracle (11 tests);
+- The bounded repair loop ($C0 \to C1 \to C2$) with an explicit 2-attempt budget.
+
+---
+
+### N-9 — Reusable gate home and bounded repair (closed 2026-08-18, updated 2026-08-28)
+
+**Decision.** The reusable implementation lives in [`release-gate/`](release-gate/) as
+an independent Python CLI plus portable skills (for GitHub Copilot, OpenAI Codex, Claude Code,
+and Antigravity). Each adopting repository owns a committed `.release-gate.yaml`.
+
+In version 0.6.0, Release Gate adds:
+- A bounded repair workflow (`/release-gate repair --base <ref>`) with a strict 2-attempt
+  budget, temporary disposable workspaces, and patch SHA-256 verification;
+- Read-only Graphify diagnosis bounded to failed checks;
+- Rolling 10 and rolling 100 decision dashboards (`_observability/`) with tamper-evident HTML snapshots.
 
 **Coexistence.** `demo/gate/gate.sh` and its skill remain unchanged for the X1
 walkthrough. `A3-release-gate-service` remains auditable historical source
-material with known defects. The new product imports neither one, and no
-plugin or host-specific adapter is part of v1.
+material with known defects.
+
+---
 
 ### N-1 — The main branch already contains a release gate that runs
 
@@ -252,3 +296,6 @@ from the repository. The gate for the new plan will be built as a fresh skill, n
 the demo's gauntlet. The demo stays available in the git history. To restore it:
 
     git checkout $(git log --diff-filter=D --format=%H -1 -- demo-rate-limiter)^ -- demo-rate-limiter
+
+*(Note: Restored and hardened in Release Gate 0.4.0+; see N-10).*
+

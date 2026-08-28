@@ -77,21 +77,21 @@ implements. This is the list to point at when someone asks "so what did we keep?
 
 ---
 
-## 3. What the demo does *not* do — and is not pretending to
+## 3. What the demo does *not* do — and how `release-gate` addresses it
 
 Stated here so nobody has to discover it. Each maps to a scaffolding concern
-that remains real.
+that remains real, alongside how the standalone [`release-gate/`](release-gate/) (v0.6.0)
+resolves or bounds it:
 
-| Gap | Scaffolding concern | Status |
-|---|---|---|
-| No sandbox — generated code runs in a plain venv | A10 | Known; acceptable for a laptop POC on a 444-line library; not for unattended use. |
-| Oracle wall is a `cd` | prompt_AB_ hidden-oracle boundary | Known; adequate while a human launches Copilot; must become a real boundary in CI. |
-| Evidence is hashed, not signed | A4 lineage; provenance | Known; `evidence.json` can be edited by anyone with the file. |
-| No statistics step yet — intervals quoted, not computed per campaign | A5 / B5 `statistics.py` | Planned for ≥5 rows; B5's module is the one piece of scaffolding code slated for reuse. |
-| Test check is not differential — it requires green, not "no new failures" | A3 baseline handling | Fine on the corpus (all admitted repos are green); required before gating a real, messy repo. Lint and coverage *are* differential (`gate.sh:114-135`, `:140-160`). |
-| Corpus is three pure libraries | E1/E2's job | Known; the mapper's first real use is auditing exactly this. |
-| Only one X-task written; X2 verified but not carded | B5 benchmark factory | `CORPUS.md` §X2. |
-| The gate is invoked by hand, not by the agent or by CI | A9 / A12 orchestration | Deliberate for learning; the CI direction is described in `README.md` §7. |
+| Gap in Bash demo | Scaffolding concern | Status in `demo/` | Resolution in `release-gate` product |
+|---|---|---|---|
+| No sandbox — code runs in a plain venv | A10 | Known limitation; venv timeouts only | Evaluates in clean, isolated clones via private Git object DB (`--base <ref>`); non-modifying default |
+| Oracle wall is a `cd` | prompt_AB_ hidden-oracle boundary | Adequate for manual runs; fragile in CI | Replaced by repo-owned `.release-gate.yaml` and separate evaluation suites; oracles isolated outside candidate tree |
+| Evidence is hashed, not signed | A4 lineage; provenance | `candidate_diff_sha256` in JSON | Tamper-evident evidence packages, atomic report publication, SHA-256 patch digest verification, and immutable release asset checksums |
+| No statistics step yet | A5 / B5 `statistics.py` | Runs 1–5 completed; Wilson intervals quoted in `RUNLOG.md`; live campaigns in `campaign-ledger.xlsx` | Self-contained rolling 10 and rolling 100 HTML/JSON gate decision dashboards (`_observability/`) and per-run HTML snapshots |
+| Test check requires green, not differential | A3 baseline handling | Acceptable because benchmark repos are green | Base-trusted policy evaluated against `--base <ref>`; candidate cannot alter policy or test launchers |
+| Corpus initially one task (X1) | E1/E2's job | `python-slugify` admitted | Dual benchmark suites: `python-slugify` (packaging/blindspots) and `rate-limiter` (100% coverage, 8-mutant gauntlet, brute-force model) |
+| Gate invoked by hand | A9 / A12 orchestration | Automated campaigns via `campaign.sh` | Portable assistant skills across GitHub Copilot, OpenAI Codex, Claude Code, and Antigravity with bounded repair state machine ($C0 \to C1 \to C2$) |
 
 ---
 
@@ -122,11 +122,18 @@ Recommendation, in two steps:
 
 ---
 
-## 5. Current state — 2026-08-18
+## 5. Current state
 
-The reusable gate is implemented independently at
-[`release-gate/`](release-gate/). This does not revise the historical ledger:
-the A/B/E directories remain the received scaffolding and audit evidence, and
-their recorded defects/test counts remain historical facts. A3 contributed
-concepts only; it is not a package dependency. The unchanged Bash demo remains
-available for its documented X1 commands.
+The production-ready tool is implemented independently at [`release-gate/`](release-gate/) (version 0.6.0).
+This does not revise the historical ledger: the A/B/E directories remain the received scaffolding and audit
+evidence, and their recorded defects/test counts remain historical facts. A3 contributed concepts only;
+it is not a package dependency.
+
+The current implementation encompasses:
+1. **`release-gate/` (v0.6.0):** Standalone Python CLI, versioned schemas, portable skills for 4 AI assistants,
+   bounded repair state machine ($C0 \to C1 \to C2$), read-only Graphify diagnosis, and rolling 10/100 dashboards.
+2. **`release-gate/demo/`:** Dual reproducible benchmarks (`python-slugify` and `rate-limiter`).
+3. **`demo/`:** Completed Runs 1–5 on Task X1 (card v2), the bash teaching gate, `campaign.sh` automated runner,
+   and `campaign-ledger.xlsx`.
+4. **`docs/`:** Presentation hub (`presentations.html`) with interactive deep-dive slide decks.
+

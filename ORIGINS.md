@@ -35,12 +35,16 @@ this file tells you *why it exists* and *whether it matters now*.
    with open questions in NOTES.md. Two of the four build stages never ran. Nothing
    in the tree calls an AI, and no end-to-end gated run has ever happened.
 
-6. **The plan now.** Use GitHub Copilot CLI as the change executor (so the unbuilt
-   A2/LLM-connector work is unnecessary), rebuild the gate as a small skill it can
-   trigger, run one Layer-1 task on a small repo with a known correct answer, and
-   measure time and tokens — then 5 runs, then decide about 20 or 100. The
-   scaffolding's lasting value is its *design thinking* and its *measurement math*,
-   not its code.
+6. **What was delivered.** Runs 1–5 on Task X1 were executed and logged in `demo/runs/RUNLOG.md`
+   (confirming ~88s latency and ~12 AIC cost per run, sizing the bill). The reusable production
+   tool was built in [`release-gate/`](release-gate/) (version 0.6.0) as a standalone Python CLI
+   and portable assistant skill (supporting Copilot, Codex, Claude Code, Antigravity) with
+   a bounded repair state machine ($C0 \to C1 \to C2$) and rolling 10/100 decision dashboards.
+   The `rate-limiter` benchmark was restored and hardened to test algorithmic invariants, 100%
+   branch coverage, and mutation analysis. Live evaluation campaigns (`demo/campaign.sh`) and an
+   interactive presentation suite (`docs/`) were built. The scaffolding's lasting value remains
+   its *design thinking* and its *measurement math*, not its code.
+
 
 ---
 
@@ -171,35 +175,39 @@ designed to catch.
 Roughly speaking: of ~35,000 lines of Python received, the demo path ahead executes
 none of it directly, and inherits two modules and five ideas.
 
-## 10. What we still need to build
+## 10. What was built and what we still need
 
-1. **The gate as a skill** (triggerable by Copilot CLI).
-   Layers: run the repo's test suite, coverage with a hard floor, type check, lint,
-   secret scan — every check fail-closed (a check that cannot run is a failure, not a
-   skip), emitting a small evidence file per run.
-2. **The X1 task spec.** Candidate: switch `python-slugify`'s transliteration backend
-   from `text-unidecode` to `Unidecode` (a supported extra — the textbook "change
-   package x to y"). Probing found real output divergences between the backends
-   (currency symbols, fractions), so a naive swap looks clean while changing
-   generated slugs — exactly what a gate must catch. The held-out oracle tests must
-   be confirmed through `slugify()` itself before the first run.
-3. **The corpus: three small repos with green baselines from a clean clone.**
-   Measured and admitted (see `demo/CORPUS.md` for the full table of 25
-   candidates): `python-slugify` (X1), `itsdangerous` (X2 — a SHA-1→SHA-256
-   default swap that silently rejects every existing token; verified live), and
-   `cachetools` (X3). Admission rule: **if the baseline is not green, the repo is out** — otherwise "the AI
-   broke it" cannot be told apart from "it was already broken."
-4. **The run log.** For every run: task id, repo, wall time, tokens (if the tool does
-   not report token counts, record that explicitly rather than inventing values —
-   `prompt_truncate`'s own rule), gate verdict, and correct/incorrect against the
-   oracle. One run first, then five for a cost estimate, then decide about 20/100
-   with the table below.
-5. **Later, in order:** the mapper as corpus audit (§6); the N-8 backtest (replay the
-   gate over ~200 real merged changes, using reverts as labels); synthetic repo
-   generation only if the audit proves the corpus too narrow.
+### What has been built
 
-**How many runs mean what** (B5's own Wilson math — if every run passes, the true
-failure rate could still be as high as):
+1. **The gate as a skill and CLI:** Standalone implementation in [`release-gate/`](release-gate/)
+   (v0.6.0) with multi-agent skills (GitHub Copilot, OpenAI Codex, Claude Code, Antigravity),
+   bounded repair state machine ($C0 \to C1 \to C2$), and fail-closed checks. The bash gate
+   at `demo/gate/gate.sh` remains supported for teaching.
+2. **The X1 task spec:** Implemented and versioned (`demo/tasks/X1.md`, `X1_v1.md`, `X1_v2.md`).
+   Identified and proved the `₹500` and `♥ love` transliteration divergence between `text-unidecode`
+   and `Unidecode`.
+3. **The corpus benchmarks:**
+   - `python-slugify` (Task X1): Admitted, pinned, and evaluated.
+   - `rate-limiter`: Restored and hardened under `release-gate/demo/rate-limiter/` with 100% branch
+     coverage, 8-mutant mutation gauntlet, and bounded repair loop.
+   - Admitted candidate repos: `itsdangerous` (X2) and `cachetools` (X3); see `demo/CORPUS.md`.
+4. **The run log & live campaigns:**
+   - Runs 1–5 completed on Task X1 (v2) in `demo/runs/RUNLOG.md` (mean 88s, ~11.8 AIC).
+   - Live campaign runner added (`demo/campaign.sh`), executing Anthropic Claude sessions through
+     the gate and logging to `demo/runs/campaign-ledger.xlsx` while classifying executor errors as `EXEC_ERROR`.
+5. **Observability dashboards & presentations:**
+   - Rolling 10/100 gate decision dashboards (`_observability/`) with tamper-evident HTML snapshots.
+   - Presentation hub (`docs/presentations.html`) with deep-dive interactive decks.
+
+### What remains
+
+1. **Corpus expansion:** Carding X2 (`itsdangerous`) and X3 (`cachetools`) on the bench.
+2. **The mapper as a corpus audit:** Using `E1-E2-conceptual-diversity-mapper/` to analyze what
+   service-shaped architectures the benchmark currently lacks.
+3. **The backtest (NOTES N-8):** Replaying the gate over ~200 real historical merged changes in a
+   target repository, using reverts as ground-truth labels.
+
+**How many runs mean what** (B5's Wilson math — if every run passes, the true failure rate could still be up to):
 
 | clean runs | true failure rate could still be |
 |---|---|
@@ -211,22 +219,26 @@ failure rate could still be as high as):
 
 So 5 runs size the bill; 30+ runs start to be evidence.
 
-## 11. demo-rate-limiter (removed 2026-08-16)
+## 11. Rate-limiter benchmark (removed 2026-08-16, restored & hardened in 0.4.0+)
 
-The repository briefly contained `release-gate/demo/rate-limiter/`, a small hand-built rate
-limiter with its own test-and-analysis chain. It predated the scaffolding (first
-commit `9f58041`) and was not part of the A/B/E build flow. It was removed on
-2026-08-16 to keep this repository purely about the original scaffolding (decision
-recorded in NOTES.md, closed note N-1). It remains in git history:
+The repository originally contained `release-gate/demo/rate-limiter/`, a small hand-built rate limiter with
+its own test-and-analysis chain that predated the scaffolding. It was temporarily removed on 2026-08-16
+to focus on the A/B/E scaffolding audit (decision recorded in NOTES.md, closed note N-1).
 
-```bash
-git checkout $(git log --diff-filter=D --format=%H -1 -- rate-limiter)^ -- rate-limiter
-```
+Beginning in Release Gate 0.4.0, the rate limiter was **restored, redesigned, and hardened** under
+[`release-gate/demo/rate-limiter/`](release-gate/demo/rate-limiter/) as the second canonical benchmark.
+Unlike `python-slugify` (which tests dependency lifecycles and packaging blindspots), the rate limiter
+benchmarks deep algorithmic invariants: 100% branch coverage, an 8-mutant mutation gauntlet,
+a differential brute-force oracle, and the full $C0 \to C1 \to C2$ bounded repair workflow.
 
-## 12. Current state — 2026-08-18
+## 12. Current state
 
-The reusable implementation now lives in [`release-gate/`](release-gate/).
-It is independent of A1/A2/A3/A9/B6 and treats those components as historical
-design and audit material. The existing `demo/gate/gate.sh` interface remains
-the unchanged X1 teaching gate; it is not a compatibility layer for the new
-CLI.
+The production-ready tool lives in [`release-gate/`](release-gate/) (version 0.6.0).
+It is completely independent of A1/A2/A3/A9/B6, treating the scaffolding as historical design
+principles and audit evidence. The repository now includes:
+- Production Release Gate CLI, schemas, and multi-agent assistant skills;
+- Automated bounded repair workflows and rolling decision dashboards;
+- Dual benchmark suites (`python-slugify` and `rate-limiter`);
+- Interactive teaching demo and live campaign runner (`demo/`);
+- Presentation hub and technical deep-dives (`docs/`).
+

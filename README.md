@@ -74,15 +74,36 @@ lane, where you hold the answers, can see both kinds of mistake. (This is
 
 ## 3. What is in this repository
 
-Three distinct things live here. Do not confuse them.
+Four distinct areas live here. Do not confuse them.
 
-### 3a. The reusable product — `release-gate/`
+### 3a. The reusable product — `release-gate/` (v0.6.0)
 
-[`release-gate/`](release-gate/) is the standalone implementation for reuse
-across repositories. It is a Python 3.11+ CLI with a repository-owned
-`.release-gate.yaml`, versioned schemas, clean base/candidate workspaces,
-three-way policy, tamper-evident evidence, and a thin portable skill. It has no
-runtime dependency on the demo or on the A/B scaffolding.
+[`release-gate/`](release-gate/) is the standalone, production-ready implementation
+for reuse across repositories. It is an independent Python 3.11+ CLI with a
+repository-owned `.release-gate.yaml`, versioned JSON schemas (`schemas/`),
+clean candidate isolation using a private Git object database, base-trusted policy
+enforcement, three-way verdicts (`PASS`, `FAIL`, `NEEDS_HUMAN`), and thin
+portable assistant skills for GitHub Copilot, OpenAI Codex, Claude Code, and
+Google Antigravity. It has no runtime dependency on the demo or on the A/B
+scaffolding.
+
+Key capabilities in v0.6.0:
+- **Bounded Repair Workflow:** An automated, human-in-the-loop repair state
+  machine ($C0 \to C1 \to C2$) with an explicit 2-attempt budget, candidate
+  lineage tracking, disposable workspace isolation, and transactional apply
+  verified against SHA-256 digests.
+- **Assurance-Aware & Graphify Diagnosis:** Optional, read-only Graphify
+  diagnosis bounded to failed checks; reports unverified layers inside aggregate
+  suites without falsely claiming coverage.
+- **Decision Observability Dashboards:** Self-contained, non-gating rolling 10
+  and rolling 100 HTML/JSON dashboards (`_observability/`) and tamper-evident
+  per-run snapshots.
+- **Dual Benchmark Demos ([`release-gate/demo/`](release-gate/demo/)):**
+  1. `python-slugify` (Task X1): Packaging migration, ambient environment
+     confusion, uninstalled dependencies, and tampering defenses.
+  2. `rate-limiter`: In-process sliding-window rate limiter with 100% branch
+     coverage, an 8-mutant mutation gauntlet, brute-force differential oracle,
+     and the full bounded repair cycle ($C0 \to C1 \to C2$).
 
 Start with [`release-gate/README.md`](release-gate/README.md). This is the
 product to install for a new repository.
@@ -124,19 +145,19 @@ which was current, three copies of one component under two labels, the same
 concept ("gate outcome") defined nine incompatible ways. Keep that in mind
 when someone asks why any of this is necessary.
 
-### 3c. The demo — a minimum working version of the two lanes
+### 3c. The demo & evaluation campaign — minimum working versions of the two lanes
 
-Directory `demo/`. Small, and it runs. Everything below is about this.
+Directory `demo/`. Small, and it runs.
 
 The Bash interface at `demo/gate/gate.sh` remains supported unchanged for the
-X1 walkthrough. `A3-release-gate-service` is audited legacy source material;
+X1 teaching walkthrough. `A3-release-gate-service` is audited legacy source material;
 neither is the reusable product.
 
 ```
 demo/
 ├── setup_workbench.sh    clone python-slugify at a pinned green commit; reset between runs
 ├── tasks/
-│   ├── X1.md             the task card — what the AI is told (and nothing more); says which version is live
+│   ├── X1.md             the task card — what the AI is told; points to active version
 │   ├── X1_v1.md, X1_v2.md  frozen copies of each version — diff them to see the real change
 │   └── X1-CHANGES.md     why each version changed, and which runs used it
 ├── gate/
@@ -145,12 +166,26 @@ demo/
 ├── oracle/
 │   └── test_x1_oracle.py THE ANSWER KEY — hidden from the AI and from the gate
 ├── grade.sh              run the oracle, sort the run into a box, append to the run log
+├── campaign.sh           live campaign runner — N fresh Anthropic sessions through the gate
 ├── RUN.md                step-by-step: do a run yourself
 ├── DIAGRAMS.md           the flow and the HLD mapping, in Mermaid
 ├── CORPUS.md             which repos are on the bench and why
 ├── workbench/            (created by setup; not committed) the clone + venv the AI works in
-└── runs/                 (created per run) evidence.json, patch, per-check logs, RUNLOG.md
+└── runs/                 (created per run) evidence.json, patch, per-check logs, RUNLOG.md,
+                          campaign.csv, campaign-ledger.xlsx
 ```
+
+### 3d. Presentation suite and visual hub — `docs/`
+
+Directory `docs/`, launched locally via [`serve-presentations.sh`](serve-presentations.sh)
+(macOS/Linux) or [`serve-presentations.ps1`](serve-presentations.ps1) (Windows PowerShell):
+- **Presentation Hub (`docs/presentations.html`):** Interactive presentation
+  portal hosted on GitHub Pages and localhost.
+- **Deep-Dive Decks:** Includes *Code Assistant Skill & Plugin Development*,
+  *X1 — Behind the Scenes* (packaging and divergence walkthrough),
+  *Rate Limiter — Behind the Scenes* (bounded repair and mutation gauntlet),
+  and *Architecture Reference*.
+
 
 ---
 
@@ -299,6 +334,8 @@ does not exist on macOS — before any control was planted. Good.)
 
 ## 6. Running it
 
+### The Interactive Teaching Demo (`demo/`)
+
 **First time (2 minutes):**
 
 ```bash
@@ -315,67 +352,71 @@ bash demo/gate/gate.sh "$PWD/demo/workbench/python-slugify" "$PWD/demo/workbench
 bash demo/grade.sh run-01 <wall_seconds> <tokens|unknown> # 4. oracle → box → RUNLOG.md
 ```
 
-**To watch it refuse (30 seconds each):**
+**Automated Campaign Runs (`demo/campaign.sh`):**
+To execute automated multi-session evaluations against the gate (e.g. using Anthropic Claude models) and record them into `demo/runs/campaign-ledger.xlsx`:
+
+```bash
+bash demo/campaign.sh 5   # runs 5 automated sessions through the gate
+```
+
+**To watch the gate refuse (30 seconds each):**
 
 ```bash
 echo "# x" >> demo/workbench/python-slugify/test.py && bash demo/gate/gate.sh "$PWD/demo/workbench/python-slugify" "$PWD/demo/workbench/venv" try-tamper   # FAIL on scope
 bash demo/setup_workbench.sh reset
 ```
 
----
+### The Standalone Product Demos (`release-gate/demo/`)
 
-## 7. What the numbers will and will not tell you
-
-Run 1 proves the plumbing. Runs 2–5 give an average for minutes and tokens per
-run — the cost estimate.
-
-Five runs are **not** evidence the pipeline works. If every one of five runs
-is clean, the true failure rate could still be as high as 43%. This is the
-Wilson interval, computed by the scaffolding's own `statistics.py`:
-
-| clean runs | true failure rate could still be up to |
-|---|---|
-| 5 | 43% |
-| 10 | 28% |
-| 20 | 16% |
-| 30 | 11% |
-| 100 | 4% |
-
-So the honest sequence is: **5 runs to size the bill; the bill decides whether
-30 or 100 are affordable; 30-plus starts to be evidence.** Present it that way
-and the number survives a skeptic.
-
-Also: report *counts with denominators*, never one score. "1 false release in
-30 runs" is a statement. "97% quality" is not.
+See [`release-gate/demo/README.md`](release-gate/demo/README.md) for full instructions:
+- **`python-slugify`:** `uv run --python 3.12 --no-project python demo.py verify`
+- **`rate-limiter`:** `bash run.sh demo` (POSIX) or `.\run.ps1 demo` (PowerShell)
 
 ---
 
-## 8. What comes next, in order
+## 7. What the numbers tell us (Runs 1–5 and Beyond)
 
-1. **Runs 1–5** on X1 (this document).
-2. **A second and third repository** on the bench, each with a green baseline
-   from a clean clone and its own X-task and oracle. `itsdangerous` (297
-   tests, 0.6 s) and `cachetools` (312 tests, 4.4 s) are measured and admitted;
-   see `demo/CORPUS.md` for the full candidate table.
-3. **A stronger gate**, driven by what the runs reveal. Control 2 already
-   says where: the visible suite cannot see backend divergence.
-4. **The Evidence Diversity Mapper as a corpus audit** — "your three repos are
-   all pure libraries; your bench cannot see service-shaped code" — which is
-   cheap and tells you what the bench is blind to. Only after that, and only if
-   the audit says the bench is too narrow, synthetic repository generation.
-5. **The backtest** (NOTES N-8): replay the gate over ~200 real merged changes
-   in one of our own repos, using reverts as labels. Real code, free answer
-   key, one-sided (history cannot show false blocks) — but real.
+Runs 1–5 on Task X1 (card v2) are **completed** and logged in [`demo/runs/RUNLOG.md`](demo/runs/RUNLOG.md):
+
+| run_id | task | card | gate verdict | truth (oracle) | box | wall_s | cost | model |
+|---|---|---|---|---|---|---|---|---|
+| run-01 | X1 | v1 | NEEDS_HUMAN | oracle_error | escalated | 127 | 16.2 AIC | claude-haiku-4.5 |
+| run-01b | X1 | v1 | PASS | correct | good_pass | (re-gate after `pip install Unidecode`) | — | (same) |
+| run-02 | X1 | v2 | PASS | correct | good_pass | 103 | 16.6 AIC | claude-haiku-4.5 |
+| run-03 | X1 | v2 | PASS | correct | good_pass | 90 | 10.4 AIC | claude-haiku-4.5 |
+| run-04 | X1 | v2 | PASS | correct | good_pass | 92 | 11.4 AIC | claude-haiku-4.5 |
+| run-05 | X1 | v2 | PASS | correct | good_pass | 69 | 9.0 AIC | claude-haiku-4.5 |
+
+**Findings from the first five runs:**
+- **Cost & Latency:** Four clean v2 sessions averaged **88 seconds** and **~11.8 AIC** per run.
+- **Fail-Closed Working:** Run 1 proved that environment confusion (the model declaring a package in `setup.py` but failing to install it into the venv) safely results in `NEEDS_HUMAN` rather than a broken pass.
+- **What five clean runs do and do not say:** 4/4 good passes on v2 (5/5 with run-01b). By B5's Wilson interval, zero failures in $n=4$ still leaves the true failure rate possibly as high as **49%** ($n=5$ is $43\%$, $n=20$ is $16\%$, $n=30$ is $11\%$). Five runs sized the bill; automated campaigns (`campaign.sh`) expand the denominator.
+
+Always report *counts with denominators*, never one composite score. "1 false release in 30 runs" is an actionable statement. "97% quality" is not.
+
+---
+
+## 8. Roadmap & Current Implementation Status
+
+1. **Runs 1–5 on X1:** **Done.** Completed, costs sized (~88s, ~12 AIC), logged in `RUNLOG.md`.
+2. **Second benchmark repository:** **Done.** `rate-limiter` implemented in `release-gate/demo/rate-limiter/` with 100% branch coverage, 8-mutant mutation gauntlet, brute-force differential oracle, and bounded repair.
+3. **Standalone Product (v0.6.0):** **Done.** `release-gate/` CLI, bounded repair state machine ($C0 \to C1 \to C2$) with 2-attempt budget, read-only Graphify diagnosis, rolling 10/100 decision dashboards, and assistant skills.
+4. **Live Evaluation Campaigns:** **Done.** `campaign.sh` automated runner added, separating executor infrastructure failures (`EXEC_ERROR`) from gate verdicts in `campaign-ledger.xlsx`.
+5. **Presentation Hub & Decks:** **Done.** Interactive decks in `docs/` served via `serve-presentations.sh` / `.ps1`.
+6. **Next steps:**
+   - Add third benchmark repository (`itsdangerous` or `cachetools`; see `demo/CORPUS.md`).
+   - Run the Evidence Diversity Mapper as a corpus audit ("these repos are pure libraries; what service-shaped patterns are missing?").
+   - The backtest (NOTES N-8): Replay the gate over historical commits and reverts in target repositories.
 
 ---
 
 ## 9. Where to read more
 
-- [ORIGINS.md](ORIGINS.md) — the scaffolding explained: every original
-  artifact, which we use, what we still need.
-- [INDEX.md](INDEX.md) — where every artifact went; test status; sixteen
-  catalogued defects.
-- [NOTES.md](NOTES.md) — open questions. N-6 (why you need the offline lane)
-  and N-8 (the three questions a gate must answer) are the ones to read.
-- `demo/gate/gate.sh` — the gate itself. It is the best documentation of what
-  the gate does, because it *is* what the gate does.
+- [**`release-gate/README.md`**](release-gate/README.md) — The standalone product, bounded repair, CLI usage, and skill integration.
+- [**`release-gate/demo/README.md`**](release-gate/demo/README.md) — The standalone dual demos (`python-slugify` and `rate-limiter`).
+- [**`ORIGINS.md`**](ORIGINS.md) — The scaffolding explained: original artifacts, what was kept, and evolution.
+- [**`INDEX.md`**](INDEX.md) — Where every artifact went, test status, and sixteen catalogued defects.
+- [**`NOTES.md`**](NOTES.md) — Architecture decisions and open questions (`N-6` on offline measurement, `N-10` on rate limiter).
+- [**`docs/presentations.html`**](docs/presentations.html) — Interactive presentation hub for deep-dive slide decks.
+- `demo/gate/gate.sh` — The original bash teaching gate.
+

@@ -238,20 +238,43 @@ Two components also supplied files that their own declared structure does not li
 B6 also shows a recommended `pyproject.toml` and a pytest marker block, but presents them
 as guidance rather than as files. They were not written out.
 
-## Current implementation index — 2026-08-18
+## Current implementation index
 
-The repository-neutral product is now under [`release-gate/`](release-gate/):
+The repository contains the production product, the teaching demo, the presentation suite, and the historical scaffolding.
 
-- `src/release_gate/` — standalone engine and CLI;
-- `schemas/` — configuration, stable result, and manifest contracts;
-- `examples/` — generic, Python, and Node policies;
-- `skills/release-gate/` — portable invocation/reporting skill; and
-- `docs/` — canonical architecture, security, adoption, CLI, evidence, and
-  configuration documentation.
+### Standalone product — [`release-gate/`](release-gate/) (version 0.6.0)
 
-Historical A/B/E test counts and the sixteen defects above are preserved. A3
-is source material rather than a dependency; the Bash demo remains separately
-supported unchanged.
+- `src/release_gate/` — standalone engine, CLI, and bounded repair state machine ($C0 \to C1 \to C2$ with a 2-attempt budget);
+- `schemas/` — configuration, stable result, manifest, and decision report contracts;
+- `skills/release-gate/` — portable skills for GitHub Copilot, OpenAI Codex, Claude Code, and Antigravity;
+- `examples/` — approved configuration templates for Python, Node, and generic runtimes;
+- `docs/` — canonical architecture, security, adoption, CLI, evidence, and configuration documentation;
+- `demo/` — standalone reproducible benchmarks:
+  - `python-slugify/` — packaging migration, uninstalled dependencies, and tampering defenses;
+  - `rate-limiter/` — sliding-window rate limiter with 100% branch coverage, 8-mutant mutation gauntlet, brute-force differential oracle, and bounded repair;
+- `_observability/` — rolling 10 and rolling 100 gate-decision dashboards and tamper-evident run snapshots.
+
+### Teaching demo and campaigns — [`demo/`](demo/)
+
+- `gate/gate.sh` — original six-check bash teaching gate;
+- `tasks/` — task specification cards (`X1.md`, `X1_v1.md`, `X1_v2.md`);
+- `oracle/test_x1_oracle.py` — hidden ground truth tests;
+- `grade.sh` — four-box run classification;
+- `campaign.sh` — automated multi-session evaluation runner with Anthropic Claude models;
+- `runs/` — run artifacts, completed runs 1–5 (`RUNLOG.md`), `campaign.csv`, and `campaign-ledger.xlsx`.
+
+### Presentations and documentation — [`docs/`](docs/)
+
+- `presentations.html` — presentation hub;
+- Interactive slide decks (`code-assistant-skill-plugin-development.html`, `rate-limiter-behind-the-scenes.html`, `x1-behind-the-scenes.html`, `architecture.html`);
+- `serve-presentations.sh` and `serve-presentations.ps1` — local HTTP server scripts.
+
+### Knowledge graph — [`graphify-out/`](graphify-out/)
+
+- `graph.json` and `GRAPH_REPORT.md` — AST knowledge graph with node relationships and community detection.
+
+Historical A/B/E test counts and the sixteen defects above are preserved. A3 is source material rather than a dependency. The Bash demo remains separately supported unchanged.
+
 
 ## Two corrections that were applied
 
