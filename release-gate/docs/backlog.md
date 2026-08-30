@@ -10,6 +10,19 @@ This backlog captures strategic and tactical enhancements for the **Release Gate
 3. **Isolation Weaknesses:** Worktree and filesystem separation alone fail to isolate environment variables, credentials, caches, or network namespaces.
 4. **Passive Dashboards vs. Control Loops:** Shifting from observational telemetry to pre-agreed, blocking release policies and verifiable success criteria.
 
+## Implementation Status Audit (2026-08-30)
+
+This audit compares the current `release-gate/src/`, tests, and product documentation with each item's acceptance criteria. “Partial” means a related capability exists but the stated acceptance criteria are not yet satisfied; it should not be treated as complete.
+
+| Status | Items | Evidence / next action |
+| :--- | :--- | :--- |
+| **Delivered baseline (not previously represented as backlog items)** | Candidate reconstruction and base-trusted policy enforcement; bounded C0 → C1 → C2 repair protocol; tamper-evident evidence packages; rolling decision observability dashboards | Implemented in `src/release_gate/` and documented in `README.md`. These are product foundations, not completion of the enhancement items below. |
+| **Partial** | **BG-402**, **BG-502**, **BG-703**, **BG-705** | Versioned result/manifest/trace and verdict precedence exist, but there is no confidence ledger; the policy contract uses `PASS`/`FAIL`/`NEEDS_HUMAN` rather than the backlog's proposed routing states; lesson and outcome artifacts exist but are not yet reusable learning inputs. |
+| **Incomplete / blocked** | **BG-704** | Repair integration tests exist, but the suite currently fails before exercising the workflow because `tests/test_repair_integration.py` uses `sys.executable` without importing `sys`. Fix the harness and add guidance/lesson-content assertions. |
+| **Not started or explicitly deferred** | **BG-101**, **BG-102**, **BG-201**, **BG-202**, **BG-301**, **BG-302**, **BG-401**, **BG-501**, **BG-601**, **BG-602**, **BG-603**, **BG-701**, **BG-702** | No implementation satisfies the acceptance criteria. In particular, hard sandboxing, diff budgets, architectural/duplication analysis, code-mode execution, queue throttling, structured CLI guidance, and governed feedback learning remain future work. |
+
+The status labels above are the source of truth for roadmap grooming. Move an item to **Done** only when its acceptance criteria and qualification tests pass; code that merely provides a neighboring foundation stays **Partial**.
+
 ---
 
 ## Strategic Epics & Backlog Items
