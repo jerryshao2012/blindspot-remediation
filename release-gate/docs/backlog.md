@@ -16,16 +16,21 @@ This backlog captures strategic and tactical enhancements for the **Release Gate
 
 ```mermaid
 flowchart TD
-    A[Agent Change Candidate] --> B[Epic 1: Diff & Blast Radius Budget]
-    B -->|Pass Budget| C[Epic 3: Hard Sandbox Execution]
-    B -->|Exceeds Budget| R1[FAIL: Diff Budget Exceeded]
-    C --> D[Epic 6: Code Mode Verification Engine]
-    D --> E[Epic 2: Architectural Conformance & Intent Drift]
-    E --> F[Epic 4: Cognitive-Load Evidence Summarization]
-    F --> G[Epic 5: Release Policy & Error Budget Control Loop]
-    G -->|Automated Pass| H[MERGE / PASS]
-    G -->|Escalation| I[HUMAN_REVIEW_REQUIRED: Focused State Delta]
-    G -->|Policy Violation| J[FAIL: Policy Rejection]
+    A[Agent Change Candidate] --> B[Phase 1: Core Gate & Reviewer Evidence]
+    B --> C[Phase 2: Execution Safety & Verification Runtime]
+    C --> D[Phase 3: Analysis & Orchestration]
+    D --> E[Release Policy Decision]
+    E -->|Pass| H[MERGE / PASS]
+    E -->|Escalation| I[HUMAN_REVIEW_REQUIRED: Focused State Delta]
+    E -->|Policy Violation| J[FAIL: Policy Rejection]
+    E -->|Eligible Check Failure| R[Phase 0: Repair Workflow Foundation<br/>C0 → C1 → C2]
+    R -->|Fresh candidate| B
+    E --> K[BG-705: Structured Repair Outcome Dataset]
+    R --> K
+    K --> L[Phase 4: Governed Self-Improvement<br/>Proposal + Requalification]
+    L -->|Human approval| M[Versioned Capability Promotion]
+    L -->|Rejected / Needs review| I
+    M -.->|Next run only| B
 ```
 
 ---
@@ -109,29 +114,31 @@ The current Release Gate supports **within-session self-correction** (`C0 → C1
 ## Implementation Roadmap
 
 ```
-Phase 1: Cognitive Load Reduction & Gating (Q1)
-├── BG-101: Diff Size & Blast Radius Gates
-├── BG-401: System State Mutation Summaries
-└── BG-502: Multi-Tiered Three-Way Policy Engine
-
-Phase 2: Security, Isolation & Code Mode Foundations (Q2)
-├── BG-301: Container/MicroVM Sandbox Integration
-├── BG-302: Credential & Environment Leakage Scanner
-├── BG-102: Code Duplication & Bloat Detection
-└── BG-601: Code Mode Verification SDK & Runtime
-
-Phase 3: Advanced Tool Calling & Semantic Conformance (Q3)
-├── BG-602: Hybrid Tool Calling Router (Function vs Code Mode)
-├── BG-603: Code Mode Sandbox Diagnostics & Error Taxonomy
-├── BG-201: ADR Conformance Evaluator
-├── BG-202: LLM Judge Calibration & FP Tracking (<15% target)
-├── BG-402: Decision Provenance & Confidence Ledger
-└── BG-501: Review Budget Capacity Throttling
-
-Phase 4: Governed Self-Improvement (after qualification controls)
+Phase 0: Repair Workflow Foundation (qualification prerequisite)
 ├── BG-704: Repair Integration Qualification Health
 ├── BG-702: Structured Repair Guidance Channel
 ├── BG-703: Accurate Passing-Candidate Lessons
-├── BG-705: Structured Repair Outcome Dataset & Lineage
+└── BG-705: Structured Repair Outcome Dataset & Lineage
+
+Phase 1: Core Gate & Reviewer Evidence (Q1)
+├── BG-502: Multi-Tiered Three-Way Policy Engine
+├── BG-101: Diff Size & Blast Radius Gates
+├── BG-401: System State Mutation Summaries
+├── BG-402: Decision Provenance & Confidence Ledger
+└── BG-501: Review Budget Capacity Throttling
+
+Phase 2: Execution Safety & Verification Runtime (Q2)
+├── BG-301: Container/MicroVM Sandbox Integration
+├── BG-302: Credential & Environment Leakage Scanner
+├── BG-601: Code Mode Verification SDK & Runtime
+└── BG-603: Code Mode Sandbox Diagnostics & Error Taxonomy
+
+Phase 3: Analysis & Orchestration (Q3)
+├── BG-102: Code Duplication & Bloat Detection
+├── BG-201: ADR Conformance Evaluator
+├── BG-202: LLM Judge Calibration & FP Tracking (<15% target)
+└── BG-602: Hybrid Tool Calling Router (Function vs Code Mode)
+
+Phase 4: Governed Self-Improvement (after qualification controls)
 └── BG-701: Governed Repair Feedback Learning Loop
 ```
