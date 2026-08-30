@@ -93,6 +93,19 @@ flowchart TD
 
 ---
 
+### Epic 7: Governed Self-Improvement & Repair Learning
+**Goal:** Turn bounded repair evidence into reviewed, reproducible capability improvements without allowing the release gate to silently modify its own policy or become the developer.
+
+The current Release Gate supports **within-session self-correction** (`C0 → C1 → C2`) only. Cross-session feedback learning, automatic prompt/playbook/benchmark changes, and self-modifying assurance policy are intentionally deferred. The items below define the missing, separately governed learning layer.
+
+| Item ID | Title | Priority | Description & Acceptance Criteria |
+| :--- | :--- | :---: | :--- |
+| **BG-701** | **Governed Repair Feedback Learning Loop** | High | **Problem:** Repair sessions and rolling observability are recorded, but no later session consumes them to improve diagnosis or repair behavior. **Implementation:** Add a separate learner that consumes repair outcomes, human decisions, rollbacks, incidents, and new failure modes; generate versioned proposals for prompts, playbooks, benchmark cases, or model routing. **Acceptance Criteria:** Proposals are never applied automatically; each has provenance, an approver, a capability version, requalification evidence on a frozen benchmark, and a reversible promotion/rollback record. |
+| **BG-702** | **Expose Structured Repair Guidance to the Assistant** | High | **Problem:** `request_repair()` computes check-specific playbook guidance, but the `repair-request` CLI drops it, leaving the assistant with only failed check IDs and paths. **Implementation:** Return guidance plus safe references to the latest result and execution logs, clearly marked as untrusted diagnostic data. **Acceptance Criteria:** CLI and skill contract tests assert that guidance and diagnostic artifact locations reach every repair attempt without expanding approved paths or changing the verdict. |
+| **BG-703** | **Persist Accurate Passing-Candidate Lessons** | High | **Problem:** The success lesson proposal is generated from the pre-success session, so it cannot identify the candidate that just passed and is too generic to be reusable. **Implementation:** Generate the proposal from the updated attempt lineage and include failure fingerprint, changed paths, verification evidence, and the successful remediation pattern. **Acceptance Criteria:** A passing `C1`/`C2` proposal names the passing candidate, references its evidence, and is available to the governed learner; failed candidates remain preserved. |
+| **BG-704** | **Repair Integration Qualification Health** | High | **Problem:** The repair integration suite currently fails before exercising the workflow because `tests/test_repair_integration.py` uses `sys.executable` without importing `sys`. **Implementation:** Repair the test harness and make the qualification suite run the full C0/C1/C2, repeated-candidate, needs-human, guidance, and lesson-content scenarios. **Acceptance Criteria:** Ruff is clean, all repair integration tests execute (not collection-fail), and CI blocks release qualification on any harness error. |
+| **BG-705** | **Structured Repair Outcome Dataset & Lineage** | Medium | **Problem:** `RepairAttempt` stores hashes and verdicts but does not provide a normalized failure fingerprint, human outcome, cost, or causal classification for future analysis. **Implementation:** Add a versioned, append-only repair outcome record linked to every candidate and gate run. **Acceptance Criteria:** Learner inputs distinguish failed, corrected, abandoned, and rolled-back attempts; records include checks, artifacts, paths, timing/token cost where available, and immutable candidate lineage without exposing secrets. |
+
 ## Implementation Roadmap
 
 ```
@@ -114,4 +127,11 @@ Phase 3: Advanced Tool Calling & Semantic Conformance (Q3)
 ├── BG-202: LLM Judge Calibration & FP Tracking (<15% target)
 ├── BG-402: Decision Provenance & Confidence Ledger
 └── BG-501: Review Budget Capacity Throttling
+
+Phase 4: Governed Self-Improvement (after qualification controls)
+├── BG-704: Repair Integration Qualification Health
+├── BG-702: Structured Repair Guidance Channel
+├── BG-703: Accurate Passing-Candidate Lessons
+├── BG-705: Structured Repair Outcome Dataset & Lineage
+└── BG-701: Governed Repair Feedback Learning Loop
 ```
