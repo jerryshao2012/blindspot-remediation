@@ -1464,6 +1464,29 @@ def _stat_windows_relative_native(  # pragma: no cover - Windows CI
         _close_quietly(descriptor)
 
 
+def _windows_directory_path(directory_fd: int) -> str:  # pragma: no cover - Windows CI
+    """Resolve the live path backing an open directory handle."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    get_final_path = kernel32.GetFinalPathNameByHandleW
+    get_final_path.argtypes = (
+        wintypes.HANDLE,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+    )
+    get_final_path.restype = wintypes.DWORD
+    handle = wintypes.HANDLE(_windows_handle_from_fd(directory_fd))
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = get_final_path(handle, buffer, len(buffer), 0)
+    if length == 0 or length >= len(buffer):
+        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+    return buffer.value
+
+
 def _replace_windows_relative_native(  # pragma: no cover - Windows CI
     directory_fd: int, staged: _StagedPath, target: str
 ) -> None:
@@ -1478,35 +1501,19 @@ def _replace_windows_relative_native(  # pragma: no cover - Windows CI
         or _read_staged_payload(staged) != staged.payload
     ):
         raise OSError("staged observability handle changed before rename")
-    parent_handle = _windows_handle_from_fd(directory_fd)
-
-    class _FileRenameInformation(ctypes.Structure):
-        _fields_ = (
-            ("replace_if_exists", wintypes.BOOLEAN),
-            ("root_directory", wintypes.HANDLE),
-            ("file_name_length", wintypes.DWORD),
-            ("file_name", wintypes.WCHAR * (len(target) + 1)),
-        )
-
-    information = _FileRenameInformation()
-    information.replace_if_exists = 1
-    information.root_directory = wintypes.HANDLE(parent_handle)
-    information.file_name_length = len(target.encode("utf-16-le"))
-    information.file_name = target
+    directory_path = _windows_directory_path(directory_fd)
+    source_path = os.path.join(directory_path, staged.path.name)
+    target_path = os.path.join(directory_path, target)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
-    set_information = kernel32.SetFileInformationByHandle
-    set_information.argtypes = (
-        wintypes.HANDLE,
-        ctypes.c_int,
-        wintypes.LPVOID,
-        wintypes.DWORD,
-    )
-    set_information.restype = wintypes.BOOL
-    if not set_information(
-        wintypes.HANDLE(_windows_handle_from_fd(staged.descriptor)),
-        3,  # FileRenameInfo
-        ctypes.byref(information),
-        ctypes.sizeof(information),
+    move_file = kernel32.MoveFileExW
+    move_file.argtypes = (wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD)
+    move_file.restype = wintypes.BOOL
+    move_file_replace_existing = 0x1
+    move_file_write_through = 0x8
+    if not move_file(
+        source_path,
+        target_path,
+        move_file_replace_existing | move_file_write_through,
     ):
         raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
 
@@ -1588,7 +1595,9 @@ def _nt_create_relative_handle(  # pragma: no cover - Windows CI
 
     name_buffer = ctypes.create_unicode_buffer(name)
     length = len(name.encode("utf-16-le"))
-    unicode_name = _UnicodeString(length, length + 2, name_buffer)
+    unicode_name = _UnicodeString(
+        length, length + 2, ctypes.cast(name_buffer, wintypes.LPWSTR)
+    )
     attributes = _ObjectAttributes(
         ctypes.sizeof(_ObjectAttributes),
         wintypes.HANDLE(_windows_handle_from_fd(directory_fd)),

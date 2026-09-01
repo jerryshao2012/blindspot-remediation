@@ -48,7 +48,7 @@ prepare:
           - "3.12"
           - "--seed"
           - ".release-gate-venv"
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "UV_SYSTEM_CERTS", "UV_LINK_MODE"]
 
   - id: install-build-tools
     argv:
@@ -81,7 +81,7 @@ prepare:
           - "--disable-pip-version-check"
           - "setuptools>=61.2"
           - "wheel>=0.37"
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "UV_SYSTEM_CERTS", "UV_LINK_MODE"]
 
   - id: install-demo-dependencies
     argv:
@@ -120,7 +120,7 @@ prepare:
           - "pytest==8.4.2"
           - "pytest-cov==6.3.0"
           - "mypy==1.20.2"
-        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
+        inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "UV_SYSTEM_CERTS", "UV_LINK_MODE"]
 
 limits:
   stream_bytes: 1048576

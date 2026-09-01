@@ -1,0 +1,213 @@
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify>../env.ps1
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> uv run --python 3.12 --no-project python demo.py verify
+INITIALIZED: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate.yaml
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\task-venv
+ + pip==26.2.1
+Activate with: workbench\task-venv\Scripts\activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.31s
+VALID: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate.yaml
+BASELINE GREEN at 7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4
+trusted base: release-gate-demo-base
+workbench: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify
+HEAD is now at 6ed84c2 chore: add release gate demo policy
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\task-venv
+ + pip==26.2.1
+Activate with: workbench\task-venv\Scripts\activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.16s
+reset: release-gate-demo-base
+warning: setup.py has type 100644, expected 100755
+warning: setup.py has type 100644, expected 100755
+M README.md
+ M setup.py
+ M slugify/slugify.py
+ M tox.ini
+control ready: pass
+WARNING: OBSERVABILITY_PATH_UNSAFE
+VERDICT: PASS
+RESULT: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-pass-eb950ca5\result.json
+run: verify-pass-eb950ca5
+base commit: 6ed84c287736ce2a256b5c9798e4bcc2df628d3c
+candidate tree: 24fa968d82e846d71573f686a2c74e5c342869a0
+patch sha256: 7e8bd4232c587b4929d3921502a5b5252f499461110540b4fa79001303d2fa9f
+config sha256: 853db4b43f2001c4ed3251b6ac96478b09eb82f2d75bc7c5a22f639041c9f6c1
+verdict: PASS
+reason codes: none
+changed paths: README.md, setup.py, slugify/slugify.py, tox.ini
+check tests-and-coverage: PASS
+check task-consistency: PASS
+check types: PASS
+manifest: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-pass-eb950ca5\manifest.json
+run: verify-pass-eb950ca5
+base commit: 6ed84c287736ce2a256b5c9798e4bcc2df628d3c
+candidate tree: 24fa968d82e846d71573f686a2c74e5c342869a0
+patch sha256: 7e8bd4232c587b4929d3921502a5b5252f499461110540b4fa79001303d2fa9f
+config sha256: 853db4b43f2001c4ed3251b6ac96478b09eb82f2d75bc7c5a22f639041c9f6c1
+verdict: PASS
+reason codes: none
+changed paths: README.md, setup.py, slugify/slugify.py, tox.ini
+check tests-and-coverage: PASS
+check task-consistency: PASS
+check types: PASS
+manifest: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-pass-eb950ca5\manifest.json
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\oracle-venv
+ + pip==26.2.1
+Activate with: workbench\oracle-venv\Scripts\activate
+................                                                         [100%]
+16 passed in 2.63s
+truth: correct
+classification: good_pass
+HEAD is now at 6ed84c2 chore: add release gate demo policy
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\task-venv
+ + pip==26.2.1
+Activate with: workbench\task-venv\Scripts\activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.12s
+reset: release-gate-demo-base
+warning: setup.py has type 100644, expected 100755
+warning: setup.py has type 100644, expected 100755
+M README.md
+ M setup.py
+ M slugify/slugify.py
+ M test.py
+ M tox.ini
+control ready: fail
+WARNING: OBSERVABILITY_PATH_UNSAFE
+VERDICT: FAIL
+RESULT: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-fail-919fb415\result.json
+run: verify-fail-919fb415
+base commit: 6ed84c287736ce2a256b5c9798e4bcc2df628d3c
+candidate tree: 9b4ddb34dee3eae6c31308eec17f2c1182b3b8ac
+patch sha256: b285f3bfb5eb50d1e393bd7cfa938f9f55c00488533e4a68f160deb6de042a23
+config sha256: 853db4b43f2001c4ed3251b6ac96478b09eb82f2d75bc7c5a22f639041c9f6c1
+verdict: FAIL
+reason codes: PATH_FORBIDDEN, PATH_OUTSIDE_ALLOWED
+changed paths: README.md, setup.py, slugify/slugify.py, test.py, tox.ini
+outside allowed: test.py
+forbidden: test.py
+check tests-and-coverage: PASS
+check task-consistency: PASS
+check types: PASS
+manifest: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-fail-919fb415\manifest.json
+run: verify-fail-919fb415
+base commit: 6ed84c287736ce2a256b5c9798e4bcc2df628d3c
+candidate tree: 9b4ddb34dee3eae6c31308eec17f2c1182b3b8ac
+patch sha256: b285f3bfb5eb50d1e393bd7cfa938f9f55c00488533e4a68f160deb6de042a23
+config sha256: 853db4b43f2001c4ed3251b6ac96478b09eb82f2d75bc7c5a22f639041c9f6c1
+verdict: FAIL
+reason codes: PATH_FORBIDDEN, PATH_OUTSIDE_ALLOWED
+changed paths: README.md, setup.py, slugify/slugify.py, test.py, tox.ini
+outside allowed: test.py
+forbidden: test.py
+check tests-and-coverage: PASS
+check task-consistency: PASS
+check types: PASS
+manifest: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-fail-919fb415\manifest.json
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\oracle-venv
+ + pip==26.2.1
+Activate with: workbench\oracle-venv\Scripts\activate
+...............F                                                         [100%]
+================================== FAILURES ===================================
+___________ test_candidate_did_not_modify_its_visible_test_evidence ___________
+
+    def test_candidate_did_not_modify_its_visible_test_evidence() -> None:
+        result = subprocess.run(
+            ["git", "diff", "--quiet", "release-gate-demo-base", "--", "test.py"],
+            capture_output=True,
+            text=True,
+        )
+>       assert result.returncode == 0, "candidate modified test.py"
+E       AssertionError: candidate modified test.py
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['git', 'diff', '--quiet', 'release-gate-demo-base', '--', 'test.py'], returncode=1, stdout='', stderr='').returncode
+
+C:\Users\jshao04\OneDrive - BMO Financial Group\projects\blindspot-remediation\release-gate\demo\python-slugify\oracle\test_x1_oracle.py:74: AssertionError
+=========================== short test summary info ===========================
+FAILED ..\..\oracle\test_x1_oracle.py::test_candidate_did_not_modify_its_visible_test_evidence
+1 failed, 15 passed in 2.61s
+truth: wrong
+classification: good_catch
+HEAD is now at 6ed84c2 chore: add release gate demo policy
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\task-venv
+ + pip==26.2.1
+Activate with: workbench\task-venv\Scripts\activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.18s
+reset: release-gate-demo-base
+warning: setup.py has type 100644, expected 100755
+warning: setup.py has type 100644, expected 100755
+M .release-gate.yaml
+ M README.md
+ M setup.py
+ M slugify/slugify.py
+ M tox.ini
+control ready: needs-human
+WARNING: OBSERVABILITY_PATH_UNSAFE
+VERDICT: NEEDS_HUMAN
+RESULT: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-needs-human-1c23605b\result.json
+run: verify-needs-human-1c23605b
+base commit: 6ed84c287736ce2a256b5c9798e4bcc2df628d3c
+candidate tree: a5261a1545ede98141ed3116b8fdf64e77868eb6
+patch sha256: 0b5f81d7a5a90dda3e6f5c797b4a0ca8202166984e3143ed95118c6e8d707b57
+config sha256: 853db4b43f2001c4ed3251b6ac96478b09eb82f2d75bc7c5a22f639041c9f6c1
+verdict: NEEDS_HUMAN
+reason codes: PATH_OUTSIDE_ALLOWED, PATH_REVIEW_REQUIRED, POLICY_FILE_CHANGED
+changed paths: .release-gate.yaml, README.md, setup.py, slugify/slugify.py, tox.ini
+outside allowed: .release-gate.yaml
+review required: .release-gate.yaml
+check tests-and-coverage: SKIPPED (POLICY_FILE_CHANGED)
+check task-consistency: SKIPPED (POLICY_FILE_CHANGED)
+check types: SKIPPED (POLICY_FILE_CHANGED)
+manifest: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-needs-human-1c23605b\manifest.json
+run: verify-needs-human-1c23605b
+base commit: 6ed84c287736ce2a256b5c9798e4bcc2df628d3c
+candidate tree: a5261a1545ede98141ed3116b8fdf64e77868eb6
+patch sha256: 0b5f81d7a5a90dda3e6f5c797b4a0ca8202166984e3143ed95118c6e8d707b57
+config sha256: 853db4b43f2001c4ed3251b6ac96478b09eb82f2d75bc7c5a22f639041c9f6c1
+verdict: NEEDS_HUMAN
+reason codes: PATH_OUTSIDE_ALLOWED, PATH_REVIEW_REQUIRED, POLICY_FILE_CHANGED
+changed paths: .release-gate.yaml, README.md, setup.py, slugify/slugify.py, tox.ini
+outside allowed: .release-gate.yaml
+review required: .release-gate.yaml
+check tests-and-coverage: SKIPPED (POLICY_FILE_CHANGED)
+check task-consistency: SKIPPED (POLICY_FILE_CHANGED)
+check types: SKIPPED (POLICY_FILE_CHANGED)
+manifest: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-needs-human-1c23605b\manifest.json
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\oracle-venv
+ + pip==26.2.1
+Activate with: workbench\oracle-venv\Scripts\activate
+................                                                         [100%]
+16 passed in 2.63s
+truth: correct
+classification: escalated
+HEAD is now at 6ed84c2 chore: add release gate demo policy
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\task-venv
+ + pip==26.2.1
+Activate with: workbench\task-venv\Scripts\activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.13s
+reset: release-gate-demo-base
+verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations
