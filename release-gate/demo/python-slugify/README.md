@@ -15,6 +15,7 @@ installs dependencies in fresh evaluation workspaces.
 |---|---|
 | Verify setup and all three verdict controls | Follow [automated verification](#automated-verification). |
 | Let GitHub Copilot CLI implement and gate X1 | Follow [interactive Copilot CLI walkthrough](#interactive-copilot-cli-walkthrough). |
+| Run the gate like a normal repository without a hidden oracle | Follow [release gate without an oracle](#release-gate-without-an-oracle). |
 | Copilot CLI is blocked by your network | Use [VS Code Copilot Chat](#vs-code-copilot-chat). |
 | Demonstrate policy generation instead of the fixed experiment | See [guided initialization](#optional-guided-initialization). |
 
@@ -209,6 +210,136 @@ the verdict exists. It cannot change or retry that verdict.
 
 `PASS` means only that the recorded policy accepted this candidate. It is not
 a merge, deployment, security attestation, or proof that no defect exists.
+
+## Release Gate without an oracle
+
+This session applies the adoption guidance for repositories that do not have
+external hidden oracles. Treat `python-slugify` like a normal maintained
+repository: rely on the reviewed `.release-gate.yaml`, existing tests, coverage,
+type checking, task-consistency checks, and scope controls. Do not run
+`demo.py grade`; that command is benchmark-only oracle analysis.
+
+### 1. Create the trusted base
+
+Start from `release-gate/demo/python-slugify`:
+
+```powershell
+uv run --python 3.12 --no-project python demo.py doctor
+uv run --python 3.12 --no-project python demo.py setup
+```
+
+```zsh
+uv run --python 3.12 --no-project python demo.py doctor
+uv run --python 3.12 --no-project python demo.py setup
+```
+
+Setup commits the reviewed policy and tags the trusted base as
+`release-gate-demo-base`. In a real repository, this corresponds to reviewing
+and committing `.release-gate.yaml` plus every script it invokes before asking
+an assistant to make candidate changes.
+
+### 2. Review the policy as the assurance map
+
+Open [the reviewed demo policy](assets/.release-gate.yaml) and confirm what the
+gate can and cannot claim:
+
+| Assurance claim | Demo check | Mode | Limitation without an oracle |
+|---|---|---|---|
+| Existing unit behavior does not regress | `tests-and-coverage` with JUnit assertions | Differential | Covers the repository test suite, not every transliteration input. |
+| Candidate keeps useful coverage | `tests-and-coverage` with coverage assertions | Candidate and differential | Coverage is a proxy for exercised code, not correctness. |
+| The backend migration is applied consistently | `task-consistency` | Candidate | Searches current required files for `text-unidecode` and `text_unidecode`; it does not prove semantic equivalence. |
+| Type-checkable package surface remains acceptable | `types` | Candidate | Advisory only; missing imports are ignored. |
+| Candidate stays inside reviewed task scope | `scope.allowed_paths`, `forbidden_paths`, and `review_required_paths` | Candidate diff | Blocks or escalates path changes, but does not review business intent. |
+
+The hidden oracle checks in this demo would be recorded as `UNAVAILABLE` for a
+normal repository run. A `PASS` therefore means the candidate satisfied this
+reviewed policy; it is not a proof that every possible slugification result is
+correct.
+
+### 3. Produce or apply a candidate
+
+For a live assistant session, copy [the frozen task card](assets/TASK.md), start
+the assistant inside `workbench/python-slugify`, and let it edit the candidate.
+Then run the gate as shown in step 4.
+
+For a deterministic no-oracle session, apply the known good candidate instead:
+
+```powershell
+uv run --python 3.12 --no-project python demo.py control pass
+```
+
+```zsh
+uv run --python 3.12 --no-project python demo.py control pass
+```
+
+This creates the same kind of candidate an assistant is expected to produce:
+`setup.py`, `slugify/slugify.py`, `README.md`, and `tox.ini` are updated while
+`test.py` and `.release-gate.yaml` remain unchanged.
+
+### 4. Validate and run only Release Gate
+
+Run the policy validator and verdict engine against the trusted base:
+
+```powershell
+release-gate validate --repo .\workbench\python-slugify
+release-gate run --repo .\workbench\python-slugify --base release-gate-demo-base
+```
+
+```zsh
+release-gate validate --repo ./workbench/python-slugify
+release-gate run --repo ./workbench/python-slugify --base release-gate-demo-base
+```
+
+Copy the absolute path printed after `RESULT:`. Exit codes 0, 1, and 2 are
+stable verdicts: `PASS`, `FAIL`, and `NEEDS_HUMAN`. Exit 3 or 4 is an
+operational error, not a release decision.
+
+### 5. Inspect the evidence, but do not grade with the oracle
+
+Use the demo inspector to summarize the recorded gate result:
+
+```powershell
+uv run --python 3.12 --no-project python demo.py inspect --result "C:\absolute\path\to\result.json"
+```
+
+```zsh
+uv run --python 3.12 --no-project python demo.py inspect --result "/absolute/path/to/result.json"
+```
+
+Read the verdict, reason codes, changed paths, scope findings, and each check
+status from `result.json`. For the deterministic `pass` control, the expected
+gate result is `PASS` with only the four reviewed task files changed. Do not run
+`demo.py grade`; that command asks the hidden oracle whether the gate decision
+matched benchmark truth, which a normal repository does not have.
+
+Release handling without an oracle is therefore:
+
+| Gate verdict | Repository action |
+|---|---|
+| `PASS` | Eligible for human review under the recorded policy. Review the diff and evidence before merge. |
+| `FAIL` | Block release; inspect failed checks and scope findings. |
+| `NEEDS_HUMAN` | Escalate because required evidence is unavailable, policy changed, or review-required files changed. |
+
+### 6. Optional negative controls without oracle truth
+
+You can still test policy calibration without invoking an oracle. Reset, apply
+one control, run the gate, and inspect `result.json`:
+
+```powershell
+uv run --python 3.12 --no-project python demo.py reset
+uv run --python 3.12 --no-project python demo.py control fail
+release-gate run --repo .\workbench\python-slugify --base release-gate-demo-base
+```
+
+```zsh
+uv run --python 3.12 --no-project python demo.py reset
+uv run --python 3.12 --no-project python demo.py control fail
+release-gate run --repo ./workbench/python-slugify --base release-gate-demo-base
+```
+
+Repeat with `needs-human` to confirm policy tampering escalates. These controls
+prove that the reviewed policy blocks known bad shapes; they do not create a
+perfect correctness oracle.
 
 ## 6. Demonstrate every verdict
 
