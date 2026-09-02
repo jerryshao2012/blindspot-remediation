@@ -1,0 +1,63 @@
+PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> uv run --python 3.12 --no-project python demo.py doctor
+git: C:\Program Files\Git\bin\git.EXE
+uv: C:\Users\jshao04\.local\bin\uv.EXE
+copilot: c:\Users\jshao04\AppData\Roaming\Code\User\globalStorage\github.copilot-chat\copilotCli\copilot.BAT
+release-gate: C:\projects\blindspot-remediation\release-gate\.venv\Scripts\release-gate.EXE
+runner python: 3.12.3
+evaluation python: C:\projects\blindspot-remediation\release-gate\.venv\Scripts\python.exe
+doctor: ready
+PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> uv run --python 3.12 --no-project python demo.py setup
+INITIALIZED: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate.yaml
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+Using CPython 3.12.3 interpreter at: C:\Program Files\Python\Python39\python.exe
+Creating virtual environment with seed packages at: workbench\task-venv
+ + pip==26.2.1
+Activate with: workbench\task-venv\Scripts\activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.24s
+VALID: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate.yaml
+BASELINE GREEN at 7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4
+trusted base: release-gate-demo-base
+workbench: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify
+PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> release-gate validate --repo ./workbench/python-slugify
+VALID
+
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> Set-Location 'C:\projects\blindspot-remediation\release-gate\demo\python-slugify'
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> Test-Path '.\workbench\python-slugify\.git'
+True
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> git -C .\workbench\python-slugify apply --check ..\..\controls\pass.patch
+warning: setup.py has type 100644, expected 100755
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> git -C .\workbench\python-slugify apply ..\..\controls\pass.patch
+warning: setup.py has type 100644, expected 100755
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> git -C .\workbench\python-slugify status --short
+ M README.md
+ M setup.py
+ M slugify/slugify.py
+ M tox.ini
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> git -C .\workbench\python-slugify diff --stat release-gate-demo-base --
+ README.md          | 10 ++--------
+ setup.py           |  4 ++--
+ slugify/slugify.py |  5 +----
+ tox.ini            | 18 +++++++-----------
+ 4 files changed, 12 insertions(+), 25 deletions(-)
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> release-gate validate --repo .\workbench\python-slugify
+VALID: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate.yaml
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> release-gate run --repo .\workbench\python-slugify --base release-gate-demo-base
+WARNING: OBSERVABILITY_PATH_UNSAFE
+VERDICT: PASS
+RESULT: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate\runs\20260902T153230Z-0b1d3f349b56\result.json
+(release-gate) PS C:\projects\blindspot-remediation\release-gate\demo\python-slugify> uv run --python 3.12 --no-project python demo.py inspect --result "C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate\runs\20260902T153230Z-0b1d3f349b56\result.json"
+
+run: 20260902T153230Z-0b1d3f349b56
+base commit: a5d82da63b0a40d0de639ec1293e8d1d3c3e0307
+candidate tree: 24fa968d82e846d71573f686a2c74e5c342869a0
+patch sha256: 7e8bd4232c587b4929d3921502a5b5252f499461110540b4fa79001303d2fa9f
+config sha256: 853db4b43f2001c4ed3251b6ac96478b09eb82f2d75bc7c5a22f639041c9f6c1
+verdict: PASS
+reason codes: none
+changed paths: README.md, setup.py, slugify/slugify.py, tox.ini
+check tests-and-coverage: PASS
+check task-consistency: PASS
+check types: PASS
+manifest: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate\runs\20260902T153230Z-0b1d3f349b56\manifest.json
