@@ -82,16 +82,24 @@ trusted base: release-gate-demo-base
 workbench: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify
 ```
 
-An initial policy validation command also returned `VALID` before candidate
-changes were applied:
+## Let Copilot implement X1
+
+Open [the complete frozen task card](assets/TASK.md) and copy all of it. Do not include hints or mention the oracle.
+
+Start Copilot inside the generated candidate repository:
 
 ```powershell
-release-gate validate --repo ./workbench/python-slugify
+cd workbench\python-slugify
+copilot
 ```
 
-```text
-VALID
+```zsh
+cd workbench/python-slugify
+copilot
 ```
+
+Paste the task card and let Copilot edit and test the candidate. Review `/diff`.
+Do not accept changes to `test.py`, `.release-gate.yaml`, or evidence.
 
 ## Candidate Preparation
 
