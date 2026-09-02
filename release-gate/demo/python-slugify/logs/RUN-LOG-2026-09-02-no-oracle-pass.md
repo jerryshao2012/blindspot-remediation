@@ -101,6 +101,8 @@ copilot
 Paste the task card and let Copilot edit and test the candidate. Review `/diff`.
 Do not accept changes to `test.py`, `.release-gate.yaml`, or evidence.
 
+![Github Copilot](Screenshot%202026-09-02%20130341.png)
+
 ## Candidate Preparation
 
 The generated candidate repository was verified:
