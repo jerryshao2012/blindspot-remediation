@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo 1 - Release Gate Executive Walkthrough</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230075be'/%3E%3Cpath d='M8 8h16v5H13v6h11v5H8z' fill='white'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f5f6f7;
+    --paper-deep: #e6f9fe;
+    --white: #fefefe;
+    --ink: #001928;
+    --muted: #646c76;
+    --muted-dark: #8b949e;
+    --line: rgba(0,25,40,.16);
+    --soft-line: rgba(0,25,40,.09);
+    --terminal: #001928;
+    --terminal-soft: #003552;
+    --blue: #0075be;
+    --blue-bright: #38a5e8;
+    --blue-soft: rgba(0,117,190,.12);
+    --cyan: #009ec9;
+    --green: #00b88c;
+    --green-bright: #00e7b4;
+    --amber: #d99100;
+    --amber-bright: #ffc827;
+    --red: #e9425f;
+    --font-display: "Heebo", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+    --title-size: clamp(2.2rem, 5.8vw, 5.2rem);
+    --h2-size: clamp(1.45rem, 3.2vw, 3.1rem);
+    --h3-size: clamp(0.95rem, 1.6vw, 1.4rem);
+    --body-size: clamp(.78rem, 1.1vw, 1.02rem);
+    --small-size: clamp(.64rem, .86vw, .82rem);
+    --micro-size: clamp(.56rem, .72vw, .7rem);
+    --slide-padding: clamp(1rem, 4vw, 4rem);
+    --content-gap: clamp(0.5rem, 2vw, 2rem);
+    --element-gap: clamp(0.25rem, 1vw, 1rem);
+    --ease: cubic-bezier(.16,1,.3,1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  /* ===========================================
+     VIEWPORT FITTING: MANDATORY BASE STYLES
+     Include this ENTIRE file in every presentation.
+     These styles ensure slides fit exactly in the viewport.
+     =========================================== */
+
+  /* 1. Lock html/body to viewport */
+  html, body {
+      height: 100%;
+      overflow-x: hidden;
+  }
+
+  html {
+      scroll-snap-type: y mandatory;
+      scroll-behavior: smooth;
+  }
+
+  /* 2. Each slide = exact viewport height */
+  .slide {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh; /* Dynamic viewport height for mobile browsers */
+      overflow: hidden; /* CRITICAL: Prevent ANY overflow */
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+  }
+
+  /* 3. Content container with flex for centering */
+  .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      max-height: 100%;
+      overflow: hidden; /* Double-protection against overflow */
+      padding: var(--slide-padding);
+  }
+
+  /* 4. ALL typography uses clamp() for responsive scaling */
+  :root {
+      /* Titles scale from mobile to desktop */
+      --title-size: clamp(1.5rem, 5vw, 4rem);
+      --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+      --h3-size: clamp(1rem, 2.5vw, 1.75rem);
+
+      /* Body text */
+      --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+      --small-size: clamp(0.65rem, 1vw, 0.875rem);
+
+      /* Spacing scales with viewport */
+      --slide-padding: clamp(1rem, 4vw, 4rem);
+      --content-gap: clamp(0.5rem, 2vw, 2rem);
+      --element-gap: clamp(0.25rem, 1vw, 1rem);
+  }
+
+  /* 5. Cards/containers use viewport-relative max sizes */
+  .card, .container, .content-box {
+      max-width: min(90vw, 1000px);
+      max-height: min(80vh, 700px);
+  }
+
+  /* 6. Lists auto-scale with viewport */
+  .feature-list, .bullet-list {
+      gap: clamp(0.4rem, 1vh, 1rem);
+  }
+
+  .feature-list li, .bullet-list li {
+      font-size: var(--body-size);
+      line-height: 1.4;
+  }
+
+  /* 7. Grids adapt to available space */
+  .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+      gap: clamp(0.5rem, 1.5vw, 1rem);
+  }
+
+  /* 8. Images constrained to viewport */
+  img, .image-container {
+      max-width: 100%;
+      max-height: min(50vh, 400px);
+      object-fit: contain;
+  }
+
+  /* ===========================================
+     RESPONSIVE BREAKPOINTS
+     Aggressive scaling for smaller viewports
+     =========================================== */
+
+  /* Short viewports (< 700px height) */
+  @media (max-height: 700px) {
+      :root {
+          --slide-padding: clamp(0.75rem, 3vw, 2rem);
+          --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+          --title-size: clamp(1.25rem, 4.5vw, 2.5rem);
+          --h2-size: clamp(1rem, 3vw, 1.75rem);
+      }
+  }
+
+  /* Very short viewports (< 600px height) */
+  @media (max-height: 600px) {
+      :root {
+          --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+          --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+          --title-size: clamp(1.1rem, 4vw, 2rem);
+          --body-size: clamp(0.7rem, 1.2vw, 0.95rem);
+      }
+
+      /* Hide non-essential elements */
+      .nav-dots, .keyboard-hint, .decorative {
+          display: none;
+      }
+  }
+
+  /* Extremely short (landscape phones, < 500px height) */
+  @media (max-height: 500px) {
+      :root {
+          --slide-padding: clamp(0.4rem, 2vw, 1rem);
+          --title-size: clamp(1rem, 3.5vw, 1.5rem);
+          --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+          --body-size: clamp(0.65rem, 1vw, 0.85rem);
+      }
+  }
+
+  /* Narrow viewports (< 600px width) */
+  @media (max-width: 600px) {
+      :root {
+          --title-size: clamp(1.25rem, 7vw, 2.5rem);
+      }
+
+      /* Stack grids vertically */
+      .grid {
+          grid-template-columns: 1fr;
+      }
+  }
+
+  /* ===========================================
+     REDUCED MOTION
+     Respect user preferences
+     =========================================== */
+  @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.2s !important;
+      }
+
+      html {
+          scroll-behavior: auto;
+      }
+  }
+
+  body {
+    font-family: var(--font-display);
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  main {
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+  }
+
+  .topbar {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 40;
+    display: flex;
+    justify-content: space-between;
+    padding: .7rem var(--slide-padding) .4rem;
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: linear-gradient(var(--paper) 65%, transparent);
+    pointer-events: none;
+  }
+
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: var(--blue);
+    z-index: 50;
+    width: 0;
+    transition: width .3s var(--ease);
+  }
+
+  .counter,
+  .hints {
+    position: fixed;
+    bottom: .7rem;
+    z-index: 40;
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    color: var(--muted-dark);
+  }
+
+  .counter { right: var(--slide-padding); }
+  .hints { left: var(--slide-padding); }
+
+  .nav-dots {
+    position: fixed;
+    right: .9rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    z-index: 40;
+  }
+
+  .nav-dots button {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid var(--muted-dark);
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    transition: all .2s;
+  }
+
+  .nav-dots button.active {
+    background: var(--blue);
+    border-color: var(--blue);
+    transform: scale(1.25);
+  }
+
+  .slide {
+    justify-content: center;
+    padding: calc(var(--slide-padding) + 3.4rem) var(--slide-padding) calc(var(--slide-padding) * .8);
+    background:
+      linear-gradient(120deg, rgba(230,249,254,.75), transparent 38%),
+      var(--paper);
+  }
+
+  .slide:nth-child(even) {
+    background:
+      linear-gradient(145deg, rgba(255,255,255,.9), transparent 55%),
+      var(--paper);
+  }
+
+  .kicker {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: .65rem;
+    font-family: var(--font-mono);
+    font-size: var(--small-size);
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--blue);
+  }
+
+  .kicker::before {
+    content: "";
+    width: 2rem;
+    height: 2px;
+    background: var(--blue);
+  }
+
+  h1, h2 {
+    max-width: 15ch;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.05;
+  }
+
+  h1 { font-size: var(--title-size); }
+  h2 {
+    font-size: var(--h2-size);
+    margin-bottom: clamp(.8rem, 2vh, 1.4rem);
+  }
+
+  .lead {
+    color: var(--muted);
+    font-size: var(--body-size);
+    line-height: 1.58;
+    max-width: 62ch;
+  }
+
+  .src {
+    margin-top: .9rem;
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    color: var(--muted-dark);
+  }
+
+  .src::before {
+    content: "source - ";
+    color: var(--blue);
+  }
+
+  .summary-grid,
+  .demo-grid,
+  .takeaway-grid,
+  .appendix-grid {
+    display: grid;
+    gap: clamp(.7rem, 1.4vw, 1.1rem);
+    margin-top: clamp(.8rem, 2vh, 1.35rem);
+  }
+
+  .summary-grid { grid-template-columns: 1.05fr 1fr; align-items: stretch; }
+  .demo-grid { grid-template-columns: .9fr 1.1fr; align-items: stretch; }
+  .takeaway-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .appendix-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .panel,
+  .card {
+    background: var(--white);
+    border: 1px solid var(--soft-line);
+    border-radius: 10px;
+    padding: clamp(.75rem, 1.4vw, 1.05rem);
+    box-shadow: 0 4px 16px rgba(0,25,40,.035);
+  }
+
+  .panel.large {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: .8rem;
+    border-left: 4px solid var(--blue);
+  }
+
+  .card h3,
+  .panel h3,
+  .lane-label {
+    margin-bottom: .45rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    font-weight: 600;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  .card p,
+  .panel p,
+  .card li,
+  .panel li {
+    color: var(--ink);
+    font-size: var(--small-size);
+    line-height: 1.55;
+  }
+
+  .card ul,
+  .panel ul {
+    list-style: none;
+    display: grid;
+    gap: .35rem;
+  }
+
+  .card li,
+  .panel li {
+    padding-left: 1em;
+    text-indent: -1em;
+  }
+
+  .card li::before,
+  .panel li::before {
+    content: "- ";
+    color: var(--muted-dark);
+  }
+
+  .metric-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .65rem;
+  }
+
+  .metric {
+    padding: .75rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+  }
+
+  .metric strong {
+    display: block;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: clamp(1.05rem, 2.2vw, 1.8rem);
+    line-height: 1;
+  }
+
+  .metric span {
+    display: block;
+    margin-top: .25rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: .45rem;
+  }
+
+  .flow-step {
+    min-height: clamp(5rem, 13vh, 7rem);
+    padding: .65rem;
+    border: 1px solid var(--soft-line);
+    border-bottom: 3px solid var(--blue);
+    border-radius: 8px;
+    background: var(--white);
+  }
+
+  .flow-step:nth-child(4) { border-bottom-color: var(--amber); }
+  .flow-step:nth-child(5) { border-bottom-color: var(--cyan); }
+  .flow-step:nth-child(6) { border-bottom-color: var(--green); }
+
+  .flow-step b {
+    display: block;
+    margin-bottom: .25rem;
+    color: var(--muted-dark);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+  }
+
+  .flow-step span {
+    color: var(--ink);
+    font-size: var(--small-size);
+    line-height: 1.35;
+  }
+
+  .dependency-map {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .55rem;
+    margin-top: .9rem;
+  }
+
+  .dep {
+    padding: .7rem;
+    min-height: 6.1rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--white);
+  }
+
+  .dep b {
+    display: block;
+    margin-bottom: .25rem;
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    color: var(--blue);
+  }
+
+  .dep span {
+    display: block;
+    color: var(--muted);
+    font-size: var(--small-size);
+    line-height: 1.45;
+  }
+
+  .stage-list {
+    display: grid;
+    gap: .55rem;
+  }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 5.8rem 1fr;
+    gap: .75rem;
+    align-items: start;
+    padding: .65rem .75rem;
+    border: 1px solid var(--soft-line);
+    border-radius: 8px;
+    background: var(--white);
+  }
+
+  .stage b {
+    color: var(--blue);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .stage span {
+    color: var(--ink);
+    font-size: var(--small-size);
+    line-height: 1.45;
+  }
+
+  .term {
+    background: var(--terminal);
+    color: #dfe9f0;
+    border-radius: 10px;
+    padding: .85rem 1rem;
+    font-family: var(--font-mono);
+    font-size: var(--small-size);
+    line-height: 1.55;
+    overflow: hidden;
+  }
+
+  .term .ok { color: var(--green-bright); }
+  .term .wn { color: var(--amber-bright); }
+  .term .er { color: #ff8ba0; }
+  .term .dim { color: #7d93a3; }
+  .term pre {
+    white-space: pre-wrap;
+    font-family: inherit;
+  }
+
+  .badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    margin-top: .7rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    padding: .15rem .55rem;
+    color: var(--muted);
+    background: var(--white);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+  }
+
+  .good { border-left: 3px solid var(--green); }
+  .warn { border-left: 3px solid var(--amber); }
+  .bad { border-left: 3px solid var(--red); }
+  .accent { border-left: 3px solid var(--blue); }
+  .mono { font-family: var(--font-mono); }
+  .pass { color: var(--green); font-weight: 700; }
+  .human { color: var(--amber); font-weight: 700; }
+  .fail { color: var(--red); font-weight: 700; }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity .5s var(--ease),
+      transform .5s var(--ease);
+  }
+
+  .slide.visible .reveal {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .reveal:nth-child(2) { transition-delay: .05s; }
+  .reveal:nth-child(3) { transition-delay: .1s; }
+  .reveal:nth-child(4) { transition-delay: .15s; }
+  .reveal:nth-child(5) { transition-delay: .2s; }
+
+  aside.speaker-notes { display: none; }
+
+  .drawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(440px, 94vw);
+    z-index: 80;
+    transform: translateX(102%);
+    transition: transform .3s var(--ease);
+    background: var(--terminal);
+    color: #dfe9f0;
+    padding: 1rem 1.1rem;
+    overflow-y: auto;
+    box-shadow: -12px 0 40px rgba(0,25,40,.35);
+  }
+
+  .drawer.open { transform: none; }
+
+  .drawer-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding-bottom: .65rem;
+    margin-bottom: .8rem;
+    border-bottom: 1px solid var(--terminal-soft);
+  }
+
+  .drawer-actions {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+  }
+
+  .drawer h4 {
+    color: var(--blue-bright);
+    font-family: var(--font-mono);
+    font-size: var(--small-size);
+  }
+
+  .drawer button {
+    border: 1px solid var(--terminal-soft);
+    border-radius: 5px;
+    background: transparent;
+    color: #dfe9f0;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    padding: .15rem .5rem;
+  }
+
+  .drawer .notes-body p {
+    margin-bottom: .8rem;
+    color: #c6d4de;
+    font-size: var(--small-size);
+    line-height: 1.65;
+  }
+
+  .drawer .notes-body strong { color: #fff; }
+  .drawer .notes-body code {
+    color: var(--cyan);
+    background: rgba(0,158,201,.15);
+    border-radius: 3px;
+    padding: .1rem .25rem;
+    font-family: var(--font-mono);
+  }
+
+  @media (max-width: 920px) {
+    .summary-grid,
+    .demo-grid,
+    .takeaway-grid,
+    .appendix-grid,
+    .dependency-map {
+      grid-template-columns: 1fr;
+    }
+
+    .flow {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .topbar span:last-child,
+    .hints {
+      display: none;
+    }
+
+    .flow {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .stage {
+      grid-template-columns: 1fr;
+      gap: .25rem;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="topbar"><span>Advanced Engineering Demo</span><span>Demo 1 - Release Gate</span></div>
+<div class="counter" id="counter">01 / 07</div>
+<div class="hints">Left/Right navigate - F fullscreen - N notes popup</div>
+<nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
+
+<main id="deck">
+  <section class="slide" id="slide-1" data-title="Executive Summary">
+    <div class="slide-content">
+      <div class="kicker reveal">Executive summary - 1 minute</div>
+      <h1 class="reveal">A release decision, not an agent claim.</h1>
+      <p class="lead reveal">Demo 1 shows how enterprises can reduce AI blind spots by placing an independent gate between generated code and release: clean reconstruction, reviewed scope, deterministic evidence, and a three-way verdict.</p>
+      <div class="summary-grid reveal">
+        <div class="panel large">
+          <div>
+            <h3>What the gate adds</h3>
+            <p>It turns "tests passed on my machine" into a recorded decision that leadership, engineers, and auditors can inspect.</p>
+          </div>
+          <div class="metric-row">
+            <div class="metric"><strong>6</strong><span>proof stages</span></div>
+            <div class="metric"><strong>3</strong><span>verdicts</span></div>
+            <div class="metric"><strong>1</strong><span>human stop</span></div>
+          </div>
+        </div>
+        <div class="flow" aria-label="Release gate proof pipeline">
+          <div class="flow-step"><b>01</b><span>Candidate intake hashes the change.</span></div>
+          <div class="flow-step"><b>02</b><span>Clean rebuild removes host advantage.</span></div>
+          <div class="flow-step"><b>03</b><span>Reviewed policy defines scope.</span></div>
+          <div class="flow-step"><b>04</b><span>Evidence checks run independently.</span></div>
+          <div class="flow-step"><b>05</b><span>Verdict aggregates risk.</span></div>
+          <div class="flow-step"><b>06</b><span>Human review owns merge.</span></div>
+        </div>
+      </div>
+      <div class="src reveal">release-gate-demo.html, slides 2-5 and 8-10</div>
+      <aside class="speaker-notes" data-duration="01:00">
+        <p><strong>Frame the value.</strong> Keep this to one minute. The leadership point is that the gate is independent of the coding agent. It checks quality, change effects, and release gating evidence before the work reaches a release path.</p>
+        <p><strong>Say plainly:</strong> This is not an automatic merge button. It is an evidence-producing release decision point designed to reduce AI blind spots.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="slide" id="slide-2" data-title="Why python-slugify Matters">
+    <div class="slide-content">
+      <div class="kicker reveal">The demo task - 1 minute</div>
+      <h2 class="reveal">A small dependency migration can still miss the release surface.</h2>
+      <p class="lead reveal">The <span class="mono">python-slugify</span> task is intentionally modest: migrate from <span class="mono">text-unidecode</span> to required <span class="mono">Unidecode</span>. The risk is breadth, not algorithmic difficulty.</p>
+      <div class="dependency-map reveal">
+        <div class="dep"><b>setup.py</b><span>Package dependency must change to <span class="mono">Unidecode&gt;=1.1.1</span>.</span></div>
+        <div class="dep"><b>slugify.py</b><span>Import path must remove the fallback to the legacy backend.</span></div>
+        <div class="dep"><b>tox.ini</b><span>Test environments must stop reinstalling stale dependency combinations.</span></div>
+        <div class="dep"><b>README.md</b><span>Documentation must match the shipped dependency contract.</span></div>
+      </div>
+      <div class="summary-grid reveal">
+        <div class="card accent">
+          <h3>Graphify context</h3>
+          <p>Graphify's AST dependency map gives the team a codebase-aware starting point for understanding change effects before the gate evaluates evidence.</p>
+        </div>
+        <div class="card warn">
+          <h3>Credibility caveat</h3>
+          <p>The September 2 PASS shown in the walkthrough is a known-good control patch replay, not fresh live AI generation.</p>
+        </div>
+      </div>
+      <div class="src reveal">x1-behind-the-scenes.html, slides 5, 7, 10, and 13</div>
+      <aside class="speaker-notes" data-duration="01:00">
+        <p><strong>Why this example is useful.</strong> The task sounds small, which is the point. Real AI risk often appears in the edges: packaging, tox, docs, and policy boundaries.</p>
+        <p><strong>Graphify wording:</strong> Present Graphify as foundational codebase understanding and change-effect context. Do not say the recorded September 2 gate used Graphify as a formal check unless that is added separately.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="slide" id="slide-3" data-title="Live Demo Run Of Show">
+    <div class="slide-content">
+      <div class="kicker reveal">Live demo - 7 minutes</div>
+      <h2 class="reveal">Run it like a cooking show: live where it matters, staged where waiting adds no value.</h2>
+      <div class="demo-grid reveal">
+        <div class="stage-list">
+          <div class="stage"><b>0:00</b><span>Open the live environment and candidate diff. Show the four touched files.</span></div>
+          <div class="stage"><b>1:30</b><span>Show clean rebuild context: base commit, candidate tree, patch hash, config hash.</span></div>
+          <div class="stage"><b>3:00</b><span>Run or reveal checks: tests-and-coverage, task-consistency, advisory types.</span></div>
+          <div class="stage"><b>5:30</b><span>Open <span class="mono">result.json</span>, <span class="mono">trace.json</span>, and <span class="mono">manifest.json</span> as receipts.</span></div>
+          <div class="stage"><b>6:30</b><span>Close with human review: PASS means policy accepted this candidate.</span></div>
+        </div>
+        <div class="term" aria-label="Demo receipt excerpt">
+<pre><span class="dim">run:</span> 20260902T153230Z-0b1d3f349b56
+<span class="dim">candidate:</span> README.md, setup.py, slugify/slugify.py, tox.ini
+
+tests-and-coverage  <span class="ok">PASS</span>
+task-consistency    <span class="ok">PASS</span>
+types               <span class="ok">PASS</span>
+
+VERDICT             <span class="ok">PASS</span>
+reason_codes        none
+
+<span class="wn">stage honestly:</span> saved receipts cover model/codegen wait time</pre>
+        </div>
+      </div>
+      <div class="badge-row reveal">
+        <span class="badge">Live environment tab</span>
+        <span class="badge">Candidate patch</span>
+        <span class="badge">Saved run log</span>
+        <span class="badge">Evidence receipts</span>
+      </div>
+      <div class="src reveal">x1-behind-the-scenes.html, slides 8-13; RUN-LOG-2026-09-02-no-oracle-pass.md</div>
+      <aside class="speaker-notes" data-duration="07:00">
+        <p><strong>Drive the demo.</strong> Use prepped tabs to avoid 30+ second dead air while AI or environment steps run. Be explicit about what is live and what is saved evidence.</p>
+        <p><strong>Recommended tabs:</strong> live environment, candidate diff, <code>result.json</code>, <code>trace.json</code>, <code>manifest.json</code>, and the source run log. Keep screenshots in reserve only if the live path stalls.</p>
+        <p><strong>Do not over-explain internals.</strong> Graham may interrupt with technical questions. Use the receipts to answer, then return to the run of show.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="slide" id="slide-4" data-title="Leadership Takeaway">
+    <div class="slide-content">
+      <div class="kicker reveal">Close - 1 minute</div>
+      <h2 class="reveal">The enterprise standard is evidence first, human accountable.</h2>
+      <p class="lead reveal">Release Gate improves confidence without pretending automation can own the final judgment. It separates adverse evidence from missing evidence and leaves the release decision inspectable.</p>
+      <div class="takeaway-grid reveal">
+        <div class="card good">
+          <h3>PASS</h3>
+          <p>The reviewed policy accepted the candidate under recorded checks. Engineers still inspect before merge.</p>
+        </div>
+        <div class="card bad">
+          <h3>FAIL</h3>
+          <p>Evidence says the candidate is wrong, out of scope, or violating blocking policy.</p>
+        </div>
+        <div class="card warn">
+          <h3>NEEDS_HUMAN</h3>
+          <p>The gate lacks enough trustworthy evidence, so it escalates instead of guessing.</p>
+        </div>
+      </div>
+      <div class="summary-grid reveal">
+        <div class="card accent">
+          <h3>Enterprise value</h3>
+          <p>Augmented quality checks, change-effect visibility, and release gating reduce blind spots in AI-assisted engineering.</p>
+        </div>
+        <div class="card">
+          <h3>Presenter split</h3>
+          <p>Sets the executive frame; drives the live walkthrough and evidence receipts.</p>
+        </div>
+      </div>
+      <div class="src reveal">release-gate-demo.html, slides 8 and 10; x1-behind-the-scenes.html, slide 13</div>
+      <aside class="speaker-notes" data-duration="01:00">
+        <p><strong>Close crisply.</strong> PASS is not "the AI is correct." PASS is "the reviewed policy accepted this candidate with the evidence on disk." The human release owner still owns the decision.</p>
+        <p><strong>Bridge to Q&amp;A:</strong> Invite questions about policy design, evidence quality, enterprise integration, and how Graphify expands change-effect understanding.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="slide" id="slide-5" data-title="Appendix - Receipts">
+    <div class="slide-content">
+      <div class="kicker reveal">Appendix</div>
+      <h2 class="reveal">The PASS verdict is backed by inspectable artifacts.</h2>
+      <div class="appendix-grid reveal">
+        <div class="term">
+<pre>.release-gate/runs/
+  20260902T153230Z-0b1d3f349b56/
+    result.json
+    trace.json
+    manifest.json
+    candidate.patch
+    effective-config.json</pre>
+        </div>
+        <div class="card accent">
+          <h3>What each receipt proves</h3>
+          <ul>
+            <li><span class="mono">result.json</span>: verdict, checks, scope, hashes.</li>
+            <li><span class="mono">trace.json</span>: commands, timing, exit codes.</li>
+            <li><span class="mono">manifest.json</span>: SHA-256 inventory of run artifacts.</li>
+            <li><span class="mono">candidate.patch</span>: the exact change under review.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card warn reveal" style="margin-top:.8rem;">
+        <h3>Important qualification</h3>
+        <p>Tamper-evident artifacts are not immutable records and PASS is not proof of all semantic correctness. They make the decision reviewable.</p>
+      </div>
+      <div class="src reveal">x1-behind-the-scenes.html, slide 12</div>
+      <aside class="speaker-notes" data-duration="01:00">
+        <p><strong>Use only if asked.</strong> This slide is for auditability questions. It shows what is on disk and what each file contributes.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="slide" id="slide-6" data-title="Appendix - Controls">
+    <div class="slide-content">
+      <div class="kicker reveal">Appendix</div>
+      <h2 class="reveal">The offline controls exercise all three outcomes.</h2>
+      <div class="takeaway-grid reveal">
+        <div class="card good">
+          <h3>Control PASS</h3>
+          <p>Known-good patch changes only the approved X1 files and clears all checks.</p>
+        </div>
+        <div class="card bad">
+          <h3>Control FAIL</h3>
+          <p>Forbidden test-file edit triggers <span class="mono">PATH_FORBIDDEN</span> and blocks the candidate.</p>
+        </div>
+        <div class="card warn">
+          <h3>Control NEEDS_HUMAN</h3>
+          <p>Policy-file edits trigger <span class="mono">POLICY_FILE_CHANGED</span>; the gate escalates.</p>
+        </div>
+      </div>
+      <div class="term reveal" style="margin-top:.8rem;">
+<pre>demo.py control pass         <span class="ok">PASS</span>
+demo.py control fail         <span class="er">FAIL</span>
+demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
+      </div>
+      <div class="src reveal">RUN-LOG-2026-09-01-automated-verification.md; x1-behind-the-scenes.html, slides 14-15</div>
+      <aside class="speaker-notes" data-duration="01:00">
+        <p><strong>Use only if asked.</strong> The controls demonstrate that the verdict categories are not cosmetic. They are exercised separately and mapped to specific release consequences.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="slide" id="slide-7" data-title="Appendix - Source Map">
+    <div class="slide-content">
+      <div class="kicker reveal">Appendix</div>
+      <h2 class="reveal">Source map for questions after the executive path.</h2>
+      <div class="appendix-grid reveal">
+        <div class="card accent">
+          <h3>Primary decks</h3>
+          <ul>
+            <li><span class="mono">release-gate/demo/release-gate-demo.html</span>: executive release gate architecture.</li>
+            <li><span class="mono">docs/x1-behind-the-scenes.html</span>: Demo 1 no-oracle walkthrough and controls.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Recommended prepared tabs</h3>
+          <ul>
+            <li>Live environment run.</li>
+            <li>Candidate diff with four touched files.</li>
+            <li>September 2 result receipt folder.</li>
+            <li>Saved run log for timing gaps.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card warn reveal" style="margin-top:.8rem;">
+        <h3>Presenter guardrail</h3>
+        <p>When showing saved evidence, label it as saved evidence. When showing a live command, label it as live execution.</p>
+      </div>
+      <aside class="speaker-notes" data-duration="00:30">
+        <p><strong>Use only if needed.</strong> This is the parking-lot slide for source provenance and demo staging questions.</p>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<aside class="drawer" id="notesDrawer" aria-label="Speaker notes">
+  <div class="drawer-head">
+    <h4 id="notesTitle">Speaker Notes</h4>
+    <div class="drawer-actions">
+      <button type="button" id="popoutNotes">Popout</button>
+      <button type="button" id="closeNotes">Close</button>
+    </div>
+  </div>
+  <div class="notes-body" id="notesBody"></div>
+</aside>
+
+<script>
+(() => {
+  const deck = document.getElementById("deck");
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const progress = document.getElementById("progress");
+  const counter = document.getElementById("counter");
+  const navDots = document.getElementById("navDots");
+  const notesDrawer = document.getElementById("notesDrawer");
+  const notesTitle = document.getElementById("notesTitle");
+  const notesBody = document.getElementById("notesBody");
+  const closeNotes = document.getElementById("closeNotes");
+  const popoutNotes = document.getElementById("popoutNotes");
+  let current = 0;
+  let wheelLock = false;
+
+  class SpeakerNotesPopup {
+    constructor() {
+      this.windowRef = null;
+      this.running = false;
+      this.startedAt = null;
+      this.elapsed = 0;
+      this.interval = null;
+      this.fontSize = 18;
+      this.screenDetails = null;
+      this.screenPermission = null;
+      this.targetWindowBounds = null;
+      this.screenAccessPromise = null;
+      this.screenAccessState = "checking";
+      this.handleScreenTopologyChange = () => this.recomputeTargetScreen();
+      this.handleScreenPermissionChange = () => this.onScreenPermissionChange();
+      window.addEventListener("beforeunload", () => {
+        if (this.screenDetails) {
+          this.screenDetails.removeEventListener?.("screenschange", this.handleScreenTopologyChange);
+          this.screenDetails.removeEventListener?.("currentscreenchange", this.handleScreenTopologyChange);
+        }
+        this.screenPermission?.removeEventListener?.("change", this.handleScreenPermissionChange);
+        if (this.windowRef && !this.windowRef.closed) {
+          try { this.windowRef.close(); } catch (e) {}
+        }
+      });
+      void this.initializeScreenAccess();
+    }
+
+    hasScreenDetailsApi() {
+      return typeof window.getScreenDetails === "function";
+    }
+
+    async initializeScreenAccess() {
+      if (!this.hasScreenDetailsApi()) {
+        this.screenAccessState = "fallback";
+        return;
+      }
+      try {
+        this.screenPermission = await navigator.permissions?.query?.({ name: "window-management" });
+      } catch (e) {
+        this.screenAccessState = "needs-permission";
+        return;
+      }
+      this.screenPermission?.addEventListener?.("change", this.handleScreenPermissionChange);
+      if (this.screenPermission?.state === "granted") {
+        await this.loadScreenDetails();
+      } else if (this.screenPermission?.state === "denied") {
+        this.screenAccessState = "fallback";
+      } else {
+        this.screenAccessState = "needs-permission";
+      }
+    }
+
+    async requestScreenAccess() {
+      if (!this.hasScreenDetailsApi()) {
+        this.screenAccessState = "fallback";
+        return null;
+      }
+      return this.loadScreenDetails();
+    }
+
+    async loadScreenDetails() {
+      if (this.screenAccessPromise) return this.screenAccessPromise;
+      this.screenAccessState = "checking";
+      this.screenAccessPromise = window.getScreenDetails()
+        .then((details) => {
+          this.screenDetails?.removeEventListener?.("screenschange", this.handleScreenTopologyChange);
+          this.screenDetails?.removeEventListener?.("currentscreenchange", this.handleScreenTopologyChange);
+          this.screenDetails = details;
+          details.addEventListener?.("screenschange", this.handleScreenTopologyChange);
+          details.addEventListener?.("currentscreenchange", this.handleScreenTopologyChange);
+          this.recomputeTargetScreen();
+          return details;
+        })
+        .catch(() => {
+          this.screenAccessState = "fallback";
+          return null;
+        })
+        .finally(() => { this.screenAccessPromise = null; });
+      return this.screenAccessPromise;
+    }
+
+    onScreenPermissionChange() {
+      if (this.screenPermission?.state === "granted") {
+        void this.loadScreenDetails();
+      } else {
+        this.screenDetails = null;
+        this.targetWindowBounds = null;
+        this.screenAccessState = this.screenPermission?.state === "denied" ? "fallback" : "needs-permission";
+      }
+    }
+
+    sameScreen(a, b) {
+      return Boolean(a && b && (a === b || (
+        a.left === b.left &&
+        a.top === b.top &&
+        a.width === b.width &&
+        a.height === b.height
+      )));
+    }
+
+    recomputeTargetScreen() {
+      const screens = Array.from(this.screenDetails?.screens || []);
+      const currentScreen = this.screenDetails?.currentScreen;
+      const targetScreen = screens.find((screen) => !this.sameScreen(screen, currentScreen));
+      this.targetWindowBounds = targetScreen ? this.boundsForScreen(targetScreen) : null;
+      this.screenAccessState = this.targetWindowBounds ? "ready" : "fallback";
+    }
+
+    boundsForScreen(screen) {
+      const screenLeft = screen?.availLeft ?? screen?.left ?? 0;
+      const screenTop = screen?.availTop ?? screen?.top ?? 0;
+      const screenWidth = screen?.availWidth ?? screen?.width ?? 1040;
+      const screenHeight = screen?.availHeight ?? screen?.height ?? 800;
+      return {
+        left: screenLeft + 40,
+        top: screenTop + 40,
+        width: Math.min(1040, screenWidth),
+        height: Math.min(800, screenHeight)
+      };
+    }
+
+    fallbackWindowBounds() {
+      return {
+        left: (window.screen.availLeft ?? window.screenLeft ?? 0) + 40,
+        top: (window.screen.availTop ?? window.screenTop ?? 0) + 40,
+        width: Math.min(1040, window.screen.availWidth || 1040),
+        height: Math.min(800, window.screen.availHeight || 800)
+      };
+    }
+
+    async open() {
+      if (this.windowRef && !this.windowRef.closed) {
+        this.windowRef.focus();
+        this.render();
+        return;
+      }
+
+      if (this.screenAccessState === "needs-permission" || this.screenAccessState === "checking") {
+        await this.requestScreenAccess();
+      }
+
+      const bounds = this.targetWindowBounds || this.fallbackWindowBounds();
+      const { left, top, width, height } = bounds;
+      const features = `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
+
+      this.windowRef = window.open("", "Demo1ReleaseGateSpeakerNotes", features);
+      if (!this.windowRef || this.windowRef.closed || typeof this.windowRef.closed === "undefined") {
+        toggleNotes(true);
+        alert("Popup window was blocked. Please allow popups for speaker notes.");
+        return;
+      }
+
+      this.initDocument();
+      this.moveToTargetScreen();
+      this.windowRef.focus();
+      this.render();
+      this.renderTimer();
+    }
+
+    moveToTargetScreen() {
+      if (!this.windowRef || this.windowRef.closed) return;
+      if (!this.targetWindowBounds && this.screenDetails) this.recomputeTargetScreen();
+      const bounds = this.targetWindowBounds || this.fallbackWindowBounds();
+      try {
+        this.windowRef.moveTo(bounds.left, bounds.top);
+        this.windowRef.resizeTo(bounds.width, bounds.height);
+      } catch (e) {
+        console.warn("Manual screen move constrained:", e);
+      }
+    }
+
+    initDocument() {
+      const doc = this.windowRef.document;
+      doc.open();
+      doc.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo 1 Speaker Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #001928;
+    --terminal: #001928;
+    --terminal-soft: #003552;
+    --blue: #0075be;
+    --blue-bright: #38a5e8;
+    --green: #00e7b4;
+    --muted: #7d93a3;
+    --paper: #f5f6f7;
+    --font-display: "Heebo", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(240px, .34fr) 1fr;
+    background: var(--terminal);
+    color: #e7f1f7;
+    font-family: var(--font-display);
+  }
+  aside {
+    border-right: 1px solid var(--terminal-soft);
+    padding: 1rem;
+    background: rgba(0,0,0,.18);
+    overflow-y: auto;
+  }
+  main {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem 1.2rem;
+    border-bottom: 1px solid var(--terminal-soft);
+  }
+  .badge, .duration, .clock, .slide-nav-num {
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--blue-bright);
+  }
+  h1 {
+    padding: 1rem 1.2rem 0;
+    color: #fff;
+    font-size: clamp(1.6rem, 4vw, 3rem);
+    line-height: 1.08;
+    letter-spacing: 0;
+  }
+  .notes {
+    padding: 1rem 1.2rem 1.4rem;
+    overflow-y: auto;
+    font-size: var(--notes-size, 18px);
+  }
+  .notes p {
+    margin-bottom: .95rem;
+    color: #c8d8e2;
+    line-height: 1.65;
+  }
+  .notes strong { color: #fff; }
+  .notes code {
+    color: var(--green);
+    background: rgba(0,231,180,.12);
+    border-radius: 4px;
+    padding: .08rem .24rem;
+    font-family: var(--font-mono);
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .9rem 1.2rem;
+    border-top: 1px solid var(--terminal-soft);
+    background: rgba(0,0,0,.16);
+  }
+  .buttons { display: flex; flex-wrap: wrap; gap: .45rem; }
+  button {
+    border: 1px solid rgba(115,195,235,.35);
+    border-radius: 5px;
+    background: var(--terminal-soft);
+    color: #e7f1f7;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: .74rem;
+    padding: .28rem .6rem;
+  }
+  button:hover { background: var(--blue); color: #fff; }
+  .timer {
+    color: var(--green);
+    font-family: var(--font-mono);
+    font-size: .9rem;
+    font-weight: 600;
+  }
+  .slide-list {
+    display: grid;
+    gap: .35rem;
+    margin-top: .75rem;
+  }
+  .slide-item {
+    width: 100%;
+    text-align: left;
+    display: grid;
+    grid-template-columns: 2.2rem 1fr;
+    gap: .4rem;
+    border-color: transparent;
+    background: transparent;
+    color: #b9ccd8;
+    padding: .45rem;
+  }
+  .slide-item.active {
+    background: rgba(0,117,190,.22);
+    border-color: rgba(115,195,235,.35);
+    color: #fff;
+  }
+  .up-next {
+    padding: .8rem 1.2rem 1rem;
+    border-top: 1px solid var(--terminal-soft);
+    background: rgba(0,0,0,.12);
+    color: var(--muted);
+    font-size: .86rem;
+    line-height: 1.5;
+  }
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; }
+    aside { display: none; }
+  }
+</style>
+</head>
+<body>
+  <aside>
+    <div class="badge">Slide Navigator</div>
+    <div class="slide-list" id="popupSlideList"></div>
+  </aside>
+  <main>
+    <header>
+      <div>
+        <div class="badge" id="popupSlideBadge">Slide</div>
+        <div class="duration">Target <span id="popupTargetDuration">01:00</span></div>
+      </div>
+      <div>
+        <div class="clock" id="popupWallClock"></div>
+        <div class="timer" id="popupSessionTimer">00:00 / 10:00</div>
+      </div>
+    </header>
+    <h1 id="popupSlideTitle">Slide Title</h1>
+    <section class="notes" id="popupNotesBody"></section>
+    <section class="up-next">
+      <div class="badge">Up next</div>
+      <div id="popupNextTitle">Ready</div>
+      <div id="popupNextPreview"></div>
+    </section>
+    <footer class="controls">
+      <div class="buttons">
+        <button id="popupBtnPrev" type="button">Prev</button>
+        <button id="popupBtnNext" type="button">Next</button>
+        <button id="popupTimerToggle" type="button">Start</button>
+        <button id="popupTimerReset" type="button">Reset</button>
+        <button id="popupMoveScreenBtn" type="button" title="Move to secondary monitor">Screen 2</button>
+        <button id="popupFontMinus" type="button">A-</button>
+        <button id="popupFontPlus" type="button">A+</button>
+      </div>
+      <div class="badge">N notes popup</div>
+    </footer>
+  </main>
+</body>
+</html>`);
+      doc.close();
+
+      doc.getElementById("popupBtnNext")?.addEventListener("click", () => goTo(current + 1));
+      doc.getElementById("popupBtnPrev")?.addEventListener("click", () => goTo(current - 1));
+      doc.getElementById("popupTimerToggle")?.addEventListener("click", () => this.toggleTimer());
+      doc.getElementById("popupTimerReset")?.addEventListener("click", () => this.resetTimer());
+      doc.getElementById("popupMoveScreenBtn")?.addEventListener("click", () => this.moveToTargetScreen());
+      doc.getElementById("popupFontPlus")?.addEventListener("click", () => this.changeFontSize(1));
+      doc.getElementById("popupFontMinus")?.addEventListener("click", () => this.changeFontSize(-1));
+      doc.addEventListener("keydown", (event) => {
+        if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(event.key)) {
+          event.preventDefault();
+          goTo(current + 1);
+        } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(event.key)) {
+          event.preventDefault();
+          goTo(current - 1);
+        } else if (event.key.toLowerCase() === "t") {
+          event.preventDefault();
+          this.toggleTimer();
+        } else if (event.key.toLowerCase() === "r") {
+          event.preventDefault();
+          this.resetTimer();
+        } else if (event.key === "+" || event.key === "=") {
+          event.preventDefault();
+          this.changeFontSize(1);
+        } else if (event.key === "-" || event.key === "_") {
+          event.preventDefault();
+          this.changeFontSize(-1);
+        }
+      });
+
+      const list = doc.getElementById("popupSlideList");
+      slides.forEach((slide, index) => {
+        const item = doc.createElement("button");
+        item.type = "button";
+        item.className = "slide-item";
+        item.dataset.slideIndex = String(index);
+        item.innerHTML = `<span class="slide-nav-num">${pad(index + 1)}</span><span>${slide.dataset.title || "Slide"}</span>`;
+        item.addEventListener("click", () => goTo(index));
+        list.appendChild(item);
+      });
+
+      this.windowRef.addEventListener("beforeunload", () => { this.windowRef = null; });
+    }
+
+    milliseconds() {
+      return this.elapsed + (this.running && this.startedAt ? Date.now() - this.startedAt : 0);
+    }
+
+    toggleTimer() {
+      if (this.running) {
+        this.elapsed = this.milliseconds();
+        this.running = false;
+        this.startedAt = null;
+        clearInterval(this.interval);
+        this.interval = null;
+      } else {
+        this.running = true;
+        this.startedAt = Date.now();
+        this.interval = setInterval(() => this.renderTimer(), 500);
+      }
+      this.renderTimer();
+    }
+
+    resetTimer() {
+      this.elapsed = 0;
+      this.startedAt = this.running ? Date.now() : null;
+      this.renderTimer();
+    }
+
+    renderTimer() {
+      if (!this.windowRef || this.windowRef.closed) return;
+      const total = Math.floor(this.milliseconds() / 1000);
+      const label = `${pad(Math.floor(total / 60))}:${pad(total % 60)} / 10:00`;
+      const doc = this.windowRef.document;
+      const timer = doc.getElementById("popupSessionTimer");
+      const toggle = doc.getElementById("popupTimerToggle");
+      const clock = doc.getElementById("popupWallClock");
+      if (timer) timer.textContent = label;
+      if (toggle) toggle.textContent = this.running ? "Pause" : (this.elapsed > 0 ? "Resume" : "Start");
+      if (clock) clock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    changeFontSize(delta) {
+      this.fontSize = Math.max(14, Math.min(32, this.fontSize + delta * 2));
+      this.render();
+    }
+
+    render() {
+      if (!this.windowRef || this.windowRef.closed) return;
+      const doc = this.windowRef.document;
+      const slide = slides[current];
+      const notes = slide.querySelector(".speaker-notes");
+      doc.getElementById("popupSlideBadge").textContent = `Slide ${current + 1} of ${slides.length}`;
+      doc.getElementById("popupTargetDuration").textContent = notes?.dataset.duration || "01:00";
+      doc.getElementById("popupSlideTitle").textContent = `${current + 1}. ${slide.dataset.title || "Slide"}`;
+      const notesEl = doc.getElementById("popupNotesBody");
+      notesEl.style.setProperty("--notes-size", `${this.fontSize}px`);
+      notesEl.innerHTML = notes ? notes.innerHTML : "<p>No speaker notes for this slide.</p>";
+
+      const next = slides[current + 1];
+      doc.getElementById("popupNextTitle").textContent = next ? `${current + 2}. ${next.dataset.title || "Slide"}` : "Presentation complete";
+      doc.getElementById("popupNextPreview").textContent = next ? (next.querySelector(".speaker-notes p")?.textContent || "") : "Open Q&A.";
+
+      doc.querySelectorAll(".slide-item").forEach((item) => {
+        item.classList.toggle("active", Number(item.dataset.slideIndex) === current);
+      });
+      this.renderTimer();
+    }
+  }
+
+  const speakerNotesPopup = new SpeakerNotesPopup();
+
+  function pad(num) {
+    return String(num).padStart(2, "0");
+  }
+
+  function goTo(index) {
+    const next = Math.max(0, Math.min(slides.length - 1, index));
+    slides[next].scrollIntoView({ behavior: "smooth", block: "start" });
+    update(next);
+  }
+
+  function update(index) {
+    current = index;
+    counter.textContent = `${pad(index + 1)} / ${pad(slides.length)}`;
+    progress.style.width = `${((index + 1) / slides.length) * 100}%`;
+    navDots.querySelectorAll("button").forEach((button, i) => {
+      button.classList.toggle("active", i === index);
+      button.setAttribute("aria-current", i === index ? "step" : "false");
+    });
+    slides.forEach((slide, i) => slide.classList.toggle("visible", i === index));
+    if (notesDrawer.classList.contains("open")) renderNotes();
+    speakerNotesPopup.render();
+  }
+
+  function renderNotes() {
+    const slide = slides[current];
+    const notes = slide.querySelector(".speaker-notes");
+    notesTitle.textContent = `${pad(current + 1)} - ${slide.dataset.title || "Slide"}`;
+    notesBody.innerHTML = notes ? notes.innerHTML : "<p>No speaker notes for this slide.</p>";
+  }
+
+  function toggleNotes(force) {
+    const open = typeof force === "boolean" ? force : !notesDrawer.classList.contains("open");
+    if (open) renderNotes();
+    notesDrawer.classList.toggle("open", open);
+  }
+
+  function isFullscreen() {
+    return Boolean(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (isFullscreen()) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (!exit) throw new Error("Fullscreen exit is unavailable");
+        await exit.call(document);
+      } else {
+        const root = document.documentElement;
+        const request = root.requestFullscreen || root.webkitRequestFullscreen || root.mozRequestFullScreen || root.msRequestFullscreen;
+        if (!request) throw new Error("Fullscreen is unavailable");
+        await request.call(root);
+      }
+    } catch (error) {
+      console.warn("Could not toggle fullscreen", error);
+    }
+  }
+
+  navDots.innerHTML = "";
+  slides.forEach((slide, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("aria-label", `Go to slide ${index + 1}: ${slide.dataset.title || ""}`);
+    button.addEventListener("click", () => goTo(index));
+    navDots.appendChild(button);
+  });
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting && entry.intersectionRatio > 0.55) {
+        update(slides.indexOf(entry.target));
+      }
+    });
+  }, { threshold: [0.6] });
+  slides.forEach((slide) => observer.observe(slide));
+
+  document.addEventListener("keydown", (event) => {
+    if (event.target.isContentEditable || /INPUT|TEXTAREA/.test(event.target.tagName)) return;
+    if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(event.key)) {
+      event.preventDefault();
+      goTo(current + 1);
+    } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(event.key)) {
+      event.preventDefault();
+      goTo(current - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      goTo(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      goTo(slides.length - 1);
+    } else if (event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      toggleFullscreen();
+    } else if (event.key.toLowerCase() === "n") {
+      event.preventDefault();
+      if (isFullscreen()) {
+        speakerNotesPopup.open();
+      } else {
+        toggleNotes();
+      }
+    } else if (event.key === "Escape") {
+      toggleNotes(false);
+    } else if (/^[1-9]$/.test(event.key)) {
+      event.preventDefault();
+      goTo(Number(event.key) - 1);
+    }
+  });
+
+  deck.addEventListener("wheel", (event) => {
+    if (Math.abs(event.deltaY) < 25 || wheelLock) return;
+    wheelLock = true;
+    goTo(current + (event.deltaY > 0 ? 1 : -1));
+    setTimeout(() => { wheelLock = false; }, 520);
+  }, { passive: true });
+
+  let touchStartY = 0;
+  deck.addEventListener("touchstart", (event) => {
+    touchStartY = event.changedTouches[0].clientY;
+  }, { passive: true });
+  deck.addEventListener("touchend", (event) => {
+    const diff = touchStartY - event.changedTouches[0].clientY;
+    if (Math.abs(diff) > 45) goTo(current + (diff > 0 ? 1 : -1));
+  }, { passive: true });
+
+  closeNotes.addEventListener("click", () => toggleNotes(false));
+  popoutNotes.addEventListener("click", () => speakerNotesPopup.open());
+
+  const hashMatch = location.hash.match(/^#slide-(\d+)$/);
+  if (hashMatch) {
+    setTimeout(() => goTo(Number(hashMatch[1]) - 1), 0);
+  } else {
+    update(0);
+  }
+})();
+</script>
+</body>
+</html>
