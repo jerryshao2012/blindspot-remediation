@@ -48,3 +48,6 @@ release-gate/demo/env.sh
 demo/runs/live-*-executor.json
 demo/runs/live-*-executor.err
 demo/runs/sdlc-*-gate/
+demo/runs/v2-*-transcript.jsonl
+demo/runs/v2-*-executor.err
+demo/runs/v2-*-gate/
