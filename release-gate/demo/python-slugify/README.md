@@ -262,7 +262,7 @@ For a live assistant session, copy [the frozen task card](assets/TASK.md), start
 the assistant inside `workbench/python-slugify`, and let it edit the candidate.
 Then run the gate as shown in step 4.
 
-For a deterministic no-oracle session, apply the known good candidate instead:
+For a deterministic online session, apply the known good candidate instead:
 
 ```powershell
 uv run --python 3.12 --no-project python demo.py control pass

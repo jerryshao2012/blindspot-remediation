@@ -18,7 +18,7 @@ ID and an older baseline commit.
 
 Refresh the existing presentations in place. Preserve their IBM-blue visual
 system, interactions, speaker-view behavior, and overall length. Reframe X1 so
-the production/no-oracle workflow is the primary story while retaining hidden
+the production/online workflow is the primary story while retaining hidden
 oracle grading as a clearly labelled offline qualification mechanism.
 
 The presentation must not imply that the September 2 candidate was generated
@@ -33,7 +33,7 @@ candidate shape.
 
 Update `docs/x1-behind-the-scenes.html` while preserving its 16-slide structure:
 
-- cite the September 2 no-oracle run as the current primary evidence;
+- cite the September 2 online run as the current primary evidence;
 - use the current setup command and pinned upstream baseline
   `7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4`;
 - explain that Copilot receives the frozen task card without hints or oracle
@@ -57,10 +57,10 @@ slides.
 
 Update `release-gate/demo/release-gate-demo.html` without adding slides:
 
-- identify the no-oracle workflow as the normal production path;
+- identify the online workflow as the normal production path;
 - identify external oracle grading as benchmark-only qualification;
 - cite the September 1 three-verdict Windows verification and September 2
-  no-oracle `PASS` evidence where X1 is summarized; and
+  online `PASS` evidence where X1 is summarized; and
 - preserve existing rate-limiter claims and bounded-repair content.
 
 ### Architecture Reference

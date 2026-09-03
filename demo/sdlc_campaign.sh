@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  SDLC-STYLE CAMPAIGN — online lane only, no oracle
+#  SDLC-STYLE CAMPAIGN — online lane only
 # =============================================================================
 #  Simulates the gate inside a real SDLC process, N times:
 #     task card → fresh `claude -p` session edits the repo → release-gate run

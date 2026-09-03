@@ -16,7 +16,7 @@ def slide_count(source: str) -> int:
     return len(re.findall(r'<section\b[^>]*class="[^"]*\bslide\b[^"]*"', source))
 
 
-def test_x1_deck_uses_september_no_oracle_release_gate_evidence() -> None:
+def test_x1_deck_uses_september_online_release_gate_evidence() -> None:
     source = read("docs/x1-behind-the-scenes.html")
 
     assert slide_count(source) == 16
@@ -39,11 +39,11 @@ def test_executive_and_architecture_distinguish_online_gate_from_offline_oracle(
     assert slide_count(executive) == 10
     assert "production ends with evidence review and a human release decision" in executive
     assert "offline known-answer qualification" in executive
-    assert "2026-09-02 no-oracle PASS" in executive
+    assert "2026-09-02 online PASS" in executive
     assert "tests-and-coverage PASS · task-consistency PASS · types PASS" in executive
     assert "assistant/control candidate → deterministic gate → evidence review → human release decision" in architecture
     assert "known-answer controls → gate → hidden oracle grading" in architecture
-    assert "RUN-LOG-2026-09-02-no-oracle-pass.md" in architecture
+    assert "RUN-LOG-2026-09-02-online-pass.md" in architecture
     assert "RUN-LOG-2026-09-01-automated-verification.md" in architecture
 
 
@@ -54,7 +54,7 @@ def test_hub_reflects_refreshed_x1_duration_and_release_gate_positioning() -> No
     assert 'url=./docs/presentations.html' in index
     assert 'href="./docs/presentations.html"' in index
     assert "16 Slides · 25m" in source
-    assert "production-style no-oracle gate run" in source
+    assert "production-style online gate run" in source
     assert "offline calibration" in source
     assert "production evidence review from benchmark-only oracle qualification" in source
 

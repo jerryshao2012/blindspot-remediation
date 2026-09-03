@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Bring the Release Gate HTML presentations in sync with the 2026-09-01 automated verification and 2026-09-02 no-oracle X1 evidence without redesigning the decks.
+**Goal:** Bring the Release Gate HTML presentations in sync with the 2026-09-01 automated verification and 2026-09-02 online X1 evidence without redesigning the decks.
 
-**Architecture:** Treat the September run logs as the source of truth and update the existing presentation copy in place. The X1 deck leads with normal no-oracle adoption, while the executive and architecture views distinguish production evidence review from benchmark-only oracle qualification. Existing navigation, speaker view, responsive CSS, and slide counts remain unchanged.
+**Architecture:** Treat the September run logs as the source of truth and update the existing presentation copy in place. The X1 deck leads with normal online adoption, while the executive and architecture views distinguish production evidence review from benchmark-only oracle qualification. Existing navigation, speaker view, responsive CSS, and slide counts remain unchanged.
 
 **Tech Stack:** Self-contained HTML/CSS/JavaScript presentations, repository Markdown evidence logs, pytest presentation regression tests, browser-based viewport verification, Graphify.
 
@@ -14,7 +14,7 @@
 
 **Files:**
 - Modify: `docs/x1-behind-the-scenes.html`
-- Reference: `release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-02-no-oracle-pass.md`
+- Reference: `release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-02-online-pass.md`
 - Reference: `release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-01-automated-verification.md`
 
 - [ ] **Step 1: Capture the pre-edit content assertions**
@@ -59,7 +59,7 @@ Do not invent a `trace.json` event count when the September log does not record 
 
 - [ ] **Step 5: Make slide 13 the production stop and preserve offline qualification**
 
-Replace the automatic `demo.py grade` storyline with the no-oracle conclusion:
+Replace the automatic `demo.py grade` storyline with the online conclusion:
 
 ```text
 PASS means the reviewed policy accepted this candidate.
@@ -89,7 +89,7 @@ Expected: 16 slides and all new evidence concepts are present.
 **Files:**
 - Modify: `release-gate/demo/release-gate-demo.html`
 - Modify: `docs/architecture.html`
-- Reference: `release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-02-no-oracle-pass.md`
+- Reference: `release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-02-online-pass.md`
 - Reference: `release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-01-automated-verification.md`
 
 - [ ] **Step 1: Update the executive pipeline distinction**
@@ -131,7 +131,7 @@ Expected: the executive deck remains 10 slides and both files explicitly disting
 
 Keep the X1 card at 16 slides and change its duration from `20m` to `25m`,
 because its speaker-note timings total `24:55`. Describe the deck as a
-production-style no-oracle gate run plus offline calibration. Update the
+production-style online gate run plus offline calibration. Update the
 executive card to mention the same production/qualification distinction without
 changing its 10-slide count or rounded `20m` duration (`19:00` of notes).
 

@@ -3,7 +3,7 @@
 #  SDLC CAMPAIGN v2 — online lane only, eval-grade columns
 # =============================================================================
 #  Same experiment as sdlc_campaign.sh (fresh claude -p session -> release-gate
-#  -> verdict, no oracle) with schema v2:
+#  -> verdict, online) with schema v2:
 #   - executor captured as stream-json TRANSCRIPT (per-attempt struggle metrics:
 #     self-test runs, failures before green, repair edits, reinstall) parsed by
 #     demo/parse_executor.py

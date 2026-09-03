@@ -1,4 +1,4 @@
-# Python-Slugify No-Oracle Run Log
+# Python-Slugify Online Run Log
 
 **Run date:** 2026-09-02  
 **Host:** Windows PowerShell  
@@ -115,7 +115,7 @@ Test-Path '.\workbench\python-slugify\.git'
 True
 ```
 
-The known good no-oracle candidate patch was checked and applied:
+The known good online candidate patch was checked and applied:
 
 ```powershell
 git -C .\workbench\python-slugify apply --check ..\..\controls\pass.patch
@@ -260,7 +260,7 @@ The file-mode warning came from Git while applying the patch on Windows. The
 observability warning came from Release Gate publication handling. Neither
 warning changed the policy verdict or prevented evidence generation.
 
-## No-Oracle Interpretation
+## Online Interpretation
 
 No `demo.py grade` command was run for this report. That means there is no
 hidden oracle truth result and no `good_pass`, `false_release`, `false_block`,

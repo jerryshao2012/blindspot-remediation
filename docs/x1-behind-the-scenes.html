@@ -480,7 +480,7 @@
   <h1>X1, behind<br>the scenes.</h1>
   <p class="lead" style="margin-top:1rem">One small task, traced end to end: every command, every file it
   touches, every piece of evidence — and exactly where each verdict comes from.</p>
-  <p class="lead" style="margin-top:.6rem">The primary proof is the September 2 no-oracle PASS run, with
+  <p class="lead" style="margin-top:.6rem">The primary proof is the September 2 online PASS run, with
   the September 1 oracle campaign kept as offline qualification. Nothing is invented.</p>
   <div class="src">release-gate/demo/python-slugify · run 20260902T153230Z-0b1d3f349b56</div>
   <aside class="speaker-notes" data-duration="00:40">
@@ -585,7 +585,7 @@
     <div class="card accent-l">
       <h3>Offline — grades the judge</h3>
       <p>A hidden answer key checks whether the gate’s verdict was <em>right</em>.
-      It exists only for measurement. In production there is no oracle; operators inspect the evidence and diff.</p>
+      It exists only for measurement. In production the online lane operates without an oracle; operators inspect the evidence and diff.</p>
     </div>
   </div>
   <div class="card" style="margin-top:.9rem">
@@ -894,9 +894,9 @@ No hidden oracle ran; semantic correctness is not proven.</pre></div>
   <div class="card accent-l" style="margin-top:.9rem"><h3>Human release decision</h3>
     <p>The gate supplies bounded evidence. A reviewer still inspects the diff and receipts, because no production
     system has a hidden answer key for a brand-new change.</p></div>
-  <div class="src">RUN-LOG-2026-09-02-no-oracle-pass.md · result.json · candidate.patch</div>
+  <div class="src">RUN-LOG-2026-09-02-online-pass.md · result.json · candidate.patch</div>
   <aside class="speaker-notes" data-duration="01:30">
-    <p><strong>0:00–1:30 · Production stop.</strong> In the September 2 no-oracle run, PASS means the reviewed policy accepted this candidate under the recorded checks. It is not a proof of all semantic correctness and it is not an automatic merge button.</p>
+    <p><strong>0:00–1:30 · Production stop.</strong> In the September 2 online run, PASS means the reviewed policy accepted this candidate under the recorded checks. It is not a proof of all semantic correctness and it is not an automatic merge button.</p>
     <p><strong>Transition:</strong> “Step 10: then, separately, we qualify the judge offline with known-answer controls.”</p>
   </aside>
 </section>
