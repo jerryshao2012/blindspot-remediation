@@ -461,7 +461,7 @@
       <span class="pn" id="n-checks">checks</span>
       <span class="pn" id="n-verdict">verdict</span>
     </span><span class="arrow">→</span>
-    <span class="pn" id="n-out">PASS · FAIL · HUMAN</span>
+    <span class="pn" id="n-out">human review</span>
   </div>
   <div class="lane">
     <span class="lane-label">OFFLINE</span>
@@ -480,9 +480,9 @@
   <h1>X1, behind<br>the scenes.</h1>
   <p class="lead" style="margin-top:1rem">One small task, traced end to end: every command, every file it
   touches, every piece of evidence — and exactly where each verdict comes from.</p>
-  <p class="lead" style="margin-top:.6rem">Every number on these slides comes from a recorded run of the
-  Release&nbsp;Gate 0.6.0 demo. Nothing is invented.</p>
-  <div class="src">release-gate/demo/python-slugify · run 20260827T143722Z-58368f55bad1</div>
+  <p class="lead" style="margin-top:.6rem">The primary proof is the September 2 no-oracle PASS run, with
+  the September 1 oracle campaign kept as offline qualification. Nothing is invented.</p>
+  <div class="src">release-gate/demo/python-slugify · run 20260902T153230Z-0b1d3f349b56</div>
   <aside class="speaker-notes" data-duration="00:40">
     <p><strong>0:00–0:40 · Set the frame.</strong> This is not a slideware pipeline — every verdict, hash and
     reason code on these slides was produced by a real gate run on this laptop. When someone doubts a number,
@@ -555,18 +555,18 @@
     </article>
     <article class="pipeline-node">
       <span class="node-index">06</span>
-      <h3>Oracle</h3>
-      <p>Truth after verdict</p>
+      <h3>Human review</h3>
+      <p>Diff + evidence before merge</p>
     </article>
   </div>
   <div class="pipeline-footnote">
-    <span>The gate records the verdict before the external oracle runs.</span>
-    <span class="accent-tag">evidence ≠ self-attestation</span>
+    <span>Production ends with evidence review; the hidden oracle is benchmark-only.</span>
+    <span class="accent-tag">evidence &ne; self-attestation</span>
   </div>
   <aside class="speaker-notes" data-duration="02:30">
     <p><strong>0:00–0:50 · Clean Reconstruction.</strong> Every run starts from a clean base and applies the candidate patch in isolation. We rebuild both base and candidate workspaces from scratch.</p>
     <p><strong>0:50–1:40 · Reviewed Policy & Evidence.</strong> Configured policies define allowed scope, required checks, and strict resource limits. Every command execution and result is recorded into tamper-evident evidence.</p>
-    <p><strong>1:40–2:30 · Verdict & External Oracle.</strong> The gate records an authoritative three-way verdict (PASS, FAIL, NEEDS_HUMAN) before any external oracle or merge action can occur.</p>
+    <p><strong>1:40–2:30 · Verdict & Human Review.</strong> The gate records an authoritative three-way verdict (PASS, FAIL, NEEDS_HUMAN). Production then reviews the diff and evidence before merge; the external oracle is reserved for offline qualification.</p>
     <p><strong>Transition:</strong> “Now let’s look at the navigation map: two lanes, one lit box at a time.”</p>
   </aside>
 </section>
@@ -585,7 +585,7 @@
     <div class="card accent-l">
       <h3>Offline — grades the judge</h3>
       <p>A hidden answer key checks whether the gate’s verdict was <em>right</em>.
-      It exists only for measurement. In production there is no oracle — which is why it is measured first.</p>
+      It exists only for measurement. In production there is no oracle; operators inspect the evidence and diff.</p>
     </div>
   </div>
   <div class="card" style="margin-top:.9rem">
@@ -648,13 +648,13 @@
   <h2>Green before, or nothing after means anything.</h2>
   <div class="grid g2">
     <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
-<pre><span class="p">$</span> python3 demo.py reset</pre>
+<pre><span class="p">$</span> uv run --python 3.12 --no-project python demo.py setup</pre>
 <pre><span class="ok">82 passed</span> in 0.04s
 reset: release-gate-demo-base</pre></div>
     <div class="card">
       <h3>What now exists on disk</h3>
       <ul>
-        <li><span class="mono">workbench/python-slugify/</span> — clean clone at commit <span class="mono">42e5e792</span></li>
+        <li><span class="mono">workbench/python-slugify/</span> — clean clone at commit <span class="mono">7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4</span></li>
         <li><span class="mono">workbench/task-venv/</span> — isolated interpreter</li>
         <li>zero modified files — <span class="mono">git status</span> is empty</li>
       </ul>
@@ -663,7 +663,7 @@ reset: release-gate-demo-base</pre></div>
   <div class="card warn" style="margin-top:.9rem"><h3>The rule</h3>
     <p>If the baseline is red, a later FAIL could mean “the AI broke it” <em>or</em> “it was already broken” —
     and no one can tell which. Green-before is the precondition for every verdict.</p></div>
-  <div class="src">demo/python-slugify/demo.py · workbench/</div>
+  <div class="src">release-gate/demo/python-slugify/demo.py · upstream baseline 7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4</div>
   <aside class="speaker-notes" data-duration="01:00">
     <p><strong>0:00–1:00 · Baseline discipline.</strong> 12 of 25 well-known open-source repos failed this rule from a
     clean clone when the corpus was measured. Never assume green; verify it at the pinned commit in the gate’s own
@@ -696,10 +696,13 @@ reset: release-gate-demo-base</pre></div>
     <span><strong>Gate invariant:</strong> no legacy dependency names remain across packaging, docs, code, or tox.</span>
     <span class="mono">README.md · setup.py · slugify.py · tox.ini</span>
   </div>
-  <div class="src">controls/pass.patch · live runs 1–5 (mean 88s, ~12 AIC)</div>
+  <div class="card accent-l" style="margin-top:.85rem"><h3>What the executor receives</h3>
+    <p>Copilot receives the complete frozen <span class="mono">assets/TASK.md</span> with no hints and no oracle access.
+    The September 2 proof replays the known-good control patch to make the release-gate evidence reproducible.</p></div>
+  <div class="src">assets/TASK.md · controls/pass.patch · September 2 proof reproduces the candidate with the control patch</div>
   <aside class="speaker-notes" data-duration="02:00">
     <p><strong>0:00–1:00 · Walk the 4 Files.</strong> Show <code>setup.py</code> (package requires), <code>slugify/slugify.py</code> (clean import without fallback), <code>tox.ini</code> (test matrix update), and <code>README.md</code>.</p>
-    <p><strong>1:00–2:00 · Gate Invariant Check.</strong> Point out the strict policy check: no legacy dependency references may linger anywhere across packaging, docs, or test matrices.</p>
+    <p><strong>1:00–2:00 · Gate Invariant Check.</strong> Copilot gets the frozen task without hints or oracle access. The recorded September 2 evidence uses <code>controls/pass.patch</code> so the candidate can be reproduced exactly.</p>
     <p><strong>Transition:</strong> “Step 4: the gate starts its clean rebuild.”</p>
   </aside>
 </section>
@@ -717,17 +720,18 @@ in an isolated workspace…</pre></div>
     <div class="card">
       <h3>Identity is pinned before judging</h3>
       <ul>
-        <li>base commit <span class="mono">42e5e792a247</span></li>
+        <li>base commit <span class="mono">a5d82da63b0a40d0de639ec1293e8d1d3c3e0307</span></li>
         <li>patch sha256 <span class="mono">7e8bd4232c58…</span> — fingerprint of <em>exactly</em> what is judged</li>
+        <li>candidate tree <span class="mono">24fa968d82e846d71573f686a2c74e5c342869a0</span></li>
         <li>policy sha256 <span class="mono">4c52b4fbbb8a…</span> — fingerprint of the rules used</li>
       </ul>
     </div>
   </div>
   <div class="card accent-l" style="margin-top:.9rem"><h3>Why rebuild?</h3>
     <p>The executor’s workspace can lie — ambient packages and cached state make incomplete work look healthy.
-    In live run-01, Copilot reported <span class="mono">“82 passed”</span> from the wrong interpreter; the gate’s clean
-    rebuild found the tests could not even run.</p></div>
-  <div class="src">.release-gate/runs/&lt;run-id&gt;/result.json → base_commit, patch_sha256, config_sha256</div>
+    Earlier live Copilot trials showed why this matters: host interpreter state made incomplete work appear
+    healthier than a clean gate rebuild.</p></div>
+  <div class="src">.release-gate/runs/20260902T153230Z-0b1d3f349b56/result.json → base_commit, candidate_tree, patch_sha256, config_sha256</div>
   <aside class="speaker-notes" data-duration="01:15">
     <p><strong>0:00–1:15 · Independence, made physical.</strong> The gate reconstructs both base and candidate from git
     in its own workspace. Nothing the executor claims is carried over. The three hashes make the verdict attributable:
@@ -821,7 +825,8 @@ review        : <span class="ok">none</span></pre></div>
 <pre>VERDICT: <span class="ok">PASS</span>
 reason_codes: []            <span class="dim">exit 0</span>
 RESULT: .release-gate/runs/
-  20260827T143722Z-58368f55bad1/result.json</pre></div>
+  20260902T153230Z-0b1d3f349b56/result.json
+warning: OBSERVABILITY_PATH_UNSAFE <span class="dim">(non-gating)</span></pre></div>
   </div>
   <div class="card warn" style="margin-top:.9rem"><h3>The line most gates get wrong</h3>
     <p>A check that <em>could not run</em> is not evidence against the candidate — and not evidence for it.
@@ -842,9 +847,9 @@ RESULT: .release-gate/runs/
   <h2>The verdict comes with receipts.</h2>
   <div class="grid g2">
     <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
-<pre class="dim">.release-gate/runs/20260827T143722Z-58368f55bad1/</pre>
+<pre class="dim">.release-gate/runs/20260902T153230Z-0b1d3f349b56/</pre>
 <pre>├ result.json            <span class="dim">verdict · checks · scope · hashes</span>
-├ trace.json             <span class="dim">12 events · what ran, when, exit codes</span>
+├ trace.json             <span class="dim">what ran, when, exit codes</span>
 ├ manifest.json          <span class="dim">every artifact + its sha256</span>
 ├ candidate.patch        <span class="dim">the exact diff that was judged</span>
 ├ effective-config.json  <span class="dim">the policy that applied</span>
@@ -863,40 +868,36 @@ RESULT: .release-gate/runs/
     <p><strong>0:00–1:15 · The audit story.</strong> result.json is the decision record; trace.json is the how
     (commands, exit codes, durations, truncation flags); manifest.json binds it together with hashes. Tamper-evident,
     not immutable — an honest distinction the tool itself makes.</p>
-    <p><strong>Transition:</strong> “Step 9: the offline oracle that grades the judge.”</p>
+    <p><strong>Transition:</strong> “Step 9: the production stop before any merge.”</p>
   </aside>
 </section>
 
 <!-- 13 =============================================================== -->
-<section class="slide" id="slide-13" data-stage="oracle" data-title="Step 9 · offline lane">
+<section class="slide" id="slide-13" data-stage="evidence" data-title="Step 9 · production stop">
   <span class="stepno">09</span>
-  <div class="kicker">Step 9 · offline lane</div>
-  <h2>Was the gate right? Only the answer key knows.</h2>
+  <div class="kicker">Step 9 · production stop</div>
+  <h2>PASS is not an automatic merge.</h2>
   <div class="grid g2">
     <div class="term"><div class="cbar"><i></i><i></i><i></i></div>
-<pre><span class="p">$</span> python3 demo.py grade --result …/result.json</pre>
-<pre><span class="ok">16 passed</span> in 0.06s
-truth: <span class="ok">correct</span>
-classification: <span class="ok">good_pass</span></pre></div>
+<pre>PASS means the reviewed policy accepted this candidate.
+Inspect the evidence and diff before merge.
+No hidden oracle ran; semantic correctness is not proven.</pre></div>
     <div class="card">
-      <h3>The hidden oracle</h3>
+      <h3>What production knows</h3>
       <ul>
-        <li>16 asserts the gate never sees — the divergent inputs: <span class="mono">₹500→rs500 · ♥ love→hearts-love …</span></li>
-        <li>expected values were <em>observed</em> by running both backends first — never guessed</li>
-        <li><b>good_pass</b> = gate said PASS <em>and</em> the change was truly correct — “good” grades the gate, not the code</li>
+        <li>the candidate touched only <span class="mono">README.md · setup.py · slugify/slugify.py · tox.ini</span></li>
+        <li><span class="mono">tests-and-coverage</span>, <span class="mono">task-consistency</span>, and <span class="mono">types</span> all passed</li>
+        <li>the run recorded hashes, logs, and a non-gating <span class="mono">OBSERVABILITY_PATH_UNSAFE</span> warning</li>
       </ul>
     </div>
   </div>
-  <div class="card accent-l" style="margin-top:.9rem"><h3>Production has no oracle</h3>
-    <p>That is the whole point of the offline lane: measure the gate on known answers <em>first</em>, then trust its
-    verdicts where no answer key exists. Production can reveal a bad pass eventually — it can <em>never</em> reveal a
-    wrongly blocked good change.</p></div>
-  <div class="src">demo/python-slugify/oracle/test_x1_oracle.py · demo.py grade</div>
+  <div class="card accent-l" style="margin-top:.9rem"><h3>Human release decision</h3>
+    <p>The gate supplies bounded evidence. A reviewer still inspects the diff and receipts, because no production
+    system has a hidden answer key for a brand-new change.</p></div>
+  <div class="src">RUN-LOG-2026-09-02-no-oracle-pass.md · result.json · candidate.patch</div>
   <aside class="speaker-notes" data-duration="01:30">
-    <p><strong>0:00–1:30 · The asymmetry argument.</strong> A false release eventually surfaces in production. A false
-    block never does — the change didn’t ship, nothing happened, no trace. Only a bench with hidden answers sees both
-    error directions.</p>
-    <p><strong>Transition:</strong> “Step 10: running the three calibrated controls.”</p>
+    <p><strong>0:00–1:30 · Production stop.</strong> In the September 2 no-oracle run, PASS means the reviewed policy accepted this candidate under the recorded checks. It is not a proof of all semantic correctness and it is not an automatic merge button.</p>
+    <p><strong>Transition:</strong> “Step 10: then, separately, we qualify the judge offline with known-answer controls.”</p>
   </aside>
 </section>
 
@@ -936,7 +937,7 @@ verdict: <span class="wn">NEEDS_HUMAN</span> · POLICY_FILE_CHANGED</pre></div>
     <div class="card warn"><h3>Blindspot B · selective completion</h3><p>Code lands, tox.ini skipped. Caught by task-consistency.</p></div>
     <div class="card accent-l"><h3>Blindspot C · trust boundary</h3><p>Touching test.py or policy escalates immediately.</p></div>
   </div>
-  <div class="src">controls/{pass,fail,needs-human}.patch · runs 20260827T1437…/1438…</div>
+  <div class="src">September 1 automated verification · controls/{pass,fail,needs-human}.patch · 16 hidden oracle tests</div>
   <aside class="speaker-notes" data-duration="03:00">
     <p><strong>0:00–1:00 · PASS Candidate.</strong> Reviewing only allowed X1 paths with clean environments produces a verified PASS verdict with zero reason codes.</p>
     <p><strong>1:00–2:00 · FAIL Candidate.</strong> Modifying forbidden test files like <code>test.py</code> is immediately caught as an out-of-scope violation (FAIL).</p>
@@ -964,13 +965,13 @@ verdict: <span class="wn">NEEDS_HUMAN</span> · POLICY_FILE_CHANGED</pre></div>
     </div>
   </div>
   <div class="card" style="margin-top:.9rem">
-    <h3>The live-run proof · run-01 → run-01b</h3>
-    <p>Copilot: <span class="mono">“82 passed.”</span> The gate’s clean rebuild: pytest <b>exit 2</b> — tests could not
-    run (missing dependency). Verdict <span class="v-hum">NEEDS_HUMAN</span>, <em>not</em> FAIL. One human
-    <span class="mono">pip install</span> later, re-gated: <span class="v-pass">PASS</span>, oracle 15/15,
-    <span class="mono">good_pass</span>. The task never “failed” — the gate briefly couldn’t verify it.</p>
+    <h3>The September 1 qualification proof</h3>
+    <p>The automated controls exercise all three outcomes: <span class="v-pass">PASS</span> as
+    <span class="mono">good_pass</span>, forbidden <span class="mono">test.py</span> edits as
+    <span class="mono">good_catch</span>, and policy edits as <span class="mono">escalated</span>. The hidden oracle has
+    <b>16</b> assertions and runs only in this offline lane.</p>
   </div>
-  <div class="src">demo/runs/RUNLOG.md · run-01 tests.log (pytest exit 2)</div>
+  <div class="src">RUN-LOG-2026-09-01-automated-verification.md · oracle/test_x1_oracle.py</div>
   <aside class="speaker-notes" data-duration="01:30">
     <p><strong>0:00–1:30 · Core distinction.</strong> Never translate gate ≠ PASS into “the engineering task
     failed”. Four different states hide behind a red light: candidate wrong, evidence missing, check broken, or

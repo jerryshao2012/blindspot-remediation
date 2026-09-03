@@ -121,15 +121,15 @@
 
 <!-- ============ DIAGRAM 1 · THE HLD ============ -->
 <h2>1 · Automated SDLC flows — the two lanes</h2>
-<p class="h2sub">The original HLD. <b>ONLINE</b> runs on every change and ends at a verdict.
-<b>OFFLINE</b> runs the same pipeline on known-answer tasks to measure the gate itself.</p>
+<p class="h2sub">The original HLD. <b>ONLINE</b> runs on every change and ends with evidence review
+and a human release decision. <b>OFFLINE</b> runs the same pipeline on known-answer tasks to measure the gate itself.</p>
 
 <div class="diagram">
-  <div class="lane-title">Online — every real or benchmark change</div>
+  <div class="lane-title">Online — every real change</div>
   <div class="flow">
     <div class="bx part"><b>Task request</b><div class="who">markdown card · demo/tasks/X1_v2.md — no Jira/ticket intake</div></div>
     <span class="arr">→</span>
-    <div class="bx built"><b>ChangeExecutionService</b><div class="who">live: Copilot CLI · demo: control patches — A2 code unused</div></div>
+    <div class="bx built"><b>Assistant/control candidate</b><div class="who">live: Copilot CLI · replay: control patches — A2 code unused</div></div>
     <span class="arr">→</span>
     <div class="bx built"><b>Candidate patch</b><div class="who">the diff · fingerprinted as patch_sha256</div></div>
     <span class="arr">→</span>
@@ -144,9 +144,9 @@
     </div>
     <span class="arr">→</span>
     <div class="stack">
-      <div class="bx miss"><b>Release</b><div class="who">out of scope by design — ends at the verdict</div></div>
-      <div class="bx built"><b>Release or human review</b><div class="who">NEEDS_HUMAN + reason codes</div></div>
-      <div class="bx built"><b>Human review</b><div class="who">you — outside the gate, as designed</div></div>
+      <div class="bx built"><b>Evidence review</b><div class="who">result.json + manifest + candidate.patch</div></div>
+      <div class="bx built"><b>Human release decision</b><div class="who">you — outside the gate, as designed</div></div>
+      <div class="bx miss"><b>Automatic release</b><div class="who">out of scope by design</div></div>
     </div>
   </div>
 
@@ -154,7 +154,7 @@
 
   <div class="lane-title">Offline — development and qualification campaigns</div>
   <div class="flow">
-    <div class="bx part"><b>BenchmarkFactory</b><div class="who">hand-built · demo/CORPUS.md — 25 candidates measured, 2 of 3 demos built</div></div>
+    <div class="bx part"><b>Known-answer controls</b><div class="who">hand-built · demo/CORPUS.md — 25 candidates measured, 2 of 3 demos built</div></div>
     <span class="arr">→</span>
     <div class="bx built"><b>Validated golden benchmark</b><div class="who">pinned commit + task card + control patches + hidden oracle</div></div>
     <span class="arr">→</span>
@@ -173,9 +173,9 @@
 </div>
 
 <div class="callout blue"><b>The one-line answer to “what do we have?”</b> —
-ONLINE today = Copilot CLI (or a control patch) + the release-gate CLI + you as human review.
-OFFLINE today = the same gate run on known-answer tasks, graded by a hidden oracle, logged to RUNLOG and a
-rolling dashboard. Everything else on this map is either partial (amber) or design (dashed).</div>
+ONLINE today = assistant/control candidate → deterministic gate → evidence review → human release decision.
+OFFLINE today = known-answer controls → gate → hidden oracle grading, logged to RUNLOG and a rolling dashboard.
+Everything else on this map is either partial (amber) or design (dashed).</div>
 
 <!-- ============ DIAGRAM 2 · THE EVIDENCE LOOP ============ -->
 <h2>2 · Release ServiceGate workflow — the evidence loop</h2>
@@ -325,7 +325,7 @@ It is how you prove the gate reads correctly — the same idea as a lab control 
 </div>
 
 <div style="margin-top:2.5rem;font-family:var(--font-m);font-size:var(--micro);color:var(--muted-dark)">
-  Sources · release-gate/demo/python-slugify run 20260827T143722Z-58368f55bad1 · release-gate/demo/rate-limiter/evidence.md ·
+  Sources · RUN-LOG-2026-09-02-no-oracle-pass.md · RUN-LOG-2026-09-01-automated-verification.md · release-gate/demo/rate-limiter/evidence.md ·
   release-gate/skills/release-gate/SKILL.md (Graphify advisory) · SCAFFOLDING-LEDGER.md · demo/runs/RUNLOG.md
 </div>
 </div>

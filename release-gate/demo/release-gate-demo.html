@@ -217,7 +217,7 @@
   <span class="pn" id="n-policy">03 policy</span><span class="arrow">→</span>
   <span class="pn" id="n-evidence">04 evidence</span><span class="arrow">→</span>
   <span class="pn" id="n-verdict">05 verdict</span><span class="arrow">→</span>
-  <span class="pn" id="n-oracle">06 oracle</span>
+  <span class="pn" id="n-oracle">06 review</span>
 </div>
 
 <main id="deck">
@@ -227,7 +227,7 @@
   <div class="kicker">AI Powered SDLC · Architecture &amp; Executive Overview</div>
   <h1>Autonomous<br>Release Gate.</h1>
   <p class="lead" style="margin-top:1rem">Closing the enterprise AI SDLC blindspot: transforming “the agent claims it is done” into an independent, tamper-evident release decision.</p>
-  <p class="lead" style="margin-top:.6rem">A high-level synthesis of repository breadth (Demo 01) and behavioral depth with bounded repair (Demo 02).</p>
+  <p class="lead" style="margin-top:.6rem">A high-level synthesis of repository breadth, behavioral depth, production evidence review, and benchmark-only oracle qualification.</p>
   <div class="src">release-gate 0.6.0 · 2026</div>
   <aside class="speaker-notes" data-duration="01:30">
     <p><strong>0:00–0:45 · Framing the Challenge.</strong> As AI code assistants and autonomous agents enter enterprise workflows, their speed generates a new bottleneck: release confidence. An agent declaring "all tests passed" is not evidence for release.</p>
@@ -298,13 +298,13 @@
     </div>
     <div class="card">
       <span class="mono" style="color:var(--purple); font-size:var(--micro-size);">STAGE 06</span>
-      <h3 style="margin-top:.2rem;">External Oracle</h3>
-      <p>Offline grading against hidden truth models to measure the gate’s precision.</p>
+      <h3 style="margin-top:.2rem;">Human Review</h3>
+      <p>Production ends with evidence review and a human release decision.</p>
     </div>
   </div>
   <aside class="speaker-notes" data-duration="02:00">
     <p><strong>0:00–1:00 · Stages 1 through 3.</strong> Every run begins with cryptographic pinning of git base and patch digest. Both environments are reconstructed from scratch, and file scope is validated against policy.</p>
-    <p><strong>1:00–2:00 · Stages 4 through 6.</strong> Real command executions produce parsed assertion evidence. A deterministic precedence rule produces the verdict before any external oracle or merge occurs.</p>
+    <p><strong>1:00–2:00 · Stages 4 through 6.</strong> Real command executions produce parsed assertion evidence. A deterministic precedence rule produces the verdict, then production ends with evidence review and a human release decision. Oracle grading belongs to offline known-answer qualification.</p>
     <p><strong>Transition:</strong> “To validate this architecture, we created two distinct demonstration tracks.”</p>
   </aside>
 </section>
@@ -319,7 +319,7 @@
         <span class="track-badge">Demo 01 · Breadth</span>
         <h3 class="track-title" style="margin-top:.4rem;">python-slugify</h3>
         <p class="track-desc" style="margin-top:.5rem;">
-          <b>Repository-wide migration consistency:</b> replacing transliteration backends across packaging (<span class="mono">setup.py</span>), code imports, test matrices (<span class="mono">tox.ini</span>), and docs.
+          <b>Repository-wide migration consistency:</b> replacing transliteration backends across packaging (<span class="mono">setup.py</span>), code imports, test matrices (<span class="mono">tox.ini</span>), and docs, with no oracle in the production gate.
         </p>
         <ul style="margin-top:.7rem; font-size:var(--small-size); color:var(--muted); line-height:1.6;">
           <li>Clean virtual environment dependency isolation</li>
@@ -363,7 +363,7 @@
   <div class="grid g2">
     <div class="card accent-l">
       <h3>Clean Environments vs Ambient State</h3>
-      <p>In live run-01, Copilot reported <span class="mono">“82 passed”</span> because the dev host had ambient packages. The gate’s clean rebuild revealed tests failed immediately (exit 2). Rebuilding from git is essential.</p>
+      <p>The 2026-09-02 no-oracle PASS run rebuilt the candidate from git, scoped four changed paths, and accepted it under the reviewed policy. Rebuilding from git is essential.</p>
     </div>
     <div class="card warn">
       <h3>Task-Consistency Invariant</h3>
@@ -374,10 +374,14 @@
     <h3>Scope Protection</h3>
     <p>Touching <span class="mono">test.py</span> is classified as <span class="mono">PATH_FORBIDDEN</span> (<span class="v-fail">FAIL</span>). Touching <span class="mono">.release-gate.yaml</span> triggers <span class="mono">POLICY_FILE_CHANGED</span> (<span class="v-hum">NEEDS_HUMAN</span>). Candidates cannot alter their own evaluation.</p>
   </div>
-  <div class="src">Detailed Walkthrough: docs/x1-behind-the-scenes.html</div>
+  <div class="card accent-l" style="margin-top:.9rem">
+    <h3>September 2 receipt</h3>
+    <p><span class="mono">tests-and-coverage PASS · task-consistency PASS · types PASS</span>. The external oracle remains offline known-answer qualification, not a production dependency.</p>
+  </div>
+  <div class="src">Detailed Walkthrough: docs/x1-behind-the-scenes.html · RUN-LOG-2026-09-02-no-oracle-pass.md</div>
   <aside class="speaker-notes" data-duration="02:00">
-    <p><strong>0:00–1:00 · The Ambient Environment Trap (Demo 01).</strong> Rebuilding base and candidate from git eliminates the "works on my machine" failure mode that plagues AI coding tools.</p>
-    <p><strong>1:00–2:00 · The Improvement Loop.</strong> Notice how an observed AI failure in early testing (stale tox.ini) became a permanent gate policy check. That is how the gate continuously learns and strengthens enterprise guardrails.</p>
+    <p><strong>0:00–1:00 · The No-Oracle PASS (Demo 01).</strong> The September 2 run accepted the X1 candidate without an oracle: clean rebuild, scoped paths, three checks passing, then evidence review.</p>
+    <p><strong>1:00–2:00 · The Qualification Loop.</strong> The September 1 known-answer controls remain valuable, but they grade the judge offline. They do not run in the production release decision.</p>
     <p><strong>Transition:</strong> “Now let’s look at Demo 02: deep algorithmic assurance and mutation testing.”</p>
   </aside>
 </section>
@@ -482,7 +486,7 @@
     </div>
     <div class="card good">
       <h3>Measured AI Cost</h3>
-      <p>5 live Copilot runs on X1: mean <b>88s</b>, ~<b>12 AIC</b> per run. 5/5 correct candidates verified end-to-end.</p>
+      <p>5 live Copilot runs on X1: mean <b>88s</b>, ~<b>12 AIC</b> per run. The current no-oracle proof adds a 2026-09-02 PASS with three checks green.</p>
     </div>
     <div class="card warn">
       <h3>Honest Unbuilt Gaps</h3>
@@ -519,7 +523,7 @@
       Release Gate transforms AI assistance from subjective claim into auditable release confidence.
     </p>
   </div>
-  <div class="src">Demo Hub: presentations.html</div>
+  <div class="src">Demo Hub: presentations.html · X1 sources: 2026-09-02 no-oracle PASS + 2026-09-01 automated verification</div>
   <aside class="speaker-notes" data-duration="01:30">
     <p><strong>0:00–1:30 · Final Synthesis.</strong> Release Gate is not another test runner; it is an enterprise assurance architecture. It enables development teams to deploy autonomous AI agents at scale while maintaining strict governance, auditability, and release integrity.</p>
     <p><strong>Close:</strong> “Thank you — let’s open for Q&A and dive into the live walkthroughs.”</p>
