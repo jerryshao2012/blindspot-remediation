@@ -9,7 +9,7 @@
 ## Purpose
 
 Record a successful Release Gate run for the Python-Slugify demo in the
-"without an oracle" workflow. This run verifies the host, creates the demo
+online workflow. This run verifies the host, creates the demo
 workbench and trusted base, validates a candidate against the reviewed
 `.release-gate.yaml` policy, records the gate evidence package, and inspects
 the result. It intentionally stops before `demo.py grade`, so no hidden oracle
