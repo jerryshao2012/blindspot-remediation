@@ -782,11 +782,11 @@
       <h2 class="reveal">Run it like a cooking show: live where it matters, staged where waiting adds no value.</h2>
       <div class="demo-grid reveal">
         <div class="stage-list">
-          <div class="stage"><b>0:00</b><span>Open the live environment and candidate diff. Show the four touched files.</span></div>
-          <div class="stage"><b>1:30</b><span>Show clean rebuild context: base commit, candidate tree, patch hash, config hash.</span></div>
-          <div class="stage"><b>3:00</b><span>Run or reveal checks: tests-and-coverage, task-consistency, advisory types.</span></div>
-          <div class="stage"><b>5:30</b><span>Open <span class="mono">result.json</span>, <span class="mono">trace.json</span>, and <span class="mono">manifest.json</span> as receipts.</span></div>
-          <div class="stage"><b>6:30</b><span>Close with human review: PASS means policy accepted this candidate.</span></div>
+          <div class="stage"><b>0:00</b><span>Introduce the Copilot-loaded skill: <span class="mono">release-gate/skills/release-gate/SKILL.md</span>.</span></div>
+          <div class="stage"><b>1:15</b><span>Show the repository contract in <span class="mono">.release-gate.yaml</span>.</span></div>
+          <div class="stage"><b>2:30</b><span>Run the gate and show <span class="pass">PASS</span>, <span class="fail">FAIL</span>, and <span class="human">NEEDS_HUMAN</span> tags.</span></div>
+          <div class="stage"><b>4:30</b><span>Walk the run log: isolated workspace, rebuild, and validation flow.</span></div>
+          <div class="stage"><b>6:00</b><span>Review <span class="mono">result.json</span> or <span class="mono">evidence.json</span> as the audit trail.</span></div>
         </div>
         <div class="term" aria-label="Demo receipt excerpt">
 <pre><span class="dim">run:</span> 20260902T153230Z-0b1d3f349b56
@@ -803,16 +803,19 @@ reason_codes        none
         </div>
       </div>
       <div class="badge-row reveal">
-        <span class="badge">Live environment tab</span>
-        <span class="badge">Candidate patch</span>
+        <span class="badge">Skill file</span>
+        <span class="badge">YAML contract</span>
+        <span class="badge">Gate verdict</span>
         <span class="badge">Saved run log</span>
         <span class="badge">Evidence receipts</span>
       </div>
       <div class="src reveal">x1-behind-the-scenes.html, slides 8-13; RUN-LOG-2026-09-02-online-pass.md</div>
       <aside class="speaker-notes" data-duration="07:00">
-        <p><strong>Drive the demo.</strong> Use prepped tabs to avoid 30+ second dead air while AI or environment steps run. Be explicit about what is live and what is saved evidence.</p>
-        <p><strong>Recommended tabs:</strong> live environment, candidate diff, <code>result.json</code>, <code>trace.json</code>, <code>manifest.json</code>, and the source run log. Keep screenshots in reserve only if the live path stalls.</p>
-        <p><strong>Do not over-explain internals.</strong> Graham may interrupt with technical questions. Use the receipts to answer, then return to the run of show.</p>
+        <p><strong>0:00-1:15 - Introduce the skill.</strong> Start in GitHub Copilot with the loaded Release Gate skill instructions, ideally <code>release-gate/skills/release-gate/SKILL.md</code> or the host-visible skill view. Explain that this is how the agent receives operational boundaries: explicit invocation, compatible version, required base ref, and verdict reporting.</p>
+        <p><strong>1:15-2:30 - Show the contract.</strong> Open <code>.release-gate.yaml</code>. Name the policy classes in plain language: allowed paths for the intended migration, forbidden paths such as <code>test.py</code> that would let the candidate self-grade, and review-required paths such as the gate policy itself.</p>
+        <p><strong>2:30-4:30 - Run the skill and show gating.</strong> Run or reveal <code>release-gate validate</code> and <code>release-gate run --base release-gate-demo-base</code>. Use the prepped PASS, FAIL, and NEEDS_HUMAN controls to show that the verdict is dynamic: normal migration passes, forbidden test modification fails, and policy modification escalates.</p>
+        <p><strong>4:30-6:00 - Display the run log.</strong> Walk through the saved run log only as needed: candidate preparation, isolated workspace reconstruction, policy validation, gate execution, and the printed <code>RESULT:</code> path. This is the cooking-show portion, so avoid waiting on slow model or environment work.</p>
+        <p><strong>6:00-7:00 - Review the evidence report.</strong> Open <code>result.json</code> or <code>evidence.json</code> and explain how to read verdict, reason codes, changed paths, checks, hashes, and manifest pointers. Close by saying the output is verifiable and auditable, but PASS is still not automatic merge authorization.</p>
       </aside>
     </div>
   </section>
