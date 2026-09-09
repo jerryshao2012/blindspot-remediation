@@ -741,10 +741,10 @@
       </div>
       <div class="src reveal">Adaptive assurance model · Saved demo: configured checks, policy enforcement, and traceable evidence</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Jay — opening pitch (about one minute).</strong> “Release Gate Service is the assurance intelligence between AI coding and software release. It asks: what do we still need to know about this change? Its adaptive model uses AI, ML, and engineering signals to select mechanisms that can answer those questions and accumulate evidence until the change can be meaningfully assessed or escalated. Engineering teams bring their specialized capabilities: tests, agents, scanners, mutation testing, and evidence-diversity models. The gate coordinates how those capabilities are used, assesses what remains unanswered, and pursues additional evidence where needed. Within the Tool Spine, that is our added value: a coordinated assurance process around each change. Today, Jerry will show its foundation through configured checks, policy enforcement, and traceable evidence.”</p>
-        <p><strong>Jay — Khosrow’s mapping concept, if asked.</strong> Map the change to potential risks, the risks to evidence needs, and the available evidence to coverage and independence. For the dependency migration, passing behavior tests would leave installation unverified if installation checks never ran. The adaptive model would recognize the gap, select a suitable capability, collect the result, and reassess sufficiency. If a material question remains unresolved, escalate it for human review. Ten tests sharing the same assumptions can provide less useful evidence than complementary checks.</p>
-        <p><strong>Jay — data science contribution, if asked.</strong> Describe evidence by risk coverage, method, and provenance; use diversity models to assess overlap and dependence. Evaluate sufficiency assessments against historical changes or seeded faults, measuring missed defects and unnecessary escalations to calibrate review thresholds. AI and ML help identify gaps and prioritize additional evidence; engineering signals ground the assessment. A score is not a probability of correctness unless validated and calibrated.</p>
-        <p><strong>Presenter scope.</strong> The adaptive loop describes the service model in Khosrow’s pitch. The saved September 2 run demonstrates configured checks and policy enforcement, not adaptive capability selection or evidence-diversity assessment. Deterministic execution supports reproducibility; keep the headline on assurance intelligence. Evidence mapping here is distinct from the L1/L2/L3 capability-model mapping.</p>
+        <p><strong>Opening pitch (about one minute).</strong> “Release Gate Service is the assurance intelligence between AI coding and software release. It asks: what do we still need to know about this change? Its adaptive model uses AI, ML, and engineering signals to select mechanisms that can answer those questions and accumulate evidence until the change can be meaningfully assessed or escalated. Engineering teams bring their specialized capabilities: tests, agents, scanners, mutation testing, and evidence-diversity models. The gate coordinates how those capabilities are used, assesses what remains unanswered, and pursues additional evidence where needed. Within the Tool Spine, that is our added value: a coordinated assurance process around each change. Today, Jerry will show its foundation through configured checks, policy enforcement, and traceable evidence.”</p>
+        <p><strong>Mapping concept, if asked.</strong> Map the change to potential risks, the risks to evidence needs, and the available evidence to coverage and independence. For the dependency migration, passing behavior tests would leave installation unverified if installation checks never ran. The adaptive model would recognize the gap, select a suitable capability, collect the result, and reassess sufficiency. If a material question remains unresolved, escalate it for human review. Ten tests sharing the same assumptions can provide less useful evidence than complementary checks.</p>
+        <p><strong>Data science contribution, if asked.</strong> Describe evidence by risk coverage, method, and provenance; use diversity models to assess overlap and dependence. Evaluate sufficiency assessments against historical changes or seeded faults, measuring missed defects and unnecessary escalations to calibrate review thresholds. AI and ML help identify gaps and prioritize additional evidence; engineering signals ground the assessment. A score is not a probability of correctness unless validated and calibrated.</p>
+        <p><strong>Presenter scope.</strong> The adaptive loop describes the service model in K’s pitch. The saved September 2 run demonstrates configured checks and policy enforcement, not adaptive capability selection or evidence-diversity assessment. Deterministic execution supports reproducibility; keep the headline on assurance intelligence. Evidence mapping here is distinct from the L1/L2/L3 capability-model mapping.</p>
         <p><strong>Tie to the themes.</strong> Evidence, quality and trust: assess whether the evidence answers the relevant questions. Operate with control: keep the process within policy and escalate unresolved risk. Measure and self-improve: use recorded outcomes to evaluate assurance quality. Keep detailed capability-model mapping in the shared appendix.</p>
       </aside>
     </div>
@@ -774,7 +774,7 @@
       <div class="src reveal">x1-behind-the-scenes.html, slides 5, 7, 10, and 13</div>
       <aside class="speaker-notes" data-duration="01:00">
         <p><strong>Why this example is useful.</strong> Explain slugification with a simple example: “Release Gate Demo” becomes “release-gate-demo” for a URL. This routine migration is a useful example of automated SDLC work because its effects cross packaging, runtime, test configuration, and documentation.</p>
-        <p><strong>Jay — make the adaptive question concrete.</strong> “For this migration, we would ask whether installation succeeds, runtime behavior remains acceptable, test environments exercise the intended dependency, and documentation matches the package. The mapping connects each question to useful evidence. As new results arrive, the adaptive model asks what is still missing and which capability can answer it next.” Use this as an illustration of the service model; the saved run executes its configured checks.</p>
+        <p><strong>Make the adaptive question concrete.</strong> “For this migration, we would ask whether installation succeeds, runtime behavior remains acceptable, test environments exercise the intended dependency, and documentation matches the package. The mapping connects each question to useful evidence. As new results arrive, the adaptive model asks what is still missing and which capability can answer it next.” Use this as an illustration of the service model; the saved run executes its configured checks.</p>
         <p><strong>Graphify wording:</strong> Present Graphify as foundational codebase understanding and change-effect context. Do not say the recorded September 2 gate used Graphify as a formal check unless that is added separately.</p>
       </aside>
     </div>
@@ -856,7 +856,7 @@ reason_codes        none
       </div>
       <div class="src reveal">release-gate-demo.html, slides 8 and 10; x1-behind-the-scenes.html, slide 13</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Jay — close on added value.</strong> “The value we bring is assurance intelligence: asking what we still need to know, choosing mechanisms to answer it, and bringing the evidence together until the change can be assessed or escalated. Your team brings its tests, agents, scanners, and specialized models; Release Gate’s adaptive model coordinates those capabilities around the change. Today’s walkthrough demonstrated the execution and evidence foundation for that model.” PASS means the configured requirements were met; the human release owner still owns the release decision.</p>
+        <p><strong>Close on added value.</strong> “The value we bring is assurance intelligence: asking what we still need to know, choosing mechanisms to answer it, and bringing the evidence together until the change can be assessed or escalated. Your team brings its tests, agents, scanners, and specialized models; Release Gate’s adaptive model coordinates those capabilities around the change. Today’s walkthrough demonstrated the execution and evidence foundation for that model.” PASS means the configured requirements were met; the human release owner still owns the release decision.</p>
         <p><strong>Bridge to the next demo.</strong> Tie back to evidence, quality and trust; operate with control; measure and self-improve. The Engineering Scorecard can put release-readiness measures in context. Present this as a conceptual handoff unless an implemented integration is shown.</p>
         <p><strong>Velocity — verbal only.</strong> Acknowledge the aspiration to support tens of thousands or hundreds of thousands of releases as autonomous engineering expands. Runtime overhead, concurrent evaluation, and human-review capacity need stress testing at that velocity. This demo does not establish production scale or throughput.</p>
       </aside>
@@ -1185,32 +1185,64 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
     --font-mono: "IBM Plex Mono", monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
   body {
-    min-height: 100vh;
     display: grid;
-    grid-template-columns: minmax(240px, .34fr) 1fr;
+    grid-template-columns: minmax(230px, 280px) 1fr;
     background: var(--terminal);
     color: #e7f1f7;
     font-family: var(--font-display);
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
   }
   aside {
     border-right: 1px solid var(--terminal-soft);
     padding: 1rem;
     background: rgba(0,0,0,.18);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  aside .badge {
+    flex-shrink: 0;
+  }
+  .slide-list {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    margin-top: .75rem;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    flex: 1;
+    min-height: 0;
+    padding-right: .2rem;
   }
   main {
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
   }
   header {
+    flex-shrink: 0;
     display: flex;
     justify-content: space-between;
     gap: 1rem;
     align-items: center;
-    padding: 1rem 1.2rem;
+    padding: .85rem 1.2rem;
     border-bottom: 1px solid var(--terminal-soft);
+    background: var(--terminal);
+    z-index: 10;
   }
   .badge, .duration, .clock, .slide-nav-num {
     font-family: var(--font-mono);
@@ -1219,17 +1251,26 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
     text-transform: uppercase;
     color: var(--blue-bright);
   }
+  .notes-scroll-pane {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+  }
   h1 {
-    padding: 1rem 1.2rem 0;
+    padding: 1rem 1.2rem .4rem;
     color: #fff;
-    font-size: clamp(1.6rem, 4vw, 3rem);
-    line-height: 1.08;
+    font-size: clamp(1.25rem, 2.5vw, 1.85rem);
+    line-height: 1.15;
     letter-spacing: 0;
+    flex-shrink: 0;
   }
   .notes {
-    padding: 1rem 1.2rem 1.4rem;
-    overflow-y: auto;
+    padding: .8rem 1.2rem 1.4rem;
     font-size: var(--notes-size, 18px);
+    flex: 1;
   }
   .notes p {
     margin-bottom: .95rem;
@@ -1245,13 +1286,15 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
     font-family: var(--font-mono);
   }
   .controls {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: .75rem;
-    padding: .9rem 1.2rem;
+    padding: .75rem 1.2rem;
     border-top: 1px solid var(--terminal-soft);
-    background: rgba(0,0,0,.16);
+    background: rgba(0,0,0,.22);
+    z-index: 10;
   }
   .buttons { display: flex; flex-wrap: wrap; gap: .45rem; }
   button {
@@ -1271,11 +1314,6 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
     font-size: .9rem;
     font-weight: 600;
   }
-  .slide-list {
-    display: grid;
-    gap: .35rem;
-    margin-top: .75rem;
-  }
   .slide-item {
     width: 100%;
     text-align: left;
@@ -1286,19 +1324,41 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
     background: transparent;
     color: #b9ccd8;
     padding: .45rem;
+    border-radius: 4px;
+    transition: background .15s, color .15s;
+  }
+  .slide-item:hover {
+    background: rgba(255,255,255,.06);
+    color: #fff;
   }
   .slide-item.active {
     background: rgba(0,117,190,.22);
     border-color: rgba(115,195,235,.35);
     color: #fff;
+    font-weight: 600;
   }
   .up-next {
     padding: .8rem 1.2rem 1rem;
     border-top: 1px solid var(--terminal-soft);
-    background: rgba(0,0,0,.12);
+    background: rgba(0,0,0,.14);
     color: var(--muted);
     font-size: .86rem;
     line-height: 1.5;
+    flex-shrink: 0;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(115, 195, 235, 0.25);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(115, 195, 235, 0.45);
   }
   @media (max-width: 760px) {
     body { grid-template-columns: 1fr; }
@@ -1322,13 +1382,15 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
         <div class="timer" id="popupSessionTimer">00:00 / 10:00</div>
       </div>
     </header>
-    <h1 id="popupSlideTitle">Slide Title</h1>
-    <section class="notes" id="popupNotesBody"></section>
-    <section class="up-next">
-      <div class="badge">Up next</div>
-      <div id="popupNextTitle">Ready</div>
-      <div id="popupNextPreview"></div>
-    </section>
+    <div class="notes-scroll-pane" id="popupNotesScrollPane">
+      <h1 id="popupSlideTitle">Slide Title</h1>
+      <section class="notes" id="popupNotesBody"></section>
+      <section class="up-next">
+        <div class="badge">Up next</div>
+        <div id="popupNextTitle">Ready</div>
+        <div id="popupNextPreview"></div>
+      </section>
+    </div>
     <footer class="controls">
       <div class="buttons">
         <button id="popupBtnPrev" type="button">Prev</button>
@@ -1444,12 +1506,19 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
       notesEl.style.setProperty("--notes-size", `${this.fontSize}px`);
       notesEl.innerHTML = notes ? notes.innerHTML : "<p>No speaker notes for this slide.</p>";
 
+      const scrollPane = doc.getElementById("popupNotesScrollPane");
+      if (scrollPane) scrollPane.scrollTop = 0;
+
       const next = slides[current + 1];
       doc.getElementById("popupNextTitle").textContent = next ? `${current + 2}. ${next.dataset.title || "Slide"}` : "Presentation complete";
       doc.getElementById("popupNextPreview").textContent = next ? (next.querySelector(".speaker-notes p")?.textContent || "") : "Open Q&A.";
 
       doc.querySelectorAll(".slide-item").forEach((item) => {
-        item.classList.toggle("active", Number(item.dataset.slideIndex) === current);
+        const isActive = Number(item.dataset.slideIndex) === current;
+        item.classList.toggle("active", isActive);
+        if (isActive) {
+          item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
       });
       this.renderTimer();
     }
