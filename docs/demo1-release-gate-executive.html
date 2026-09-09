@@ -716,36 +716,36 @@
   <section class="slide" id="slide-1" data-title="Executive Summary">
     <div class="slide-content">
       <div class="kicker reveal">Demo overview - Evidence, quality and trust</div>
-      <h1 class="reveal">Release Gate in the Tool Spine.</h1>
-      <p class="lead reveal">The Tool Spine connects reusable skills across the engineering lifecycle. Release Gate adds independent evidence and policy checks at the handoff from code change to release, helping teams assess readiness across tools.</p>
+      <h1 class="reveal">Assurance intelligence in the Tool Spine.</h1>
+      <p class="lead reveal">Release Gate Service sits between AI coding and software release. Its adaptive assurance model uses AI, ML, and engineering signals to ask what remains unknown, select the right capabilities, and build evidence for a release decision.</p>
       <div class="summary-grid reveal">
         <div class="panel large">
           <div>
-            <h3>Assurance across tool handoffs</h3>
-            <p>As routine SDLC work becomes autonomous, teams need evidence that travels with each change. Release Gate records what was checked, what remains unverified, and when human review is required.</p>
+            <h3>Teams bring capabilities. The gate coordinates.</h3>
+            <p>Tests, agents, scanners, mutation testing, and evidence-diversity models contribute specialized evidence. The gate’s role is to decide what to ask next and coordinate how that evidence is gathered and assessed.</p>
           </div>
           <div class="metric-row">
-            <div class="metric"><strong>6</strong><span>assurance stages</span></div>
+            <div class="metric"><strong>6</strong><span>adaptive steps</span></div>
             <div class="metric"><strong>3</strong><span>verdicts</span></div>
-            <div class="metric"><strong>1</strong><span>human stop</span></div>
+            <div class="metric"><strong>1</strong><span>release owner</span></div>
           </div>
         </div>
-        <div class="flow" aria-label="Release Gate assurance pipeline">
-          <div class="flow-step"><b>01</b><span>Candidate intake hashes the change.</span></div>
-          <div class="flow-step"><b>02</b><span>Clean rebuild removes host advantage.</span></div>
-          <div class="flow-step"><b>03</b><span>Reviewed policy defines scope.</span></div>
-          <div class="flow-step"><b>04</b><span>Evidence checks run independently.</span></div>
-          <div class="flow-step"><b>05</b><span>Policy and evidence determine verdict.</span></div>
-          <div class="flow-step"><b>06</b><span>Release owner reviews evidence.</span></div>
+        <div class="flow" aria-label="Adaptive assurance model: repeat evidence gathering while questions remain">
+          <div class="flow-step"><b>01</b><span>Understand the change and its risks.</span></div>
+          <div class="flow-step"><b>02</b><span>Identify unanswered questions.</span></div>
+          <div class="flow-step"><b>03</b><span>Select tests, tools, and models.</span></div>
+          <div class="flow-step"><b>04</b><span>Gather and connect evidence.</span></div>
+          <div class="flow-step"><b>05</b><span>Assess coverage and diversity.</span></div>
+          <div class="flow-step"><b>06</b><span>Seek more evidence, decide, or escalate.</span></div>
         </div>
       </div>
-      <div class="src reveal">release-gate-demo.html, slides 2-5 and 8-10</div>
+      <div class="src reveal">Adaptive assurance model · Saved demo: configured checks, policy enforcement, and traceable evidence</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Frame the outcome.</strong> Keep this overview to one minute, then move into the demo. Start from the ambition to automate routine, lower-differentiation SDLC tasks. Ask: “As tools hand work to one another, how do we know the evidence is sufficient for the next step?” The Tool Spine is the shared framing for reusable skills such as Release Gate across that lifecycle. Position this as stronger interoperability, assurance, and resilience.</p>
-        <p><strong>Tie to the themes.</strong> Evidence, quality and trust: inspect the checks and their coverage. Operate with control: enforce policy and escalate when required. Measure and self-improve: make outcomes available for review and scorecard discussion. Use the agreed capability-model mapping in the shared introduction; keep detailed L1/L2/L3 mapping in the appendix.</p>
-        <p><strong>Jay — Khosrow’s mapping concept (opening talk track).</strong> “Engineers already know how to run tests. The additional question is whether those tests provide enough evidence for this particular change. Within the Tool Spine, we map the change to potential risks, those risks to the checks they need, and the resulting evidence to its coverage and independence. Ten tests built on the same assumption may tell us less than a combination of behavior tests, installation checks, and dependency analysis. The data science contribution is making evidence sufficiency measurable, so green tests don’t hide unanswered questions.”</p>
-        <p><strong>Jay — connect to this demo.</strong> “For our dependency migration, passing behavior tests alone would leave installation unverified if no installation check ran. The broader mapping concept would identify that gap and inform whether more evidence or human review is needed. Today, Jerry will show the foundation: configured checks, policy enforcement, and traceable evidence. This saved run does not demonstrate adaptive test selection or evidence-diversity assessment.”</p>
-        <p><strong>Jay — data science detail if asked.</strong> A possible approach is to describe each check by the risks it covers, its method, and its provenance; identify redundant or correlated evidence; then evaluate sufficiency assessments against historical changes or seeded faults. Measure missed defects and unnecessary escalations to calibrate review thresholds. AI can propose task-specific tests and potential gaps, while release policy governs how findings affect the verdict. Do not present an unvalidated score as a probability of correctness. This evidence mapping is distinct from the L1/L2/L3 capability-model mapping.</p>
+        <p><strong>Jay — opening pitch (about one minute).</strong> “Release Gate Service is the assurance intelligence between AI coding and software release. It asks: what do we still need to know about this change? Its adaptive model uses AI, ML, and engineering signals to select mechanisms that can answer those questions and accumulate evidence until the change can be meaningfully assessed or escalated. Engineering teams bring their specialized capabilities: tests, agents, scanners, mutation testing, and evidence-diversity models. The gate coordinates how those capabilities are used, assesses what remains unanswered, and pursues additional evidence where needed. Within the Tool Spine, that is our added value: a coordinated assurance process around each change. Today, Jerry will show its foundation through configured checks, policy enforcement, and traceable evidence.”</p>
+        <p><strong>Jay — Khosrow’s mapping concept, if asked.</strong> Map the change to potential risks, the risks to evidence needs, and the available evidence to coverage and independence. For the dependency migration, passing behavior tests would leave installation unverified if installation checks never ran. The adaptive model would recognize the gap, select a suitable capability, collect the result, and reassess sufficiency. If a material question remains unresolved, escalate it for human review. Ten tests sharing the same assumptions can provide less useful evidence than complementary checks.</p>
+        <p><strong>Jay — data science contribution, if asked.</strong> Describe evidence by risk coverage, method, and provenance; use diversity models to assess overlap and dependence. Evaluate sufficiency assessments against historical changes or seeded faults, measuring missed defects and unnecessary escalations to calibrate review thresholds. AI and ML help identify gaps and prioritize additional evidence; engineering signals ground the assessment. A score is not a probability of correctness unless validated and calibrated.</p>
+        <p><strong>Presenter scope.</strong> The adaptive loop describes the service model in Khosrow’s pitch. The saved September 2 run demonstrates configured checks and policy enforcement, not adaptive capability selection or evidence-diversity assessment. Deterministic execution supports reproducibility; keep the headline on assurance intelligence. Evidence mapping here is distinct from the L1/L2/L3 capability-model mapping.</p>
+        <p><strong>Tie to the themes.</strong> Evidence, quality and trust: assess whether the evidence answers the relevant questions. Operate with control: keep the process within policy and escalate unresolved risk. Measure and self-improve: use recorded outcomes to evaluate assurance quality. Keep detailed capability-model mapping in the shared appendix.</p>
       </aside>
     </div>
   </section>
@@ -753,7 +753,7 @@
   <section class="slide" id="slide-2" data-title="Why python-slugify Matters">
     <div class="slide-content">
       <div class="kicker reveal">The demo task - 1 minute</div>
-      <h2 class="reveal">One migration, four connected surfaces.</h2>
+      <h2 class="reveal">What do we still need to know about this change?</h2>
       <p class="lead reveal">The <span class="mono">python-slugify</span> task is intentionally modest: migrate from <span class="mono">text-unidecode</span> to required <span class="mono">Unidecode</span>. The task spans packaging, runtime behavior, test configuration, and documentation.</p>
       <div class="dependency-map reveal">
         <div class="dep"><b>setup.py</b><span>Package dependency must change to <span class="mono">Unidecode&gt;=1.1.1</span>.</span></div>
@@ -763,8 +763,8 @@
       </div>
       <div class="summary-grid reveal">
         <div class="card accent">
-          <h3>Graphify context</h3>
-          <p>Graphify's AST dependency map gives the team a codebase-aware starting point for understanding change effects before the gate evaluates evidence.</p>
+          <h3>Map the change to evidence needs</h3>
+          <p>Graphify supplies change-effect context. The assurance question is which evidence covers these surfaces and where additional checks would add confidence.</p>
         </div>
         <div class="card warn">
           <h3>What this run demonstrates</h3>
@@ -774,6 +774,7 @@
       <div class="src reveal">x1-behind-the-scenes.html, slides 5, 7, 10, and 13</div>
       <aside class="speaker-notes" data-duration="01:00">
         <p><strong>Why this example is useful.</strong> Explain slugification with a simple example: “Release Gate Demo” becomes “release-gate-demo” for a URL. This routine migration is a useful example of automated SDLC work because its effects cross packaging, runtime, test configuration, and documentation.</p>
+        <p><strong>Jay — make the adaptive question concrete.</strong> “For this migration, we would ask whether installation succeeds, runtime behavior remains acceptable, test environments exercise the intended dependency, and documentation matches the package. The mapping connects each question to useful evidence. As new results arrive, the adaptive model asks what is still missing and which capability can answer it next.” Use this as an illustration of the service model; the saved run executes its configured checks.</p>
         <p><strong>Graphify wording:</strong> Present Graphify as foundational codebase understanding and change-effect context. Do not say the recorded September 2 gate used Graphify as a formal check unless that is added separately.</p>
       </aside>
     </div>
@@ -782,7 +783,7 @@
   <section class="slide" id="slide-3" data-title="Live Demo Run Of Show">
     <div class="slide-content">
       <div class="kicker reveal">Live demo - 7 minutes</div>
-      <h2 class="reveal">See the Tool Spine skill in action.</h2>
+      <h2 class="reveal">See the assurance foundation in action.</h2>
       <div class="demo-grid reveal">
         <div class="stage-list">
           <div class="stage"><b>0:00</b><span>Open the Release Gate skill in Copilot: <span class="mono">release-gate/skills/release-gate/SKILL.md</span>.</span></div>
@@ -816,7 +817,7 @@ reason_codes        none
       <aside class="speaker-notes" data-duration="07:00">
         <p><strong>Preparation.</strong> The seven-minute clock starts when you switch from slides to Copilot. All paths below are repository-relative; demo files are under <code>release-gate/demo/python-slugify/</code>. Pre-open the files and the September 2 evidence package on the demo machine. Full standalone script: <code>docs/demo1-release-gate-speaker-notes.md</code>. Saved logs are actual recorded execution; Markdown reports explain how to read them. Identify a new live run separately from saved runs.</p>
         <p><strong>0:00-1:15 — Skill. Open:</strong> <code>release-gate/skills/release-gate/SKILL.md</code> in Copilot. Say: “Release Gate is a reusable Tool Spine skill. It works alongside other skills and tells the agent how to invoke the gate: check compatibility, use an explicit baseline, and report the exact verdict. The agent coordinates execution; the gate decides under the configured policy.” Graphify supplies optional dependency context, not a formal check in the recorded run.</p>
-        <p><strong>1:15-2:30 — Contract. Open:</strong> <code>release-gate/demo/python-slugify/workbench/python-slugify/.release-gate.yaml</code>. Show allowed migration paths, forbidden <code>test.py</code>, and review-required policy changes. Say: “The candidate must not change its own acceptance rules.” The file under <code>assets/</code> is the source template; show the active workbench policy.</p>
+        <p><strong>1:15-2:30 — Contract. Open:</strong> <code>release-gate/demo/python-slugify/workbench/python-slugify/.release-gate.yaml</code>. Show allowed migration paths, forbidden <code>test.py</code>, and review-required policy changes. Say: “Policy sets the boundaries within which assurance operates. The candidate must not change its own acceptance rules.” Keep this brief: the policy is a supporting control, while the added-value pitch is selecting and coordinating evidence around each change. The file under <code>assets/</code> is the source template; show the active workbench policy.</p>
         <p><strong>2:30-4:30 — Three verdicts. Open:</strong> Copilot in the prepared workbench and invoke the skill with explicit <code>run --base release-gate-demo-base</code>. Then open <code>release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-01-automated-verification.log</code>. Find each <code>VERDICT:</code>: PASS for approved changes; FAIL for protected <code>test.py</code> even though configured checks pass; NEEDS_HUMAN for a policy edit, with checks SKIPPED. Say these are three saved, independent scripted controls. Briefly open the matching <code>.md</code> report at “Control Summary” to explain the output. Its oracle assessment is separate from the gate verdict.</p>
         <p><strong>4:30-6:00 — Online execution. Open:</strong> <code>release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-02-online-pass.log</code>. Lead with <code>VERDICT: PASS</code> and the exact check statuses, then use <code>RESULT:</code> to reach the evidence. Use the matching <code>.md</code> report for a brief explanation; avoid reading the log line by line. Explain that green tests alone do not settle release readiness: the protected-file control fails despite green checks. Evidence diversity and sufficiency are the broader assurance question, but this saved run does not demonstrate adaptive test selection or a diversity assessment. Say: “This separate September 2 run replayed a known-good control patch. The log records execution; the report explains it. No hidden oracle grading was performed in this online run. In plain language, PASS means the configured requirements were met; behavior beyond those checks remains unverified.”</p>
         <p><strong>6:00-7:00 — Evidence. Open:</strong> the September 2 log's exact <code>RESULT:</code> file, ending in <code>.release-gate/runs/20260902T153230Z-0b1d3f349b56/result.json</code>, then <code>manifest.json</code> in that same directory. Read verdict, reasons, changed paths, and check statuses; use the manifest and hashes to connect the evidence to the evaluated candidate. Say: “This is a traceable, tamper-evident record. PASS covers the configured policy and does not authorize merge or deployment.” Do not substitute another run's evidence without identifying it as a separate run.</p>
@@ -827,8 +828,8 @@ reason_codes        none
   <section class="slide" id="slide-4" data-title="Leadership Takeaway">
     <div class="slide-content">
       <div class="kicker reveal">Close - 1 minute</div>
-      <h2 class="reveal">Connected evidence. Controlled release decisions.</h2>
-      <p class="lead reveal">Release Gate brings an inspectable assurance step to the Tool Spine: evidence for quality and trust, policy for control, and recorded outcomes for measurement and improvement.</p>
+      <h2 class="reveal">Turn specialized tools into coordinated assurance.</h2>
+      <p class="lead reveal">The added value is deciding what evidence a change needs, orchestrating capabilities to obtain it, and reassessing what remains unresolved. Release policy provides the boundaries for that adaptive process.</p>
       <div class="takeaway-grid reveal">
         <div class="card good">
           <h3>PASS</h3>
@@ -846,7 +847,7 @@ reason_codes        none
       <div class="summary-grid reveal">
         <div class="card accent">
           <h3>Enterprise value</h3>
-          <p>Shared evidence at tool handoffs helps teams assess change effects, enforce release policy, and review gaps before release.</p>
+          <p>Engineering teams contribute domain expertise and specialized tools. Release Gate’s adaptive model coordinates their use to investigate gaps and establish evidence-based release confidence.</p>
         </div>
         <div class="card">
           <h3>Connect to the scorecard</h3>
@@ -855,7 +856,7 @@ reason_codes        none
       </div>
       <div class="src reveal">release-gate-demo.html, slides 8 and 10; x1-behind-the-scenes.html, slide 13</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Close crisply.</strong> PASS is not "the AI is correct." PASS is "the reviewed policy accepted this candidate with the evidence on disk." The human release owner still owns the decision.</p>
+        <p><strong>Jay — close on added value.</strong> “The value we bring is assurance intelligence: asking what we still need to know, choosing mechanisms to answer it, and bringing the evidence together until the change can be assessed or escalated. Your team brings its tests, agents, scanners, and specialized models; Release Gate’s adaptive model coordinates those capabilities around the change. Today’s walkthrough demonstrated the execution and evidence foundation for that model.” PASS means the configured requirements were met; the human release owner still owns the release decision.</p>
         <p><strong>Bridge to the next demo.</strong> Tie back to evidence, quality and trust; operate with control; measure and self-improve. The Engineering Scorecard can put release-readiness measures in context. Present this as a conceptual handoff unless an implemented integration is shown.</p>
         <p><strong>Velocity — verbal only.</strong> Acknowledge the aspiration to support tens of thousands or hundreds of thousands of releases as autonomous engineering expands. Runtime overhead, concurrent evaluation, and human-review capacity need stress testing at that velocity. This demo does not establish production scale or throughput.</p>
       </aside>
