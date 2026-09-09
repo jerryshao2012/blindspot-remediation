@@ -11,3 +11,7 @@ $env:ALL_PROXY = $proxy
 $env:NO_PROXY = "localhost,127.0.0.1"
 $env:UV_SYSTEM_CERTS = "true"
 $env:UV_LINK_MODE = "copy"
+
+# Configure Git proxy
+git config --global http.proxy $proxy
+git config --global https.proxy $proxy

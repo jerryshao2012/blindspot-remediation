@@ -14,3 +14,7 @@ export ALL_PROXY="$proxy"
 export NO_PROXY="localhost,127.0.0.1"
 export UV_SYSTEM_CERTS="true"
 export UV_LINK_MODE="copy"
+
+# Configure Git proxy
+git config --global http.proxy $proxy
+git config --global https.proxy $proxy
