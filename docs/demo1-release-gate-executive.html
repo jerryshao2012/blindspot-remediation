@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Demo 1 - Release Gate Executive Walkthrough</title>
+<title>Demo 1 - Tool Spine: Release Gate Executive Walkthrough</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230075be'/%3E%3Cpath d='M8 8h16v5H13v6h11v5H8z' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -707,7 +707,7 @@
 </head>
 <body>
 <div class="progress" id="progress"></div>
-<div class="topbar"><span>Advanced Engineering Demo</span><span>Demo 1 - Release Gate</span></div>
+<div class="topbar"><span>Advanced Engineering Demo</span><span>Tool Spine / Release Gate</span></div>
 <div class="counter" id="counter">01 / 07</div>
 <div class="hints">Left/Right navigate - F fullscreen - N notes popup</div>
 <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
@@ -715,34 +715,37 @@
 <main id="deck">
   <section class="slide" id="slide-1" data-title="Executive Summary">
     <div class="slide-content">
-      <div class="kicker reveal">Executive summary - 1 minute</div>
-      <h1 class="reveal">A release decision, not an agent claim.</h1>
-      <p class="lead reveal">Demo 1 shows how enterprises can reduce AI blind spots by placing an independent gate between generated code and release: clean reconstruction, reviewed scope, deterministic evidence, and a three-way verdict.</p>
+      <div class="kicker reveal">Demo overview - Evidence, quality and trust</div>
+      <h1 class="reveal">Release Gate in the Tool Spine.</h1>
+      <p class="lead reveal">The Tool Spine connects reusable skills across the engineering lifecycle. Release Gate adds independent evidence and policy checks at the handoff from code change to release, helping teams assess readiness across tools.</p>
       <div class="summary-grid reveal">
         <div class="panel large">
           <div>
-            <h3>What the gate adds</h3>
-            <p>It turns "tests passed on my machine" into a recorded decision that leadership, engineers, and auditors can inspect.</p>
+            <h3>Assurance across tool handoffs</h3>
+            <p>As routine SDLC work becomes autonomous, teams need evidence that travels with each change. Release Gate records what was checked, what remains unverified, and when human review is required.</p>
           </div>
           <div class="metric-row">
-            <div class="metric"><strong>6</strong><span>proof stages</span></div>
+            <div class="metric"><strong>6</strong><span>assurance stages</span></div>
             <div class="metric"><strong>3</strong><span>verdicts</span></div>
             <div class="metric"><strong>1</strong><span>human stop</span></div>
           </div>
         </div>
-        <div class="flow" aria-label="Release gate proof pipeline">
+        <div class="flow" aria-label="Release Gate assurance pipeline">
           <div class="flow-step"><b>01</b><span>Candidate intake hashes the change.</span></div>
           <div class="flow-step"><b>02</b><span>Clean rebuild removes host advantage.</span></div>
           <div class="flow-step"><b>03</b><span>Reviewed policy defines scope.</span></div>
           <div class="flow-step"><b>04</b><span>Evidence checks run independently.</span></div>
-          <div class="flow-step"><b>05</b><span>Verdict aggregates risk.</span></div>
-          <div class="flow-step"><b>06</b><span>Human review owns merge.</span></div>
+          <div class="flow-step"><b>05</b><span>Policy and evidence determine verdict.</span></div>
+          <div class="flow-step"><b>06</b><span>Release owner reviews evidence.</span></div>
         </div>
       </div>
       <div class="src reveal">release-gate-demo.html, slides 2-5 and 8-10</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Frame the value.</strong> Keep this to one minute. The leadership point is that the gate is independent of the coding agent. It checks quality, change effects, and release gating evidence before the work reaches a release path.</p>
-        <p><strong>Say plainly:</strong> This is not an automatic merge button. It is an evidence-producing release decision point designed to reduce AI blind spots.</p>
+        <p><strong>Frame the outcome.</strong> Keep this overview to one minute, then move into the demo. Start from the ambition to automate routine, lower-differentiation SDLC tasks. Ask: “As tools hand work to one another, how do we know the evidence is sufficient for the next step?” The Tool Spine is the shared framing for reusable skills such as Release Gate across that lifecycle. Position this as stronger interoperability, assurance, and resilience.</p>
+        <p><strong>Tie to the themes.</strong> Evidence, quality and trust: inspect the checks and their coverage. Operate with control: enforce policy and escalate when required. Measure and self-improve: make outcomes available for review and scorecard discussion. Use the agreed capability-model mapping in the shared introduction; keep detailed L1/L2/L3 mapping in the appendix.</p>
+        <p><strong>Jay — Khosrow’s mapping concept (opening talk track).</strong> “Engineers already know how to run tests. The additional question is whether those tests provide enough evidence for this particular change. Within the Tool Spine, we map the change to potential risks, those risks to the checks they need, and the resulting evidence to its coverage and independence. Ten tests built on the same assumption may tell us less than a combination of behavior tests, installation checks, and dependency analysis. The data science contribution is making evidence sufficiency measurable, so green tests don’t hide unanswered questions.”</p>
+        <p><strong>Jay — connect to this demo.</strong> “For our dependency migration, passing behavior tests alone would leave installation unverified if no installation check ran. The broader mapping concept would identify that gap and inform whether more evidence or human review is needed. Today, Jerry will show the foundation: configured checks, policy enforcement, and traceable evidence. This saved run does not demonstrate adaptive test selection or evidence-diversity assessment.”</p>
+        <p><strong>Jay — data science detail if asked.</strong> A possible approach is to describe each check by the risks it covers, its method, and its provenance; identify redundant or correlated evidence; then evaluate sufficiency assessments against historical changes or seeded faults. Measure missed defects and unnecessary escalations to calibrate review thresholds. AI can propose task-specific tests and potential gaps, while release policy governs how findings affect the verdict. Do not present an unvalidated score as a probability of correctness. This evidence mapping is distinct from the L1/L2/L3 capability-model mapping.</p>
       </aside>
     </div>
   </section>
@@ -750,8 +753,8 @@
   <section class="slide" id="slide-2" data-title="Why python-slugify Matters">
     <div class="slide-content">
       <div class="kicker reveal">The demo task - 1 minute</div>
-      <h2 class="reveal">A small dependency migration can still miss the release surface.</h2>
-      <p class="lead reveal">The <span class="mono">python-slugify</span> task is intentionally modest: migrate from <span class="mono">text-unidecode</span> to required <span class="mono">Unidecode</span>. The risk is breadth, not algorithmic difficulty.</p>
+      <h2 class="reveal">One migration, four connected surfaces.</h2>
+      <p class="lead reveal">The <span class="mono">python-slugify</span> task is intentionally modest: migrate from <span class="mono">text-unidecode</span> to required <span class="mono">Unidecode</span>. The task spans packaging, runtime behavior, test configuration, and documentation.</p>
       <div class="dependency-map reveal">
         <div class="dep"><b>setup.py</b><span>Package dependency must change to <span class="mono">Unidecode&gt;=1.1.1</span>.</span></div>
         <div class="dep"><b>slugify.py</b><span>Import path must remove the fallback to the legacy backend.</span></div>
@@ -764,13 +767,13 @@
           <p>Graphify's AST dependency map gives the team a codebase-aware starting point for understanding change effects before the gate evaluates evidence.</p>
         </div>
         <div class="card warn">
-          <h3>Credibility caveat</h3>
-          <p>The September 2 PASS shown in the walkthrough is a known-good control patch replay, not fresh live AI generation.</p>
+          <h3>What this run demonstrates</h3>
+          <p>The saved September 2 run replays a known-good control patch to demonstrate configured checks and policy enforcement.</p>
         </div>
       </div>
       <div class="src reveal">x1-behind-the-scenes.html, slides 5, 7, 10, and 13</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Why this example is useful.</strong> The task sounds small, which is the point. Real AI risk often appears in the edges: packaging, tox, docs, and policy boundaries.</p>
+        <p><strong>Why this example is useful.</strong> Explain slugification with a simple example: “Release Gate Demo” becomes “release-gate-demo” for a URL. This routine migration is a useful example of automated SDLC work because its effects cross packaging, runtime, test configuration, and documentation.</p>
         <p><strong>Graphify wording:</strong> Present Graphify as foundational codebase understanding and change-effect context. Do not say the recorded September 2 gate used Graphify as a formal check unless that is added separately.</p>
       </aside>
     </div>
@@ -779,13 +782,13 @@
   <section class="slide" id="slide-3" data-title="Live Demo Run Of Show">
     <div class="slide-content">
       <div class="kicker reveal">Live demo - 7 minutes</div>
-      <h2 class="reveal">Follow the change from instructions to an auditable release decision.</h2>
+      <h2 class="reveal">See the Tool Spine skill in action.</h2>
       <div class="demo-grid reveal">
         <div class="stage-list">
-          <div class="stage"><b>0:00</b><span>Introduce the Copilot-loaded skill: <span class="mono">release-gate/skills/release-gate/SKILL.md</span>.</span></div>
+          <div class="stage"><b>0:00</b><span>Open the Release Gate skill in Copilot: <span class="mono">release-gate/skills/release-gate/SKILL.md</span>.</span></div>
           <div class="stage"><b>1:15</b><span>Show the repository contract in <span class="mono">.release-gate.yaml</span>.</span></div>
           <div class="stage"><b>2:30</b><span>Invoke the gate; show the September 1 <span class="pass">PASS</span>, <span class="fail">FAIL</span>, and <span class="human">NEEDS_HUMAN</span> controls.</span></div>
-          <div class="stage"><b>4:30</b><span>Trace the September 2 online run: original <span class="mono">.log</span>, then explanatory <span class="mono">.md</span>.</span></div>
+          <div class="stage"><b>4:30</b><span>Show the saved September 2 verdict and check statuses; use the log only to explain a result.</span></div>
           <div class="stage"><b>6:00</b><span>Inspect that run's <span class="mono">result.json</span> and <span class="mono">manifest.json</span>.</span></div>
         </div>
         <div class="term" aria-label="Demo receipt excerpt">
@@ -803,7 +806,7 @@ reason_codes        none
         </div>
       </div>
       <div class="badge-row reveal">
-        <span class="badge">Skill file</span>
+        <span class="badge">Tool Spine skill</span>
         <span class="badge">YAML contract</span>
         <span class="badge">Gate verdict</span>
         <span class="badge">Saved run log</span>
@@ -812,10 +815,10 @@ reason_codes        none
       <div class="src reveal">September 1 automated-verification and September 2 online-pass: .log = execution; .md = interpretation</div>
       <aside class="speaker-notes" data-duration="07:00">
         <p><strong>Preparation.</strong> The seven-minute clock starts when you switch from slides to Copilot. All paths below are repository-relative; demo files are under <code>release-gate/demo/python-slugify/</code>. Pre-open the files and the September 2 evidence package on the demo machine. Full standalone script: <code>docs/demo1-release-gate-speaker-notes.md</code>. Saved logs are actual recorded execution; Markdown reports explain how to read them. Identify a new live run separately from saved runs.</p>
-        <p><strong>0:00-1:15 — Skill. Open:</strong> <code>release-gate/skills/release-gate/SKILL.md</code> in Copilot. Say: “The skill tells the agent how to invoke the gate: check compatibility, use an explicit baseline, and report the exact verdict. The agent coordinates execution; the gate decides under the configured policy.” Graphify supplies optional dependency context, not a formal check in the recorded run.</p>
+        <p><strong>0:00-1:15 — Skill. Open:</strong> <code>release-gate/skills/release-gate/SKILL.md</code> in Copilot. Say: “Release Gate is a reusable Tool Spine skill. It works alongside other skills and tells the agent how to invoke the gate: check compatibility, use an explicit baseline, and report the exact verdict. The agent coordinates execution; the gate decides under the configured policy.” Graphify supplies optional dependency context, not a formal check in the recorded run.</p>
         <p><strong>1:15-2:30 — Contract. Open:</strong> <code>release-gate/demo/python-slugify/workbench/python-slugify/.release-gate.yaml</code>. Show allowed migration paths, forbidden <code>test.py</code>, and review-required policy changes. Say: “The candidate must not change its own acceptance rules.” The file under <code>assets/</code> is the source template; show the active workbench policy.</p>
         <p><strong>2:30-4:30 — Three verdicts. Open:</strong> Copilot in the prepared workbench and invoke the skill with explicit <code>run --base release-gate-demo-base</code>. Then open <code>release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-01-automated-verification.log</code>. Find each <code>VERDICT:</code>: PASS for approved changes; FAIL for protected <code>test.py</code> even though configured checks pass; NEEDS_HUMAN for a policy edit, with checks SKIPPED. Say these are three saved, independent scripted controls. Briefly open the matching <code>.md</code> report at “Control Summary” to explain the output. Its oracle assessment is separate from the gate verdict.</p>
-        <p><strong>4:30-6:00 — Online execution. Open:</strong> <code>release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-02-online-pass.log</code>. Show readiness, baseline, validation, <code>VERDICT: PASS</code>, and <code>RESULT:</code>. Then open the matching <code>.md</code> report to explain the sequence. Say: “This separate September 2 run replayed a known-good control patch. The log records execution; the report explains it. No hidden oracle grading was performed in this online run.”</p>
+        <p><strong>4:30-6:00 — Online execution. Open:</strong> <code>release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-02-online-pass.log</code>. Lead with <code>VERDICT: PASS</code> and the exact check statuses, then use <code>RESULT:</code> to reach the evidence. Use the matching <code>.md</code> report for a brief explanation; avoid reading the log line by line. Explain that green tests alone do not settle release readiness: the protected-file control fails despite green checks. Evidence diversity and sufficiency are the broader assurance question, but this saved run does not demonstrate adaptive test selection or a diversity assessment. Say: “This separate September 2 run replayed a known-good control patch. The log records execution; the report explains it. No hidden oracle grading was performed in this online run. In plain language, PASS means the configured requirements were met; behavior beyond those checks remains unverified.”</p>
         <p><strong>6:00-7:00 — Evidence. Open:</strong> the September 2 log's exact <code>RESULT:</code> file, ending in <code>.release-gate/runs/20260902T153230Z-0b1d3f349b56/result.json</code>, then <code>manifest.json</code> in that same directory. Read verdict, reasons, changed paths, and check statuses; use the manifest and hashes to connect the evidence to the evaluated candidate. Say: “This is a traceable, tamper-evident record. PASS covers the configured policy and does not authorize merge or deployment.” Do not substitute another run's evidence without identifying it as a separate run.</p>
       </aside>
     </div>
@@ -824,8 +827,8 @@ reason_codes        none
   <section class="slide" id="slide-4" data-title="Leadership Takeaway">
     <div class="slide-content">
       <div class="kicker reveal">Close - 1 minute</div>
-      <h2 class="reveal">The enterprise standard is evidence first, human accountable.</h2>
-      <p class="lead reveal">Release Gate improves confidence without pretending automation can own the final judgment. It separates adverse evidence from missing evidence and leaves the release decision inspectable.</p>
+      <h2 class="reveal">Connected evidence. Controlled release decisions.</h2>
+      <p class="lead reveal">Release Gate brings an inspectable assurance step to the Tool Spine: evidence for quality and trust, policy for control, and recorded outcomes for measurement and improvement.</p>
       <div class="takeaway-grid reveal">
         <div class="card good">
           <h3>PASS</h3>
@@ -843,17 +846,18 @@ reason_codes        none
       <div class="summary-grid reveal">
         <div class="card accent">
           <h3>Enterprise value</h3>
-          <p>Augmented quality checks, change-effect visibility, and release gating reduce blind spots in AI-assisted engineering.</p>
+          <p>Shared evidence at tool handoffs helps teams assess change effects, enforce release policy, and review gaps before release.</p>
         </div>
         <div class="card">
-          <h3>Presenter split</h3>
-          <p>One presenter frames and closes; the other drives the seven-minute file walkthrough.</p>
+          <h3>Connect to the scorecard</h3>
+          <p>Use the verdict, check results, and evidence gaps to inform the release-readiness discussion in the Engineering Scorecard demo.</p>
         </div>
       </div>
       <div class="src reveal">release-gate-demo.html, slides 8 and 10; x1-behind-the-scenes.html, slide 13</div>
       <aside class="speaker-notes" data-duration="01:00">
         <p><strong>Close crisply.</strong> PASS is not "the AI is correct." PASS is "the reviewed policy accepted this candidate with the evidence on disk." The human release owner still owns the decision.</p>
-        <p><strong>Bridge to Q&amp;A:</strong> Invite questions about policy design, evidence quality, enterprise integration, and how Graphify expands change-effect understanding.</p>
+        <p><strong>Bridge to the next demo.</strong> Tie back to evidence, quality and trust; operate with control; measure and self-improve. The Engineering Scorecard can put release-readiness measures in context. Present this as a conceptual handoff unless an implemented integration is shown.</p>
+        <p><strong>Velocity — verbal only.</strong> Acknowledge the aspiration to support tens of thousands or hundreds of thousands of releases as autonomous engineering expands. Runtime overhead, concurrent evaluation, and human-review capacity need stress testing at that velocity. This demo does not establish production scale or throughput.</p>
       </aside>
     </div>
   </section>
@@ -884,7 +888,7 @@ reason_codes        none
       </div>
       <div class="card warn reveal" style="margin-top:.8rem;">
         <h3>Important qualification</h3>
-        <p>Tamper-evident artifacts are not immutable records and PASS is not proof of all semantic correctness. They make the decision reviewable.</p>
+        <p>PASS means this candidate met the configured policy and checks. Behavior outside those checks remains unverified. Artifact hashes help detect changes to the recorded evidence; they do not make it immutable.</p>
       </div>
       <div class="src reveal">x1-behind-the-scenes.html, slide 12</div>
       <aside class="speaker-notes" data-duration="01:00">
