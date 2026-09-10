@@ -122,7 +122,7 @@ Recommendation, in two steps:
 
 ---
 
-## 5. Current state
+## 5. Current state — 2026-08-18
 
 The production-ready tool is implemented independently at [`release-gate/`](release-gate/) (version 0.6.0).
 This does not revise the historical ledger: the A/B/E directories remain the received scaffolding and audit

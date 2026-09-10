@@ -231,7 +231,7 @@ Unlike `python-slugify` (which tests dependency lifecycles and packaging blindsp
 benchmarks deep algorithmic invariants: 100% branch coverage, an 8-mutant mutation gauntlet,
 a differential brute-force oracle, and the full $C0 \to C1 \to C2$ bounded repair workflow.
 
-## 12. Current state
+## 12. Current state — 2026-08-18
 
 The production-ready tool lives in [`release-gate/`](release-gate/) (version 0.6.0).
 It is completely independent of A1/A2/A3/A9/B6, treating the scaffolding as historical design

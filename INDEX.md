@@ -238,7 +238,7 @@ Two components also supplied files that their own declared structure does not li
 B6 also shows a recommended `pyproject.toml` and a pytest marker block, but presents them
 as guidance rather than as files. They were not written out.
 
-## Current implementation index
+## Current implementation index — 2026-08-18
 
 The repository contains the production product, the teaching demo, the presentation suite, and the historical scaffolding.
 
