@@ -244,7 +244,7 @@ def test_upgrade_commands_remove_then_install_verified_pinned_artifacts() -> Non
 
 def test_readme_documents_safe_updates_for_every_host() -> None:
     readme = _read("README.md")
-    heading = "## Updating an existing installation"
+    heading = "## Updating an Existing Installation"
 
     assert heading in readme
     upgrade = readme.split(heading, 1)[1].split("Invoke the skill explicitly", 1)[0]

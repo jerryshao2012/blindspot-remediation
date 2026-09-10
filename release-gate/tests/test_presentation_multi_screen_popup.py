@@ -616,7 +616,12 @@ def test_complete_inline_scripts_compile(path: Path) -> None:
     scripts = inline_scripts(path)
     assert scripts
     for script in scripts:
-        subprocess.run(["node", "-e", f"new Function({json.dumps(script)});"], check=True)
+        subprocess.run(
+            ["node", "-e", 'const fs = require("fs"); new Function(fs.readFileSync(0, "utf8"));'],
+            input=script,
+            text=True,
+            check=True,
+        )
 
 
 @pytest.mark.parametrize("path", DECKS)
