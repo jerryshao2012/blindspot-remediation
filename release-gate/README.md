@@ -251,6 +251,15 @@ The [`demo/`](demo/README.md) directory contains complete, reproducible end-to-e
 
 ---
 
+## Maintaining Release Versions
+
+For a release bump, edit only `src/release_gate/__init__.py::__version__`, then
+run `uv run python scripts/sync_release_version.py`. Review the generated
+changes and release notes before committing. CI enforces the same source with
+`uv run python scripts/sync_release_version.py --check`.
+
+---
+
 ## Contract Map
 
 - [Design](docs/design.md): Architecture, reconstruction, execution, and verdict rules.
