@@ -1441,7 +1441,7 @@ def _open_windows_relative_native(  # pragma: no cover - Windows CI
         directory_fd,
         name,
         desired_access=desired_access,
-        share_access=0x0001 | 0x0002,  # FILE_SHARE_READ | FILE_SHARE_WRITE
+        share_access=0x0001 | 0x0002 | 0x0004,
         disposition=disposition,
     )
     return _windows_fd_from_handle(handle, flags)

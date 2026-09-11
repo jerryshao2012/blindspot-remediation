@@ -1317,6 +1317,38 @@ def test_native_windows_child_open_is_handle_relative(
     assert calls == [(17, "child.lock", os.O_RDWR | os.O_CREAT, False)]
 
 
+def test_native_windows_child_open_shares_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import release_gate.observability_runtime as runtime
+
+    calls: list[dict[str, int]] = []
+    monkeypatch.setattr(runtime, "_uses_native_windows_paths", lambda: True)
+    monkeypatch.setattr(
+        runtime,
+        "_nt_create_relative_handle",
+        lambda directory_fd, name, *, desired_access, share_access, disposition: (
+            calls.append(
+                {
+                    "directory_fd": directory_fd,
+                    "desired_access": desired_access,
+                    "share_access": share_access,
+                    "disposition": disposition,
+                }
+            )
+            or 81
+        ),
+    )
+    monkeypatch.setattr(runtime, "_windows_fd_from_handle", lambda handle, flags: 91)
+
+    descriptor = runtime._open_windows_child(
+        17, Path("child.lock"), os.O_RDWR | os.O_CREAT, 0o600
+    )
+
+    assert descriptor == 91
+    assert calls[0]["share_access"] & 0x0004
+
+
 def test_native_windows_child_stat_is_handle_relative(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
