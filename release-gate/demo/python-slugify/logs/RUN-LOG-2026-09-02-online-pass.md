@@ -170,13 +170,9 @@ release-gate run --repo .\workbench\python-slugify --base release-gate-demo-base
 ```
 
 ```text
-WARNING: OBSERVABILITY_PATH_UNSAFE
 VERDICT: PASS
 RESULT: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\python-slugify\.release-gate\runs\20260902T153230Z-0b1d3f349b56\result.json
 ```
-
-`OBSERVABILITY_PATH_UNSAFE` was a warning only. It did not prevent verdict,
-result, or manifest creation.
 
 ## Inspection Output
 
@@ -253,12 +249,9 @@ Two warnings were observed and both were non-gating:
 
 ```text
 warning: setup.py has type 100644, expected 100755
-WARNING: OBSERVABILITY_PATH_UNSAFE
 ```
 
-The file-mode warning came from Git while applying the patch on Windows. The
-observability warning came from Release Gate publication handling. Neither
-warning changed the policy verdict or prevented evidence generation.
+The file-mode warning came from Git while applying the patch on Windows.
 
 ## Online Interpretation
 

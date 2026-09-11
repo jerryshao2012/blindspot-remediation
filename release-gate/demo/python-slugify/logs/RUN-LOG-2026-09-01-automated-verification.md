@@ -206,15 +206,6 @@ Git also emitted an LF-to-CRLF conversion notice for `.gitignore` during
 initialization. Neither warning changed policy, configured check results, or
 control verdicts.
 
-Each Release Gate invocation reported:
-
-```text
-WARNING: OBSERVABILITY_PATH_UNSAFE
-```
-
-This non-gating observability publication warning did not prevent result or
-manifest creation. All expected verdicts and oracle classifications completed.
-
 ## Summary
 
 This Windows run completed Python-Slugify's full automated Release Gate control

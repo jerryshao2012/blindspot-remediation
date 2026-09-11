@@ -31,7 +31,6 @@ M README.md
  M slugify/slugify.py
  M tox.ini
 control ready: pass
-WARNING: OBSERVABILITY_PATH_UNSAFE
 VERDICT: PASS
 RESULT: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-pass-eb950ca5\result.json
 run: verify-pass-eb950ca5
@@ -85,7 +84,6 @@ M README.md
  M test.py
  M tox.ini
 control ready: fail
-WARNING: OBSERVABILITY_PATH_UNSAFE
 VERDICT: FAIL
 RESULT: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-fail-919fb415\result.json
 run: verify-fail-919fb415
@@ -160,7 +158,6 @@ M .release-gate.yaml
  M slugify/slugify.py
  M tox.ini
 control ready: needs-human
-WARNING: OBSERVABILITY_PATH_UNSAFE
 VERDICT: NEEDS_HUMAN
 RESULT: C:\projects\blindspot-remediation\release-gate\demo\python-slugify\workbench\evidence\verify-needs-human-1c23605b\result.json
 run: verify-needs-human-1c23605b
