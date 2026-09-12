@@ -65,9 +65,14 @@ sandbox execution is delivered.
 
 ## Strategic Epics & Backlog Items
 
+The diagram shows capability relationships, not a requirement to finish every
+phase before starting the next-phase pilot. Epic 10 is an advisory workflow
+outside the gate; its read-only capture can start independently of deployment.
+
 ```mermaid
 flowchart TD
-    A[Agent Change Candidate] --> B[Phase 1: Core Gate & Reviewer Evidence]
+    U[Upstream Planning & Change Execution] --> A[Agent Change Candidate]
+    A --> B[Phase 1: Core Gate & Reviewer Evidence]
     B --> C[Phase 2: Execution Safety & Verification Runtime]
     C --> D[Phase 3: Evidence Producers & Analysis]
     D --> E[Release Policy Decision<br/>PASS / FAIL / NEEDS_HUMAN]
@@ -79,12 +84,31 @@ flowchart TD
     R -->|Fresh candidate| B
     E --> K[BG-705: Structured Repair Outcome Dataset]
     R --> K
-    K --> L[Phase 4: Governed Self-Improvement<br/>Proposal + Requalification]
+    K --> L[Phase 4 / BG-701: Governed Self-Improvement<br/>Proposal + Requalification]
     L -->|Human approval| M[Versioned Capability Promotion]
     L -->|Rejected / Needs review| I
     M -.->|Next run only| B
     H --> O[Phase 5: Runtime Guardrails & Incident Feedback]
     O -.->|Governed proposal, next run only| L
+
+    P[External PR Merge Event & Review Evidence] --> Q
+    subgraph PILOT[Next Phase / Epic 10: Single-Repository Advisory Pilot]
+        Q[BG-1001: Post-Merge Capture] --> S[BG-1002: PR Health Assessment]
+        S --> T[BG-1003: Lesson Proposals]
+        T -->|Human approval under BG-701| V[Approved Versioned Lessons]
+        V --> W[BG-1004: Bounded Lesson Retrieval]
+        S --> X[BG-1005: Verified Batch Audit]
+        X --> Y[BG-1006: Improvement Proposals]
+        V --> Y
+        Z[BG-1007: Measurement & Maintenance<br/>From capture through reuse and audit]
+        Q -.-> Z
+        W -.-> Z
+        X -.-> Z
+    end
+    K -.->|Qualified repair lessons| T
+    W -.->|Next run context only| U
+    W -.->|Approved guidance and scope only| R
+    Y -.->|Separate review and requalification| L
 ```
 
 ---
@@ -188,9 +212,90 @@ The current Release Gate supports **within-session self-correction** (`C0 → C1
 | **BG-902** | **Runtime Guardrail Signal Ingestion** | Medium | **Problem:** Live incidents, rollback triggers, SLO breaches, and canary failures are valuable learning inputs but are outside current gate evidence and verdict finalization.<br>**Implementation:** Add an append-only ingestion format for downstream runtime signals linked to candidate tree, release artifact, gate run ID, and deployed environment.<br>**Acceptance Criteria:** Runtime signals cannot alter a completed `result.json`; they can create governed learning proposals, benchmark additions, policy-review tasks, or reviewer warnings for future runs. |
 | **BG-903** | **Rollback and Incident Outcome Correlation** | Medium | **Problem:** Without correlation between gate evidence and production outcomes, teams cannot tell which blindspots escaped the gate or whether new checks reduce real incidents.<br>**Implementation:** Correlate rollback, hotfix, incident, and human-review outcomes with gate controls, producer classes, diff metrics, and repair lineage.<br>**Acceptance Criteria:** Periodic reports identify escaped-defect classes, false-positive controls, missing evidence producers, and candidate patterns that should update benchmarks or policy proposals through BG-701. |
 
+## Next Phase: Post-Merge Learning Pilot (2026-09-12)
+
+The next improvement is to connect merged PR feedback to approved lessons that
+future planning and repair runs actually consume. Existing repair lesson proposals
+and rolling verdict dashboards provide useful foundations, but do not close this
+loop. Start with one repository and advisory analysis; measure whether lessons
+are useful before proposing new blocking controls.
+
+**Source rationale:** [What Happens After the PR Merges: Building the Learning Loop Software Factories Are Missing](https://shahbhat.medium.com/what-happens-after-the-pr-merges-building-the-learning-loop-software-factories-are-missing-bd867da38b8b)
+describes post-merge health checks, lesson extraction, active context loading,
+periodic PR audits, and reviewed skill improvements. The accompanying
+[you-got-skills repository](https://github.com/bhatti/you-got-skills) is an
+implementation reference, not a proposed dependency. This backlog uses the
+supplied article text; the linked repository source could not be fetched and its
+implementation has not been independently verified. The article's example
+statistics are not Release Gate measurements or default thresholds.
+
+### Epic 10: Post-Merge Learning & Review Effectiveness
+
+**Goal:** Reduce recurring blindspots and review reconstruction effort by turning
+review evidence into reusable, governed knowledge. All items below are proposed
+and not implemented by this backlog update.
+
+| Item ID | Title | Priority | Description & Acceptance Criteria |
+| :--- | :--- | :---: | :--- |
+| **BG-1001** | **Post-Merge Evidence Capture** | High | **Problem:** Gate decisions and repair outcomes lack the subsequent PR review context needed for learning.<br>**Implementation:** Add a separate workflow that captures PR identity, reviewed revision, merge revision, review threads, linked acceptance criteria, CI attempts, and available gate-run references. Use explicit revision/tree evidence for correlation rather than assuming a PR's latest run verified its merged contents.<br>**Acceptance Criteria:** Reprocessing the same evidence is idempotent; later evidence is recorded with provenance. No-comment PRs are captured. Missing data, incomplete pagination, and uncertain squash/rebase correlations are explicit. Closed-unmerged PRs cannot be labeled successful merges. Finalized gate artifacts are never rewritten.<br>**Dependencies:** Existing result/manifest identity; align repair references with BG-705. |
+| **BG-1002** | **Evidence-Linked PR Health Assessment** | High | **Problem:** A merged PR can lack recorded intent, meaningful review, or clean verification without yielding any review comment from which to extract a lesson.<br>**Implementation:** Assess specification coverage, design rationale, security/SRE sensitivity, review quality, and CI health before extracting lessons. Distinguish missing evidence from confirmed deficiencies and CI retries from demonstrated flakiness.<br>**Acceptance Criteria:** Every assessment includes source references and coverage limitations, including PRs with zero comments. Comment count, diff size, or phrases such as “LGTM” alone cannot establish inadequate review. Risky-path review gaps and unacknowledged critical findings are advisory findings requiring verification.<br>**Dependencies:** BG-1001; align future risk routing with BG-101/BG-503. |
+| **BG-1003** | **Governed Lesson Extraction & Lifecycle** | High | **Problem:** Useful review feedback stays in closed threads, while generic or duplicate lessons can overwhelm future context.<br>**Implementation:** Create structured proposals with category, learning, evidence, application scope, source PR/revision, and lifecycle status. Use the article's categories: Edge Case, Integration Gotcha, Performance Cliff, Security Trap, Process Friction, Domain Rule, and Tooling Quirk. Store approved repository lessons in `docs/learnings/` with stable IDs and versions.<br>**Acceptance Criteria:** Human approval is required before reuse. Duplicate proposals retain source provenance without multiplying active lessons; contradictory evidence is flagged for review. Rejected, superseded, and retired lessons remain traceable. Sanitize sensitive content and treat review text as untrusted data, not executable instructions.<br>**Dependencies:** BG-1002 and BG-701 governance; integrate accurate repair lessons through BG-703/BG-705. |
+| **BG-1004** | **Active, Bounded Lesson Retrieval** | High | **Problem:** A write-only learning directory cannot improve subsequent work.<br>**Implementation:** Let upstream planning and repair workflows select approved lessons using changed paths, check IDs, and failure patterns. Record the IDs and versions actually supplied to each run, with a configurable context budget.<br>**Acceptance Criteria:** Demonstrate a reviewed lesson from one PR appearing in a later relevant run. Irrelevant, unapproved, retired, expired, or superseded lessons are excluded; no-match cases are explicit. Retrieved content cannot override base-trusted policy, expand approved repair paths, or alter a finalized verdict.<br>**Dependencies:** BG-1003; BG-702 for the repair guidance channel. |
+| **BG-1005** | **Periodic Advisory PR Audit** | Medium | **Problem:** Individual lessons do not reveal repeated specification, design, skill, or review-practice gaps across PRs.<br>**Implementation:** Analyze a bounded batch for those four dimensions, verify every proposed finding against its evidence, and synthesize recurring patterns. Include positive practices and team-level trends without reviewer rankings.<br>**Acceptance Criteria:** Findings include evidence, confidence, frequency denominators, and collection limitations. Human-labeled samples measure false positives, including terse but substantive reviews. Suspected high-risk review gaps are escalated for human assessment; heuristic review-quality scores never block the pilot.<br>**Dependencies:** BG-1001/BG-1002; reuse BG-202 calibration principles before any later enforcement proposal. |
+| **BG-1006** | **Evidence-Linked Improvement Proposals** | Medium | **Problem:** Audit reports can accumulate without producing a concrete improvement to future behavior.<br>**Implementation:** Convert verified recurring findings into reviewable recommendations for playbooks, skills, intent documentation, and regression cases. Each proposal identifies the target artifact, proposed change, source PRs/lessons, expected benefit, and validation approach.<br>**Acceptance Criteria:** A reviewer can trace each recommendation to verified evidence and accept or reject it. Capability changes follow BG-701 approval, versioning, frozen-benchmark requalification, and reversible promotion. The pilot neither applies proposals automatically nor creates external PRs automatically.<br>**Dependencies:** BG-1003/BG-1005 and BG-701; future generated evidence follows BG-801/BG-803. |
+| **BG-1007** | **Learning Effectiveness, Cost & Maintenance** | Medium | **Problem:** More lessons and higher pass rates do not demonstrate fewer blindspots.<br>**Implementation:** Measure capture coverage, lesson approval/reuse, human-sampled audit precision, recurring failure patterns, processing time, and model cost where available. Support periodic lesson retirement and supersession.<br>**Acceptance Criteria:** Reports state denominators, observation windows, unavailable values, and sampling limitations. Establish a baseline before claiming improvement; distinguish correlation from causation. Collection and model work have bounded batch/context budgets, and truncation is visible. Production escape metrics remain unavailable until BG-902/BG-903 supplies correlated outcomes.<br>**Dependencies:** Instrument BG-1001 onward; use BG-1004 consumption records and BG-1005 labeled samples. |
+
+### Pilot Boundaries & Delivery Order
+
+1. **Capture and assess:** BG-1001 → BG-1002, with BG-1007 measurement from the start. A read-only, single-repository evidence pilot can begin without waiting for all later roadmap phases.
+2. **Approve and reuse:** BG-1003 → BG-1004, using BG-701 governance. Repair-specific reuse also requires the applicable BG-702–705 qualification work; upstream planning reuse does not require deployment integration.
+3. **Audit and propose:** BG-1005 → BG-1006. Keep recommendations advisory until separately reviewed and qualified.
+
+Learning/audit records are separately versioned artifacts outside finalized gate
+evidence. The stable `PASS` / `FAIL` / `NEEDS_HUMAN` contract is unchanged. The
+learner belongs outside the deterministic evaluator, and context loading belongs
+in upstream planning or explicitly governed repair workflows. This pilot grants
+no deployment authority and introduces no blocking review-quality score.
+
+BG-301/BG-302 execution-safety work retains its existing priority. Metadata
+analysis must not execute candidate code; any later generated verification remains
+subject to the evidence-producer and execution-safety controls. Cross-repository
+sharing, automatic improvement PR creation, blocking risk-policy changes, and
+runtime integrations remain later work under the relevant existing epics.
+
+### Pilot Acceptance Scenarios
+
+- Capture duplicate events, PRs without review comments, incomplete CI history, closed-unmerged PRs, and uncertain squash/rebase mappings without inventing successful outcomes or modifying finalized evidence.
+- Verify a terse substantive review is not classified solely by its length; report unacknowledged critical findings with supporting evidence and an explicit human-review step.
+- Deduplicate lessons, retain conflicting evidence, exclude unapproved/superseded lessons, and keep retrieval within its configured context budget.
+- Trace one merged-PR finding through a reviewed lesson into a later run's recorded context and an evidence-linked improvement proposal.
+- Produce a human-sampled audit with precision and coverage denominators, cost visibility, and positive practices; verify that advisory analysis leaves gate verdict behavior unchanged.
+
+**Status clarification (2026-09-12):** The historical BG-704 audit above reported
+a missing `sys` import. Current `tests/test_repair_integration.py` includes that
+import, so that specific blocker is no longer present. Full qualification was not
+rerun for this documentation update; BG-704 must not be marked complete on that
+observation alone. The earlier dated audit is retained as history.
+
 ## Implementation Roadmap
 
+The next-phase priority is the incremental Epic 10 pilot above. It is a staged
+entry into Phase 4's governed learning capability, not a replacement for the
+existing safety and qualification work. Read-only capture and advisory assessment
+can start independently; lesson reuse requires approval under BG-701, and repair
+integration requires the applicable Phase 0 controls. The numbered phases remain
+capability groupings; their historical quarter labels are not new delivery
+commitments.
+
 ```
+Next-Phase Pilot: Epic 10 (single repository; advisory only)
+├── Stage A: BG-1001 → BG-1002 — Capture & Health Assessment
+├── Stage B: BG-1003 → BG-1004 — Approved Lessons & Active Retrieval
+│   └── BG-701 approval; applicable Phase 0 controls for repair reuse
+├── Stage C: BG-1005 → BG-1006 — Verified Audits & Improvement Proposals
+│   └── Capability changes enter Phase 4 review and requalification
+└── Throughout: BG-1007 — Measurement & Knowledge Maintenance
+
 Phase 0: Repair Workflow Foundation (qualification prerequisite)
 ├── BG-704: Repair Integration Qualification Health
 ├── BG-702: Structured Repair Guidance Channel
@@ -220,7 +325,8 @@ Phase 3: Analysis & Orchestration (Q3)
 └── BG-803: Evidence Producer Registry & Trust Labels
 
 Phase 4: Governed Self-Improvement (after qualification controls)
-└── BG-701: Governed Repair Feedback Learning Loop
+├── BG-701: Governed Repair Feedback Learning Loop
+└── Promote qualified capability proposals from the Epic 10 pilot
 
 Phase 5: Downstream Runtime Feedback (post-PASS integration)
 ├── BG-503: Stable Verdict Contract vs. Workflow Routing Clarification
