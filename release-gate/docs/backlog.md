@@ -68,6 +68,8 @@ sandbox execution is delivered.
 The diagram shows capability relationships, not a requirement to finish every
 phase before starting the next-phase pilot. Epic 10 is an advisory workflow
 outside the gate; its read-only capture can start independently of deployment.
+Epic 11 adds upstream intent and approval evidence; the gate validates that
+evidence without taking ownership of lifecycle orchestration.
 
 ```mermaid
 flowchart TD
@@ -109,6 +111,17 @@ flowchart TD
     W -.->|Next run context only| U
     W -.->|Approved guidance and scope only| R
     Y -.->|Separate review and requalification| L
+    subgraph INTENT[Epic 11: Lifecycle Intent & Approval Evidence]
+        IA[BG-1101: Original Intent & Decision Record] --> IB[BG-1102: Artifact Consistency]
+        IA --> IC[BG-1103: Risk-Based Evidence Profile]
+        IB --> ID[BG-1104: Revision-Bound Role Approvals]
+        IC --> ID
+        ID --> IE[BG-1105: Explicit Handoff & Resume]
+    end
+    IE -->|Upstream owner authorizes continuation| U
+    ID -.->|Recorded evidence for validation| B
+    IA -.->|Intent provenance for later assessment| S
+    PB[BG-804: Property-Based Test Evidence] --> D
 ```
 
 ---
@@ -200,6 +213,7 @@ The current Release Gate supports **within-session self-correction** (`C0 → C1
 | **BG-801** | **Independent Test Synthesis Evidence Producer** | High | **Problem:** Candidate-authored tests can pass while preserving the agent's blindspot, and synthesized tests are currently represented only as a diagram concept rather than a governed evidence source.<br>**Implementation:** Add an optional producer that generates or selects independent tests from task intent, changed APIs, bug classes, and historical incidents, then executes them in the same isolated gate runtime as other controls.<br>**Acceptance Criteria:** Generated tests are stored as untrusted evidence artifacts with generator version, prompt/input digest, changed-path scope, execution result, and reviewer-visible limitations. The gate decision consumes only the recorded result and configured policy threshold. |
 | **BG-802** | **Mutation & Adversarial Case Analysis Producer** | High | **Problem:** Ordinary deterministic tests can miss boundary, negative, and regression cases that are common in agent-generated code.<br>**Implementation:** Add mutation/adversarial runners that create bounded mutants or adversarial fixtures for changed units, prioritize them by blast radius, and report survivor classes without modifying the candidate tree.<br>**Acceptance Criteria:** Evidence identifies killed/surviving mutants, adversarial scenario IDs, affected paths, runtime cost, and policy contribution. Surviving high-severity cases can produce `FAIL` or `NEEDS_HUMAN`; inconclusive runs never produce `PASS`. |
 | **BG-803** | **Evidence Producer Registry & Trust Labels** | Medium | **Problem:** As checks expand beyond repository-declared commands, reviewers need to know which evidence came from deterministic tools, generated tests, model judgments, or downstream runtime signals.<br>**Implementation:** Add a producer registry with stable IDs, versions, trust class, determinism class, required sandbox profile, and allowed verdict contribution.<br>**Acceptance Criteria:** `result.json` or an associated evidence summary can group controls by producer and label each as deterministic, bounded-generated, subjective, downstream, or advisory. Blocking policy may only use producer classes explicitly enabled by base-trusted configuration. |
+| **BG-804** | **Property-Based & Metamorphic Test Evidence** | High | **Problem:** Example-based tests can miss boundary cases, and candidate-authored tests can repeat the implementation's assumptions.<br>**Implementation:** Extend BG-801/BG-802 with bounded property-based and metamorphic checks derived from reviewed invariants, domain rules, and acceptance criteria. Record property/generator versions, seeds, execution budgets, and minimized counterexamples as independent evidence.<br>**Acceptance Criteria:** A failing run can be replayed from its recorded seed or saved counterexample. Vacuous properties and excessive discarded inputs are reported; timeout or incomplete required evidence cannot silently count as success. Candidate changes cannot weaken trusted properties or their oracle. Random inputs alone are not evidence of an independent or correct oracle. Results use existing verdict policy and do not modify the candidate tree.<br>**Dependencies:** BG-801/BG-802/BG-803 and their execution-safety controls; BG-1101 supplies reviewed intent when available. |
 
 ---
 
@@ -277,6 +291,43 @@ import, so that specific blocker is no longer present. Full qualification was no
 rerun for this documentation update; BG-704 must not be marked complete on that
 observation alone. The earlier dated audit is retained as history.
 
+## AIDLC Review: Intent, Collaboration & Evidence (2026-09-13)
+
+**Source:** Peng Qian, *From OpenSpec to AIDLC: How I Improved My Team’s AI Code
+Quality*, September 4, 2026; user-supplied article text. The author describes a
+customized AIDLC v1 workflow. Its observations about OpenSpec, AWS, and quality
+improvements are author-reported context, not independently verified product
+comparisons or Release Gate results. No framework migration or skill installation
+is proposed here.
+
+The useful addition to the post-merge pilot is a stronger record of what was
+intended and approved before code reaches the gate. Preserve original requirements
+and decisions, assess whether related artifacts still agree, and separate approval
+from authorization to execute. Apply workflow depth according to risk rather than
+requiring every change to complete every lifecycle stage.
+
+### Epic 11: Lifecycle Intent & Approval Evidence
+
+**Goal:** Make upstream requirements, decisions, and human approvals verifiable
+release evidence while keeping generation, document edits, and stage orchestration
+outside Release Gate. All items are proposed, not implemented.
+
+| Item ID | Title | Priority | Description & Acceptance Criteria |
+| :--- | :--- | :---: | :--- |
+| **BG-1101** | **Original Intent & Decision Provenance** | High | **Problem:** A generated spec can omit why a requirement exists and which assumptions a human actually accepted.<br>**Implementation:** Define a versioned upstream intent record linking source requirements, clarified questions/answers, accepted decisions, unresolved assumptions, acceptance criteria, and selected work-unit scope. Distinguish original human input from model summaries; link revisions and artifact digests into gate evidence.<br>**Acceptance Criteria:** A reviewer can trace a requirement through its rationale to verification evidence. Changes append superseding decisions instead of rewriting approved history. Deferred work and unresolved questions remain visible. Sensitive conversation content is minimized/redacted; a complete raw chat transcript is not required. A candidate-authored summary alone cannot claim human approval.<br>**Dependencies:** Extend BG-201/BG-402; supply provenance to BG-1002/BG-1003. |
+| **BG-1102** | **Specification, Design & Implementation Consistency** | High | **Problem:** Requirements, design, tasks, and tests can diverge as implementation changes, leaving individually plausible but contradictory artifacts.<br>**Implementation:** Track impacted artifact links and acceptance-criterion-to-check mappings. Detect stale revisions, missing references, and absent required evidence deterministically; report semantic contradictions separately as advisory findings. Upstream workflows prepare any document corrections for review.<br>**Acceptance Criteria:** Fixtures cover a changed acceptance criterion with an old test mapping, a task/design conflict, and a behavior change with stale documentation. Findings identify affected artifact revisions and required re-review. The gate does not rewrite documents, treat file existence as semantic consistency, or certify an LLM judgment as proof.<br>**Dependencies:** BG-1101 and BG-201; subjective blocking requires BG-202 qualification. |
+| **BG-1103** | **Risk-Based Lifecycle Evidence Profiles** | High | **Problem:** A single heavyweight process invites bypasses, while a lightweight process can omit critical analysis for risky changes.<br>**Implementation:** Use base-trusted profiles to select required intent, design, security, testing, and approval evidence by change type and sensitivity. Record profile selection, reasons, and explicit not-applicable decisions. Existing-system changes reference relevant current behavior; small fixes can use a minimal profile. Upstream planning selects a bounded work unit and retains deferred requirements.<br>**Acceptance Criteria:** Small-fix, new-feature, existing-system, and security-sensitive fixtures select the expected evidence requirements. Candidate content or a casual opt-out cannot disable mandatory controls. Unknown risk is surfaced for review. Frontend or non-functional labels alone do not justify skipping user-impact analysis. Workflow adapters load only relevant guidance and preserve restart state.<br>**Dependencies:** BG-101/BG-503 and BG-1101; profile selection remains distinct from BG-602 execution-mode routing. |
+| **BG-1104** | **Revision-Bound Role Approval Evidence** | High | **Problem:** An approval mark can refer to outdated documents or lack trustworthy reviewer identity and authority.<br>**Implementation:** Record the approving actor, trusted identity source, required role, decision, time, and exact artifact revision/digest under base-trusted role policy. Require renewed approval when the covered artifact changes; support append-only rejection, supersession, and revocation records.<br>**Acceptance Criteria:** Stale, revoked, missing, or unauthorized approvals cannot satisfy a required approval control. A product reviewer and technical reviewer satisfy only the roles assigned by trusted policy. Local git name/email is attribution metadata, not authenticated identity. Pilot findings are advisory; later enforced missing approval routes through `NEEDS_HUMAN`, while integrity violations follow existing failure policy.<br>**Dependencies:** BG-1101/BG-1103 and BG-402/BG-503. |
+| **BG-1105** | **Approval, Handoff & Execution Separation** | Medium | **Problem:** Approving requirements must not start coding or deployment in the reviewer's environment, and resuming elsewhere must not reuse stale stage state.<br>**Implementation:** Define an upstream handoff record with approved artifacts, pending work, next responsible role, and a separate explicit continuation action. Support native assistant question tools while persisting decisions in portable artifacts.<br>**Acceptance Criteria:** Approval alone triggers no execution. Another authorized owner can resume from the handoff and must revalidate artifact revisions and unresolved requirements. Duplicate continuation does not repeat completed stage work. No specific IDE, command vocabulary, or AIDLC directory layout is required. Gate `PASS` remains eligibility evidence, not execution or deployment authorization.<br>**Dependencies:** BG-1103/BG-1104 and BG-901; orchestration remains upstream. |
+
+### Delivery, Qualification & Relationship to Existing Work
+
+- Start BG-1101/BG-1102 in advisory mode alongside the Epic 10 pilot: clearer intent improves both reviewer evidence and later lesson extraction. This does not delay read-only post-merge capture.
+- Add BG-1103/BG-1104, then BG-1105 after evidence and identity contracts are qualified. Enable deterministic enforcement only through reviewed base-trusted configuration; preserve the stable verdict enum.
+- Deliver BG-804 within Phase 3's existing evidence-producer work. Property-based testing complements examples, mutation tests, and independent review; it cannot guarantee resistance to test gaming when its properties or oracle are wrong.
+- Reuse BG-201 for ADR conformance, BG-402 for provenance, and BG-1002 for retrospective health assessment. Epic 11 supplies lifecycle evidence rather than duplicating those evaluators or replacing the agreed learning pilot.
+- Qualification must exercise stale/revoked approvals, misleading local Git identity, candidate attempts to skip controls, semantic uncertainty, cross-owner resume, and reproducible generated-test failures. Measure missing-intent findings, stale approvals, review effort, and accepted false positives before expanding enforcement; make no unmeasured quality-gain claim.
+
 ## Implementation Roadmap
 
 The next-phase priority is the incremental Epic 10 pilot above. It is a staged
@@ -285,7 +336,8 @@ existing safety and qualification work. Read-only capture and advisory assessmen
 can start independently; lesson reuse requires approval under BG-701, and repair
 integration requires the applicable Phase 0 controls. The numbered phases remain
 capability groupings; their historical quarter labels are not new delivery
-commitments.
+commitments. Epic 11 is a complementary advisory evidence track; it does not
+replace or block the selected Epic 10 pilot.
 
 ```
 Next-Phase Pilot: Epic 10 (single repository; advisory only)
@@ -295,6 +347,11 @@ Next-Phase Pilot: Epic 10 (single repository; advisory only)
 ├── Stage C: BG-1005 → BG-1006 — Verified Audits & Improvement Proposals
 │   └── Capability changes enter Phase 4 review and requalification
 └── Throughout: BG-1007 — Measurement & Knowledge Maintenance
+
+Complementary Track: Epic 11 (advisory first)
+├── BG-1101 → BG-1102: Intent Provenance & Artifact Consistency
+├── BG-1103 → BG-1104: Evidence Profiles & Revision-Bound Approvals
+└── BG-1105: Explicit Handoff & Resume (upstream integration)
 
 Phase 0: Repair Workflow Foundation (qualification prerequisite)
 ├── BG-704: Repair Integration Qualification Health
@@ -322,7 +379,8 @@ Phase 3: Analysis & Orchestration (Q3)
 ├── BG-602: Hybrid Tool Calling Router (Function vs Code Mode)
 ├── BG-801: Independent Test Synthesis Evidence Producer
 ├── BG-802: Mutation & Adversarial Case Analysis Producer
-└── BG-803: Evidence Producer Registry & Trust Labels
+├── BG-803: Evidence Producer Registry & Trust Labels
+└── BG-804: Property-Based & Metamorphic Test Evidence
 
 Phase 4: Governed Self-Improvement (after qualification controls)
 ├── BG-701: Governed Repair Feedback Learning Loop
