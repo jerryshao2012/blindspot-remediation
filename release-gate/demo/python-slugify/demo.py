@@ -157,7 +157,8 @@ def read_assurance_summary(path: Path) -> AssuranceSummary:
         raise DemoError(f"unable to read assurance result JSON: {path}") from error
     if not isinstance(value, dict):
         raise DemoError("assurance result must be a JSON object")
-    if value.get("version") != 1:
+    version = value.get("version")
+    if type(version) is not int or version != 1:
         raise DemoError("assurance result version must be 1")
 
     gate_result_path = _required_string(value, "gate_result_path")

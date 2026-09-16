@@ -196,6 +196,8 @@ def test_assurance_summary_reads_demo_fields(tmp_path: Path) -> None:
     ("replacement", "message"),
     [
         ({"version": 2}, "version"),
+        ({"version": True}, "version"),
+        ({"version": 1.0}, "version"),
         ({"mode": "optional"}, "mode"),
         ({"gate_verdict": "UNKNOWN"}, "gate_verdict"),
         ({"disposition": "UNKNOWN"}, "disposition"),
