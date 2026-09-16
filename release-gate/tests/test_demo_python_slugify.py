@@ -35,7 +35,7 @@ def test_parser_exposes_simplified_demo_commands() -> None:
 
     for command in ("doctor", "setup", "reset", "verify"):
         assert parser.parse_args([command]).command == command
-    for command in ("inspect", "grade"):
+    for command in ("inspect", "inspect-assurance", "grade"):
         parsed = parser.parse_args([command, "--result", "result.json"])
         assert parsed.command == command
     assert parser.parse_args(["control", "pass"]).scenario == "pass"
@@ -137,6 +137,170 @@ def test_result_summary_rejects_invalid_results(
 
     with pytest.raises(driver.DemoError, match=message):
         driver.read_result_summary(result)
+
+
+def assurance_result(gate_result_path: Path) -> dict[str, object]:
+    return {
+        "version": 1,
+        "run_id": "assured-pass",
+        "engine_version": "0.7.0",
+        "gate_result_path": str(gate_result_path),
+        "gate_result_sha256": "a" * 64,
+        "gate_manifest_sha256": "b" * 64,
+        "base_commit": "c" * 40,
+        "candidate_tree": "d" * 40,
+        "patch_sha256": "e" * 64,
+        "policy_sha256": "f" * 64,
+        "mode": "advisory",
+        "gate_verdict": "PASS",
+        "disposition": "NEEDS_HUMAN",
+        "exit_code": 0,
+        "assessment_status": "COMPLETE",
+        "evidence_sufficient": False,
+        "reason_codes": ["ASSURANCE_REQUIREMENTS_UNMET"],
+        "artifacts": [],
+        "coverage": {"mapping_uncertainty_rate": 0.25},
+        "unmet_requirements": [
+            {
+                "dimension_id": "behavior_region",
+                "value": "boundary",
+                "independent_support": 0,
+                "minimum_independent_support": 1,
+            }
+        ],
+        "duration_ms": 12,
+    }
+
+
+def test_assurance_summary_reads_demo_fields(tmp_path: Path) -> None:
+    driver = load_driver()
+    gate_result = (tmp_path / "gate" / "result.json").resolve()
+    result = tmp_path / "result.json"
+    result.write_text(json.dumps(assurance_result(gate_result)), encoding="utf-8")
+
+    summary = driver.read_assurance_summary(result)
+
+    assert summary.run_id == "assured-pass"
+    assert summary.gate_result_path == str(gate_result)
+    assert summary.mode == "advisory"
+    assert summary.gate_verdict == "PASS"
+    assert summary.disposition == "NEEDS_HUMAN"
+    assert summary.assessment_status == "COMPLETE"
+    assert summary.evidence_sufficient is False
+    assert summary.reason_codes == ("ASSURANCE_REQUIREMENTS_UNMET",)
+    assert summary.coverage == {"mapping_uncertainty_rate": 0.25}
+    assert summary.unmet_requirements[0]["value"] == "boundary"
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [
+        ({"version": 2}, "version"),
+        ({"mode": "optional"}, "mode"),
+        ({"gate_verdict": "UNKNOWN"}, "gate_verdict"),
+        ({"disposition": "UNKNOWN"}, "disposition"),
+        ({"assessment_status": "PENDING"}, "assessment_status"),
+        ({"gate_result_path": "relative/result.json"}, "absolute"),
+        ({"gate_result_path": None}, "gate_result_path"),
+        ({"evidence_sufficient": 1}, "boolean"),
+        ({"reason_codes": [1]}, "reason_codes"),
+        ({"coverage": []}, "coverage"),
+        ({"unmet_requirements": ["boundary"]}, "unmet_requirements"),
+    ],
+)
+def test_assurance_summary_rejects_invalid_results(
+    tmp_path: Path, replacement: dict[str, object], message: str
+) -> None:
+    driver = load_driver()
+    value = assurance_result((tmp_path / "gate-result.json").resolve())
+    value.update(replacement)
+    result = tmp_path / "result.json"
+    result.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(driver.DemoError, match=message):
+        driver.read_assurance_summary(result)
+
+
+def test_assurance_summary_rejects_malformed_json_and_nonobject_root(
+    tmp_path: Path,
+) -> None:
+    driver = load_driver()
+    result = tmp_path / "result.json"
+    result.write_text("{", encoding="utf-8")
+    with pytest.raises(driver.DemoError, match="unable to read assurance result JSON"):
+        driver.read_assurance_summary(result)
+
+    result.write_text("[]", encoding="utf-8")
+    with pytest.raises(driver.DemoError, match="JSON object"):
+        driver.read_assurance_summary(result)
+
+
+def test_inspect_assurance_result_prints_decision_and_link_fields(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    driver = load_driver()
+    gate_result = (tmp_path / "gate" / "result.json").resolve()
+    package = tmp_path / "assurance"
+    package.mkdir()
+    result = package / "result.json"
+    result.write_text(json.dumps(assurance_result(gate_result)), encoding="utf-8")
+    (package / "manifest.json").write_text("{}", encoding="utf-8")
+
+    summary = driver.inspect_assurance_result(result)
+
+    assert summary.gate_result_path == str(gate_result)
+    output = capsys.readouterr().out
+    for line in (
+        "run: assured-pass",
+        f"linked gate result: {gate_result}",
+        "mode: advisory",
+        "gate verdict: PASS",
+        "disposition: NEEDS_HUMAN",
+        "assessment status: COMPLETE",
+        "evidence sufficient: false",
+        "reason codes: ASSURANCE_REQUIREMENTS_UNMET",
+        "mapping uncertainty: 0.25",
+        "unmet requirements:",
+        f"manifest: {package / 'manifest.json'}",
+    ):
+        assert line in output
+
+
+@pytest.mark.parametrize("incomplete", [False, True])
+def test_inspect_assurance_result_requires_complete_package(
+    tmp_path: Path, incomplete: bool
+) -> None:
+    driver = load_driver()
+    package = tmp_path / "assurance"
+    package.mkdir()
+    result = package / "result.json"
+    result.write_text(
+        json.dumps(assurance_result((tmp_path / "gate-result.json").resolve())),
+        encoding="utf-8",
+    )
+    if incomplete:
+        (package / "manifest.json").write_text("{}", encoding="utf-8")
+        (package / ".incomplete").touch()
+
+    with pytest.raises(driver.DemoError, match="incomplete or missing manifest.json"):
+        driver.inspect_assurance_result(result)
+
+
+def test_main_dispatches_inspect_assurance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    driver = load_driver()
+    package = tmp_path / "assurance"
+    package.mkdir()
+    result = package / "result.json"
+    result.write_text(
+        json.dumps(assurance_result((tmp_path / "gate-result.json").resolve())),
+        encoding="utf-8",
+    )
+    (package / "manifest.json").write_text("{}", encoding="utf-8")
+
+    assert driver.main(["inspect-assurance", "--result", str(result)]) == 0
+    assert "linked gate result:" in capsys.readouterr().out
 
 
 def test_gate_invocation_prefers_sibling_python(

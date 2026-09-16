@@ -53,6 +53,20 @@ class ResultSummary:
     manifest_path: str
 
 
+@dataclass(frozen=True, slots=True)
+class AssuranceSummary:
+    run_id: str
+    gate_result_path: str
+    mode: str
+    gate_verdict: str
+    disposition: str
+    assessment_status: str
+    evidence_sufficient: bool
+    reason_codes: tuple[str, ...]
+    coverage: dict[str, Any] | None
+    unmet_requirements: tuple[dict[str, Any], ...]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the cross-platform python-slugify Release Gate demo."
@@ -63,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("reset", help="restore the trusted demo baseline")
     control = commands.add_parser("control", help="apply a deterministic candidate")
     control.add_argument("scenario", choices=("pass", "fail", "needs-human"))
-    for name in ("inspect", "grade"):
+    for name in ("inspect", "inspect-assurance", "grade"):
         command = commands.add_parser(name)
         command.add_argument("--result", required=True, type=Path)
     commands.add_parser("verify", help="exercise all three verdicts without Copilot")
@@ -134,6 +148,64 @@ def read_result_summary(path: Path) -> ResultSummary:
         checks=tuple(checks),
         manifest_path=_required_string(value, "manifest_path"),
     )
+
+
+def read_assurance_summary(path: Path) -> AssuranceSummary:
+    try:
+        value: object = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DemoError(f"unable to read assurance result JSON: {path}") from error
+    if not isinstance(value, dict):
+        raise DemoError("assurance result must be a JSON object")
+    if value.get("version") != 1:
+        raise DemoError("assurance result version must be 1")
+
+    gate_result_path = _required_string(value, "gate_result_path")
+    if not Path(gate_result_path).is_absolute():
+        raise DemoError("result gate_result_path must be absolute")
+
+    mode = _required_string(value, "mode")
+    if mode not in {"advisory", "enforce"}:
+        raise DemoError(f"unsupported assurance result mode: {mode}")
+    gate_verdict = _assurance_decision(value, "gate_verdict")
+    disposition = _assurance_decision(value, "disposition")
+    assessment_status = _required_string(value, "assessment_status")
+    if assessment_status not in {"COMPLETE", "UNAVAILABLE", "NOT_EVALUATED"}:
+        raise DemoError(
+            f"unsupported assurance result assessment_status: {assessment_status}"
+        )
+
+    evidence_sufficient = value.get("evidence_sufficient")
+    if not isinstance(evidence_sufficient, bool):
+        raise DemoError("result evidence_sufficient must be a boolean")
+    if "coverage" not in value:
+        raise DemoError("result coverage must be an object or null")
+    coverage = value["coverage"]
+    if coverage is not None and not isinstance(coverage, dict):
+        raise DemoError("result coverage must be an object or null")
+    unmet = value.get("unmet_requirements")
+    if not isinstance(unmet, list) or not all(isinstance(item, dict) for item in unmet):
+        raise DemoError("result unmet_requirements must be an array of objects")
+
+    return AssuranceSummary(
+        run_id=_required_string(value, "run_id"),
+        gate_result_path=gate_result_path,
+        mode=mode,
+        gate_verdict=gate_verdict,
+        disposition=disposition,
+        assessment_status=assessment_status,
+        evidence_sufficient=evidence_sufficient,
+        reason_codes=_string_tuple(value, "reason_codes"),
+        coverage=coverage,
+        unmet_requirements=tuple(unmet),
+    )
+
+
+def _assurance_decision(value: dict[str, Any], key: str) -> str:
+    decision = _required_string(value, key)
+    if decision not in {"PASS", "FAIL", "NEEDS_HUMAN"}:
+        raise DemoError(f"unsupported assurance result {key}: {decision}")
+    return decision
 
 
 def _required_mapping(value: dict[str, Any], key: str) -> dict[str, Any]:
@@ -334,6 +406,42 @@ def inspect_result(path: Path) -> ResultSummary:
     for check_id, status, reasons in summary.checks:
         detail = f" ({', '.join(reasons)})" if reasons else ""
         print(f"check {check_id}: {status}{detail}")
+    print(f"manifest: {manifest}")
+    return summary
+
+
+def inspect_assurance_result(path: Path) -> AssuranceSummary:
+    try:
+        resolved = path.expanduser().resolve(strict=True)
+    except OSError as error:
+        raise DemoError(f"assurance result does not exist: {path}") from error
+    manifest = resolved.parent / "manifest.json"
+    if not manifest.is_file() or (resolved.parent / ".incomplete").exists():
+        raise DemoError("assurance package is incomplete or missing manifest.json")
+    summary = read_assurance_summary(resolved)
+    uncertainty = (
+        summary.coverage.get("mapping_uncertainty_rate")
+        if summary.coverage is not None
+        else None
+    )
+    print(f"run: {summary.run_id}")
+    print(f"linked gate result: {summary.gate_result_path}")
+    print(f"mode: {summary.mode}")
+    print(f"gate verdict: {summary.gate_verdict}")
+    print(f"disposition: {summary.disposition}")
+    print(f"assessment status: {summary.assessment_status}")
+    print(f"evidence sufficient: {str(summary.evidence_sufficient).lower()}")
+    print(f"reason codes: {', '.join(summary.reason_codes) or 'none'}")
+    print(
+        "mapping uncertainty: "
+        f"{uncertainty if uncertainty is not None else 'unavailable'}"
+    )
+    if summary.unmet_requirements:
+        print("unmet requirements:")
+        for requirement in summary.unmet_requirements:
+            print(f"  {json.dumps(requirement, sort_keys=True)}")
+    else:
+        print("unmet requirements: none")
     print(f"manifest: {manifest}")
     return summary
 
@@ -545,6 +653,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             control(arguments.scenario)
         elif arguments.command == "inspect":
             inspect_result(arguments.result)
+        elif arguments.command == "inspect-assurance":
+            inspect_assurance_result(arguments.result)
         elif arguments.command == "grade":
             grade(arguments.result)
         elif arguments.command == "verify":
