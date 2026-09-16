@@ -1,0 +1,1599 @@
+================================================================================
+HOW TO INTEGRATE THE EXISTING EVIDENCE DIVERSITY MAPPER WITH COMPONENT 3
+================================================================================
+
+SHORT ANSWER
+============
+
+The Evidence Diversity Mapper should NOT be copied into Component 3, and Component 3 should NOT create a second mapper abstraction that duplicates it.
+
+The intended architecture is:
+
+    Component 3
+        |
+        v
+    EvidenceDiversityMapperAdapter
+        |
+        v
+    existing generic Evidence Diversity Mapper
+
+The EvidenceDiversityMapperAdapter is the boundary between the release-assurance domain and the reusable Diversity Mapper product.
+
+The existing design explicitly says that the L1 automation project should own a thin evidence-specific adapter whose job is to translate:
+
+    EvidenceArtifact
+        <->
+    ArtifactDescriptor
+
+and:
+
+    CoverageAssessment / CoverageGap / ExpansionRequest
+        <->
+    evidence-domain objects understood by the Release Gate and EvidencePlanner.
+
+The generic mapper remains domain-neutral. It should understand conceptual coverage, not release gates, tests, mutation analysis, PASS/FAIL, or software release policy.
+
+Therefore, after reviewing the mapper design again, I would make one important adjustment to the Component 3 implementation I previously supplied:
+
+    AdaptiveReleaseAssuranceService
+        should call EvidenceDiversityMapperAdapter directly.
+
+The additional:
+
+    EvidenceDiversityMapperPort
+    ExistingConceptualDiversityMapperIntegration
+
+layer I introduced is not necessary if the previously developed EvidenceDiversityMapperAdapter already exposes the required mapping and expansion operations.
+
+Removing that extra layer gives us a cleaner architecture.
+
+
+================================================================================
+1. TARGET ARCHITECTURE
+================================================================================
+
+The integrated flow should be:
+
+    ReleaseGateService
+        |
+        | GateResult
+        v
+    EvidenceArtifactFactory
+        |
+        | EvidenceBundle
+        v
+    EvidenceDiversityMapperAdapter
+        |
+        | converts evidence-domain artifacts
+        v
+    ArtifactDescriptor[]
+        |
+        v
+    Evidence Diversity Mapper
+        |
+        +------------------------------+
+        |                              |
+        v                              v
+    ConceptMapping[]            CoverageAssessment
+                                       |
+                                       v
+                                  CoverageGap[]
+                                       |
+                                       v
+                                  ExpansionRequest[]
+                                       |
+                                       v
+                                EvidencePlanner
+                                       |
+                                       v
+                               EvidenceCollector
+                                       |
+                                       v
+                              execute + validate
+                                       |
+                                       v
+                             new EvidenceArtifact[]
+                                       |
+                                       v
+                         EvidenceDiversityMapperAdapter
+                                       |
+                                       v
+                          Evidence Diversity Mapper
+                                       |
+                                       v
+                           RE-MAP NEW EVIDENCE
+                                       |
+                                       v
+                         RE-ASSESS COMPLETE BUNDLE
+                                       |
+                                       v
+                            AssurancePolicyEngine
+                                       |
+                          +------------+------------+
+                          |                         |
+                          v                         v
+                    evidence sufficient       gaps remain
+                          |                         |
+                          v                         |
+                    release disposition       next round
+
+
+This follows the mapper's original architecture. The mapper is responsible for conceptual measurement, gaps, uncertainty and expansion requests. It is not responsible for the ReleaseGateService or PASS/FAIL decisions.
+
+
+================================================================================
+2. RESPONSIBILITY BOUNDARY
+================================================================================
+
+The responsibilities should be divided exactly as follows.
+
+
+COMPONENT 3 OWNS
+----------------
+
+Component 3 owns:
+
+    EvidenceArtifact
+    EvidenceBundle
+
+    ReleaseGateService
+
+    EvidenceArtifactFactory
+
+    EvidenceDiversityMapperAdapter
+
+    EvidencePlanner
+
+    EvidenceCollectors
+
+    evidence execution and validation
+
+    AssurancePolicyEngine
+
+    ReleasePolicyEngine
+
+    assurance budgets
+
+    assurance-loop orchestration
+
+    final release disposition
+
+
+THE GENERIC DIVERSITY MAPPER OWNS
+---------------------------------
+
+The existing mapper owns:
+
+    ConceptDimension
+    ConceptSchema
+    ArtifactDescriptor
+    ConceptMapping
+    CoverageRegion
+    CoverageAssessment
+    CoverageGap
+    ExpansionRequest
+    ExpansionCandidate
+    ExpansionAssessment
+
+and the algorithms that:
+
+    map artifacts into conceptual space;
+    identify represented regions;
+    identify sparse regions;
+    identify absent regions;
+    detect conceptual repetition;
+    account for lineage;
+    represent uncertainty;
+    identify coverage gaps;
+    create or support expansion requests;
+    re-map generated additions;
+    assess whether additions actually satisfy requested concepts.
+
+
+THE ADAPTER OWNS
+----------------
+
+EvidenceDiversityMapperAdapter owns ONLY translation and orchestration between these two domains.
+
+Conceptually:
+
+    SOFTWARE ASSURANCE DOMAIN
+              |
+              v
+    EvidenceDiversityMapperAdapter
+              |
+              v
+    GENERIC DIVERSITY DOMAIN
+
+
+This is exactly why the adapter exists.
+
+
+================================================================================
+3. REMOVE TWO CLASSES FROM MY PREVIOUS COMPONENT 3 ================================================================================
+
+I would remove:
+
+    EvidenceDiversityMapperPort
+
+and:
+
+    ExistingConceptualDiversityMapperIntegration
+
+
+They were useful as defensive integration abstractions when the concrete mapper implementation was not available.
+
+However, given that we already developed:
+
+    EvidenceDiversityMapperAdapter
+
+specifically for this integration, another port plus another adapter creates:
+
+    Component 3
+        -> port
+        -> integration adapter
+        -> EvidenceDiversityMapperAdapter
+        -> mapper
+
+That is unnecessary indirection.
+
+The preferred structure is simply:
+
+    Component 3
+        -> EvidenceDiversityMapperAdapter
+        -> mapper
+
+
+================================================================================
+4. WHERE THE EXISTING MAPPER CODE SHOULD LIVE ================================================================================
+
+I would keep the generic mapper as its own Python package.
+
+For example:
+
+    diversity_mapper/
+        __init__.py
+        models.py
+        mapping.py
+        coverage.py
+        gaps.py
+        expansion.py
+        lineage.py
+        uncertainty.py
+        service.py
+
+
+Component 3 remains:
+
+    ai_engineering_release_assurance/
+        service.py
+        policy.py
+        evidence.py
+        evidence_adapter.py
+        evidence_planner.py
+        evidence_collectors.py
+        evidence_execution.py
+        assurance_policy.py
+        assurance_budget.py
+        assurance_service.py
+        composition.py
+
+
+The adapter belongs with Component 3:
+
+    ai_engineering_release_assurance/
+        evidence_diversity_mapper_adapter.py
+
+
+That placement is important.
+
+The generic mapper should not acquire a dependency on:
+
+    GateResult
+    ControlResult
+    ReleasePolicy
+    EvidencePlanner
+    ReleaseGateService
+
+Instead:
+
+    Component 3 depends on the generic mapper.
+
+Dependency direction is therefore:
+
+    Release Assurance
+          |
+          v
+    Evidence Adapter
+          |
+          v
+    Diversity Mapper
+
+and NEVER:
+
+    Diversity Mapper
+          |
+          v
+    ReleaseGateService
+
+
+================================================================================
+5. THE ADAPTER SHOULD RECEIVE THE EXISTING MAPPER ================================================================================
+
+The adapter should use dependency injection.
+
+Conceptually:
+
+    class EvidenceDiversityMapperAdapter:
+
+        def __init__(self, mapper):
+            self.mapper = mapper
+
+
+The composition root creates the generic mapper first:
+
+    diversity_mapper = DiversityMapper(
+        ...
+    )
+
+
+Then creates the evidence adapter:
+
+    evidence_mapper_adapter = EvidenceDiversityMapperAdapter(
+        mapper=diversity_mapper
+    )
+
+
+Then injects the adapter into Component 3:
+
+    assurance_service = AdaptiveReleaseAssuranceService(
+        ...
+        evidence_mapper=evidence_mapper_adapter,
+        ...
+    )
+
+
+There should be ONE mapper instance/configuration participating in a particular assurance run.
+
+The adapter does not instantiate a new mapper every time evidence is assessed.
+
+
+================================================================================
+6. INPUT TRANSLATION
+================================================================================
+
+The first important job of EvidenceDiversityMapperAdapter is translating:
+
+    EvidenceArtifact
+
+into the mapper's generic:
+
+    ArtifactDescriptor
+
+
+For example, Component 3 currently has information resembling:
+
+    EvidenceArtifact(
+        evidence_id=...,
+        evidence_type=...,
+        observation=...,
+        addressed_claims=...,
+        addressed_behaviors=...,
+        method=...,
+        producer_identity=...,
+        result=...,
+        parent_evidence_ids=...,
+        generation_batch_id=...,
+        model_identity=...,
+        prompt_template_identity=...,
+        transformation_history=...,
+        executed=...,
+        validated=...
+    )
+
+
+The adapter converts that to approximately:
+
+    ArtifactDescriptor(
+        artifact_id=evidence.evidence_id,
+        artifact_type=evidence.evidence_type,
+
+        content={
+            "observation": evidence.observation,
+            "claims": evidence.addressed_claims,
+            "behaviors": evidence.addressed_behaviors,
+            "result": evidence.result
+        },
+
+        provenance={
+            "source_method": evidence.method,
+            "producer_identity": evidence.producer_identity,
+            "model_identity": evidence.model_identity,
+            "prompt_template_identity":
+                evidence.prompt_template_identity
+        },
+
+        lineage={
+            "parent_artifact_ids":
+                evidence.parent_evidence_ids,
+
+            "generation_batch":
+                evidence.generation_batch_id,
+
+            "transformation_history":
+                evidence.transformation_history
+        }
+    )
+
+
+The exact field names should match the existing mapper implementation.
+
+The important point is that Component 3 should NOT change its domain model merely to look like the mapper's generic domain model.
+
+The adapter translates between them.
+
+
+================================================================================
+7. DO NOT THROW AWAY LINEAGE
+================================================================================
+
+This translation is especially important for:
+
+    parent_evidence_ids
+    generation_batch_id
+    producer_identity
+    model_identity
+    prompt_template_identity
+    transformation_history
+
+
+Those values must reach the mapper.
+
+Otherwise this:
+
+    test A
+        |
+        +-> generated variant A1
+        +-> generated variant A2
+        +-> generated variant A3
+        +-> generated variant A4
+        +-> generated variant A5
+
+
+could incorrectly appear to the mapper as five independent pieces of evidence.
+
+The mapper design explicitly requires lineage-aware coverage and warns that ten descendants of one generated seed must not automatically be treated as ten independently originated artifacts.
+
+Therefore the adapter is not merely serialization glue. Preserving provenance and lineage is one of its most important assurance responsibilities.
+
+
+================================================================================
+8. CONCEPT SCHEMA SHOULD COME FROM THE MAPPER DOMAIN ================================================================================
+
+I would also change one thing from the previous Component 3 implementation.
+
+Do NOT define a second Component-3-specific ConceptSchema.
+
+Use the existing mapper:
+
+    ConceptSchema
+
+
+directly.
+
+The schema is a first-class versioned artifact and should identify at least:
+
+    schema_id
+    schema_version
+    dimensions
+    dimension definitions
+    allowed values / coordinate semantics
+    derivation method
+    provenance
+    source corpus where relevant
+    model/tool versions where relevant
+    human-review status where relevant
+
+
+Every CoverageAssessment should retain the identity of the ConceptSchema against which it was calculated.
+
+This matters because:
+
+    same evidence
+        +
+    different ConceptSchema
+
+can legitimately produce:
+
+    different coverage.
+
+
+Therefore Component 3 should persist:
+
+    concept_schema_id
+    concept_schema_version
+    mapper_version
+
+in its assurance trace.
+
+
+================================================================================
+9. FIRST MAPPER CALL
+================================================================================
+
+Inside:
+
+    AdaptiveReleaseAssuranceService.evaluate()
+
+
+we already have:
+
+    gate_result = self.release_gate_service.evaluate(request)
+
+
+Then:
+
+    bundle = self.evidence_artifact_factory.build_bundle(
+        gate_result=gate_result,
+        accumulated_evidence=tuple(accumulated_evidence),
+    )
+
+
+The next call should go DIRECTLY to the existing adapter:
+
+    coverage = self.evidence_mapper_adapter.assess(
+        evidence_bundle=bundle,
+        concept_schema=self.concept_schema,
+        budget=budget.remaining(),
+    )
+
+
+The adapter internally performs:
+
+    EvidenceArtifact[]
+        |
+        v
+    ArtifactDescriptor[]
+        |
+        v
+    mapper.map(...)
+        |
+        v
+    ConceptMapping[]
+        |
+        v
+    mapper.assess_coverage(...)
+        |
+        v
+    CoverageAssessment
+        |
+        v
+    mapper.identify_gaps(...)
+        |
+        v
+    CoverageGap[]
+        |
+        v
+    mapper expansion capability
+        |
+        v
+    ExpansionRequest[]
+
+
+Depending on the exact API of the mapper we previously built, some of these may already be combined into one operation.
+
+Do not artificially split them if the existing mapper already exposes a clean high-level method.
+
+
+================================================================================
+10. WHAT THE ADAPTER RETURNS TO COMPONENT 3 ================================================================================
+
+The adapter should return one evidence-domain result containing approximately:
+
+    EvidenceCoverageResult(
+        assessment_id=...,
+        schema_id=...,
+        schema_version=...,
+        mapper_version=...,
+
+        coverage_gaps=...,
+        expansion_requests=...,
+
+        mapping_uncertainty_rate=...,
+        exact_duplicate_count=...,
+        conceptual_duplicate_count=...,
+        raw_artifact_count=...,
+        lineage_aware_count=...
+    )
+
+
+These are the values the assurance system actually needs.
+
+Component 3 does not need to understand the mapper's internal grid, archive, embedding representation, clustering representation, MAP-Elites mechanics, or other implementation details.
+
+
+================================================================================
+11. THE CRITICAL HANDOFF TO EvidencePlanner ================================================================================
+
+This is the precise point at which the mapper becomes operationally useful.
+
+The adapter produces:
+
+    EvidenceCoverageResult
+        |
+        +-> CoverageGap
+        |
+        +-> ExpansionRequest
+
+
+The EvidencePlanner consumes those outputs:
+
+    plan = self.evidence_planner.plan(
+        assurance_round=round_number,
+        coverage=coverage,
+        candidate_context=request,
+        existing_evidence=bundle,
+        available_collectors=collectors,
+        remaining_budget=budget.remaining(),
+        previous_attempts=previous_attempts,
+    )
+
+
+The planner does NOT ask:
+
+    "What random additional tests should I generate?"
+
+
+Instead it asks:
+
+    "Given these measured evidence gaps, what evidence mechanism is most
+     appropriate for investigating them?"
+
+
+For example:
+
+    CoverageGap:
+        boundary_behavior = absent
+
+             |
+             v
+
+    ExpansionRequest:
+        seek evidence involving boundary behavior
+
+             |
+             v
+
+    EvidencePlanner
+
+             |
+             v
+
+    GeneratedBehavioralTestCollector
+
+
+Or:
+
+    CoverageGap:
+        dependency_failure = sparse
+
+             |
+             v
+
+    EvidencePlanner
+
+             |
+             v
+
+    fault-injection / generated-test collector
+
+
+Or:
+
+    CoverageGap:
+        security authorization transition = absent
+
+             |
+             v
+
+    EvidencePlanner
+
+             |
+             v
+
+    SecurityAnalysisCollector
+
+
+The generic mapper should NOT know which collector is selected.
+
+That is deliberately a Component 3 responsibility.
+
+
+================================================================================
+12. THE CLOSED LOOP IS ESSENTIAL
+================================================================================
+
+Suppose the mapper says:
+
+    GAP:
+        concurrency behavior absent
+
+
+The adapter produces:
+
+    ExpansionRequest:
+        seek concurrency-related evidence
+
+
+EvidencePlanner chooses:
+
+    generated behavioral test
+
+
+The generator is instructed to produce a concurrency test.
+
+That does NOT mean the gap is closed.
+
+The generated artifact must become:
+
+    EvidenceArtifact
+
+
+It must then be:
+
+    executed
+        |
+        v
+    validated
+        |
+        v
+    returned to EvidenceDiversityMapperAdapter
+        |
+        v
+    converted to ArtifactDescriptor
+        |
+        v
+    independently mapped by the Diversity Mapper
+
+
+The mapper may conclude:
+
+    requested:
+        concurrency
+
+    actual generated test:
+        ordinary sequential state transition
+
+    result:
+        DID_NOT_SATISFY
+
+
+In that case:
+
+    concurrency gap remains open.
+
+
+This is one of the most important properties of the integration.
+
+The original mapper design explicitly requires generated artifacts to be mapped back through the mapper and says that an artifact must not be assumed to cover a concept merely because the generator was asked to produce it.
+
+
+================================================================================
+13. SECOND ADAPTER OPERATION
+================================================================================
+
+I would therefore give EvidenceDiversityMapperAdapter two principal public operations.
+
+Conceptually:
+
+    class EvidenceDiversityMapperAdapter:
+
+        def assess(
+            self,
+            *,
+            evidence_bundle,
+            concept_schema,
+            budget,
+        ) -> EvidenceCoverageResult:
+            ...
+
+
+and:
+
+        def assess_expansion(
+            self,
+            *,
+            generated_evidence,
+            expansion_requests,
+            concept_schema,
+        ) -> tuple[ExpansionAssessment, ...]:
+            ...
+
+
+The first operation answers:
+
+    "What does our current evidence portfolio cover?"
+
+
+The second answers:
+
+    "Did these newly acquired artifacts actually satisfy the concepts we
+     requested?"
+
+
+Both use the SAME generic mapper underneath.
+
+
+================================================================================
+14. ADAPTER IMPLEMENTATION SHAPE
+================================================================================
+
+The resulting adapter should approximately look like this:
+
+
+    class EvidenceDiversityMapperAdapter:
+
+        def __init__(self, mapper):
+            self._mapper = mapper
+
+
+        def assess(
+            self,
+            *,
+            evidence_bundle,
+            concept_schema,
+            budget,
+        ):
+
+            descriptors = tuple(
+                self._to_artifact_descriptor(artifact)
+                for artifact in evidence_bundle.artifacts
+            )
+
+            assessment = self._mapper.assess(
+                artifacts=descriptors,
+                schema=concept_schema,
+                budget=budget,
+            )
+
+            return self._to_evidence_coverage_result(
+                assessment
+            )
+
+
+        def assess_expansion(
+            self,
+            *,
+            generated_evidence,
+            expansion_requests,
+            concept_schema,
+        ):
+
+            descriptors = tuple(
+                self._to_artifact_descriptor(artifact)
+                for artifact in generated_evidence
+            )
+
+            assessments = self._mapper.assess_expansion(
+                artifacts=descriptors,
+                requests=expansion_requests,
+                schema=concept_schema,
+            )
+
+            return tuple(
+                self._to_evidence_expansion_assessment(item)
+                for item in assessments
+            )
+
+
+        def _to_artifact_descriptor(self, evidence):
+            ...
+
+
+        def _to_evidence_coverage_result(self, assessment):
+            ...
+
+
+        def _to_evidence_expansion_assessment(self, assessment):
+            ...
+
+
+IMPORTANT:
+
+The exact method names in the existing mapper should be used.
+
+We should NOT rename the mapper's real methods simply to make them look like the pseudocode above.
+
+The adapter is where differences between the two APIs should be reconciled.
+
+
+================================================================================
+15. MODIFICATION TO AdaptiveReleaseAssuranceService ================================================================================
+
+The constructor should change from:
+
+    evidence_mapper: EvidenceDiversityMapperPort
+
+
+to:
+
+    evidence_mapper_adapter: EvidenceDiversityMapperAdapter
+
+
+and:
+
+    self.evidence_mapper = evidence_mapper
+
+
+becomes:
+
+    self.evidence_mapper_adapter = evidence_mapper_adapter
+
+
+Then the initial mapping becomes:
+
+    coverage = self.evidence_mapper_adapter.assess(
+        evidence_bundle=bundle,
+        concept_schema=self.concept_schema,
+        budget=budget.remaining(),
+    )
+
+
+The closed-loop verification becomes:
+
+    assessments = self.evidence_mapper_adapter.assess_expansion(
+        generated_evidence=qualified,
+        expansion_requests=coverage.expansion_requests,
+        concept_schema=self.concept_schema,
+    )
+
+
+That is the principal code-level integration.
+
+
+================================================================================
+16. COMPOSITION ROOT
+================================================================================
+
+The composition root becomes much simpler.
+
+Conceptually:
+
+
+    def build_component_3(
+        *,
+        artifact_directory,
+        diversity_mapper,
+        concept_schema,
+        assurance_policy,
+        evidence_collectors,
+        dimension_to_collector,
+    ):
+
+        release_gate = ReleaseGateService(
+            artifact_directory=artifact_directory
+        )
+
+        evidence_mapper_adapter = EvidenceDiversityMapperAdapter(
+            mapper=diversity_mapper
+        )
+
+        planner = DeterministicEvidencePlanner(
+            dimension_to_collector=dimension_to_collector,
+            minimum_gap_priority=(
+                assurance_policy
+                .minimum_gap_priority_requiring_action
+            ),
+        )
+
+        return AdaptiveReleaseAssuranceService(
+            release_gate_service=release_gate,
+            evidence_artifact_factory=EvidenceArtifactFactory(),
+
+            evidence_mapper_adapter=evidence_mapper_adapter,
+
+            evidence_planner=planner,
+            evidence_collectors=evidence_collectors,
+            evidence_executor=ExistingValidatedEvidenceExecutor(),
+            assurance_policy_engine=AssurancePolicyEngine(),
+
+            concept_schema=concept_schema,
+            assurance_policy=assurance_policy,
+            artifact_directory=artifact_directory,
+        )
+
+
+The important dependency chain is now visible directly:
+
+    AdaptiveReleaseAssuranceService
+                |
+                v
+    EvidenceDiversityMapperAdapter
+                |
+                v
+        DiversityMapper
+
+
+================================================================================
+17. DO NOT LET THE MAPPER MAKE THE RELEASE DECISION ================================================================================
+
+This boundary must remain strict.
+
+The mapper may say:
+
+    region A represented
+    region B sparse
+    region C absent
+    mapping uncertainty 12%
+    conceptual duplicates 14
+    high-priority gap X exists
+
+
+It must NOT say:
+
+    PASS
+
+
+or:
+
+    FAIL
+
+
+or:
+
+    release candidate
+
+
+or:
+
+    reject candidate.
+
+
+The mapper's CoverageGap is explicitly an observation about conceptual coverage, not a release decision. The original mapper requirements also explicitly exclude ReleaseGateService, GatePolicy and PASS/FAIL from mapper ownership.
+
+Component 3 combines mapper information with:
+
+    deterministic controls
+    required reports
+    required metrics
+    AssurancePolicy
+    ReleasePolicy
+    evidence budget
+    collector availability
+    evidence validation
+
+before making the disposition.
+
+
+================================================================================
+18. DO NOT LET COVERAGE BECOME A MAGIC SCORE ================================================================================
+
+We should also resist creating logic such as:
+
+    if diversity_score > 0.85:
+        PASS
+
+
+That would defeat much of the mapper design.
+
+The mapper was intentionally designed to expose:
+
+    represented regions
+    sparse regions
+    absent regions
+    repeated regions
+    uncertain regions
+    artifact counts
+    lineage-aware counts
+    mapping uncertainty
+    CoverageGaps
+
+
+rather than collapsing everything into one number.
+
+Component 3 should therefore reason primarily over structured gaps and policy, not a single diversity score.
+
+
+================================================================================
+19. UNKNOWN MUST REMAIN UNKNOWN
+================================================================================
+
+Suppose the mapper cannot confidently determine whether a test covers:
+
+    authorization-state transition.
+
+
+It should be able to return something equivalent to:
+
+    UNKNOWN
+    UNRESOLVED
+    low mapping confidence
+
+
+The adapter must preserve that uncertainty.
+
+It must NOT translate:
+
+    UNKNOWN
+
+into:
+
+    concept absent
+
+
+and certainly not:
+
+    concept covered.
+
+
+The original mapper design explicitly requires uncertainty and UNKNOWN states rather than forced confident classifications.
+
+
+================================================================================
+20. COMPLETE RUNTIME EXAMPLE
+================================================================================
+
+A realistic assurance run now looks like this.
+
+
+ROUND 1
+
+    ReleaseGateService
+
+        pytest       PASS
+        static check PASS
+        coverage     91%
+
+              |
+              v
+
+    EvidenceArtifactFactory
+
+        17 evidence artifacts
+
+              |
+              v
+
+    EvidenceDiversityMapperAdapter
+
+              |
+              v
+
+    DiversityMapper
+
+        raw artifacts             = 17
+        lineage-aware support     = 11
+        conceptual duplicates     = 4
+        mapping uncertainty       = 0.08
+
+        gaps:
+
+            dependency_failure    sparse
+            boundary_behavior     absent
+            concurrency           absent
+
+              |
+              v
+
+    EvidencePlanner
+
+        request 1 -> behavioral test collector
+        request 2 -> fault injection collector
+        request 3 -> concurrency evidence collector
+
+              |
+              v
+
+    collectors generate/acquire evidence
+
+              |
+              v
+
+    execute + validate
+
+              |
+              v
+
+    EvidenceDiversityMapperAdapter
+
+              |
+              v
+
+    DiversityMapper
+
+
+The mapper determines:
+
+    boundary test:
+        SATISFIED_REQUEST
+
+    dependency test:
+        SATISFIED_REQUEST
+
+    supposed concurrency test:
+        DID_NOT_SATISFY
+
+
+Therefore only the first two provide evidence of progress.
+
+
+ROUND 2
+
+The complete evidence portfolio is mapped again.
+
+The mapper reports:
+
+    dependency_failure    represented
+    boundary_behavior     represented
+    concurrency           absent
+
+
+The planner now concentrates the remaining budget on concurrency.
+
+
+ROUND 3
+
+A new concurrency artifact is generated, executed and validated.
+
+The mapper independently maps it to:
+
+    concurrency = represented
+
+
+The complete bundle is assessed again.
+
+Suppose there are now:
+
+    no policy-material gaps
+    acceptable mapping uncertainty
+    all mandatory deterministic controls passed
+    all required evidence types present
+    no authoritative failure
+
+
+Then:
+
+    AssurancePolicyEngine
+        |
+        v
+    EVIDENCE SUFFICIENT
+
+and:
+
+    ReleasePolicyEngine
+        |
+        v
+    PASS
+
+
+Notice that the mapper did NOT issue PASS.
+
+It supplied evidence about evidence.
+
+
+================================================================================
+21. TRACEABILITY
+================================================================================
+
+The assurance trace should preserve enough information to reconstruct this entire process.
+
+For every mapper invocation we should preserve:
+
+    assurance_result_id
+    assurance_round
+
+    candidate_change_id
+    candidate_patch_sha256
+    reconstructed_tree
+
+    evidence_bundle_id
+
+    input evidence IDs
+
+    ConceptSchema ID
+    ConceptSchema version
+
+    mapper version
+
+    mapper configuration version
+
+    mapping IDs
+
+    CoverageAssessment ID
+
+    CoverageGap IDs
+
+    ExpansionRequest IDs
+
+    planner plan ID
+
+    collector IDs
+
+    generated/acquired evidence IDs
+
+    parent evidence IDs
+
+    generation batch IDs
+
+    model identities where applicable
+
+    prompt-template identities where applicable
+
+    ExpansionAssessment results
+
+    budget consumed
+
+    remaining budget
+
+
+This gives us the ability to answer later:
+
+    "Why did the gate ask for this particular test?"
+
+with a chain such as:
+
+    test-247
+        <- acquisition-action-18
+        <- expansion-request-31
+        <- coverage-gap-7
+        <- coverage-assessment-5
+        <- evidence-bundle-12
+        <- gate-result-42
+        <- candidate-change-9
+
+
+That level of provenance is valuable both for engineering debugging and governance.
+
+
+================================================================================
+22. COMPONENT 5 SHOULD MEASURE WHETHER THIS ACTUALLY HELPS ================================================================================
+
+Integrating the mapper does NOT prove that the mapper improves release safety.
+
+Component 5 should eventually run controlled comparisons such as:
+
+    A. Release Gate without mapper
+
+    B. Release Gate with mapping only
+
+    C. Release Gate with mapping + gaps
+
+    D. Release Gate with mapping + targeted expansion
+
+
+under comparable resource budgets.
+
+Then compare:
+
+    hidden-fault detection
+    false releases
+    false rejections
+    human-review rate
+    MORE_EVIDENCE rate
+    mutation detection
+    redundant evidence
+    tests generated
+    LLM tokens
+    cost
+    latency
+
+
+This follows the original mapper success criterion: the important question is not whether it produces an impressive conceptual map, but whether mapper-guided acquisition improves assurance under controlled resource budgets.
+
+Until Component 5 demonstrates that relationship, mapper coverage remains an additional assurance signal, not proof that the evidence is complete.
+
+
+================================================================================
+23. MINIMAL CODE CHANGES TO THE COMPONENT 3 I JUST PROVIDED ================================================================================
+
+I would therefore make exactly these structural changes.
+
+
+REMOVE:
+
+    evidence_adapter.py:
+        EvidenceDiversityMapperPort
+
+
+REMOVE:
+
+    mapper_integration.py:
+        ExistingConceptualDiversityMapperIntegration
+
+
+ADD OR IMPORT THE EXISTING:
+
+    evidence_diversity_mapper_adapter.py:
+        EvidenceDiversityMapperAdapter
+
+
+CHANGE:
+
+    AdaptiveReleaseAssuranceService.__init__()
+
+from:
+
+    evidence_mapper
+
+to:
+
+    evidence_mapper_adapter
+
+
+CHANGE INITIAL ASSESSMENT FROM:
+
+    self.evidence_mapper.assess_evidence_bundle(...)
+
+to:
+
+    self.evidence_mapper_adapter.assess(...)
+
+
+CHANGE CLOSED-LOOP ASSESSMENT FROM:
+
+    self.evidence_mapper.assess_generated_evidence(...)
+
+to:
+
+    self.evidence_mapper_adapter.assess_expansion(...)
+
+
+CHANGE COMPOSITION FROM:
+
+    mapper =
+        ExistingConceptualDiversityMapperIntegration(
+            mapper_adapter
+        )
+
+
+to:
+
+    evidence_mapper_adapter =
+        EvidenceDiversityMapperAdapter(
+            mapper=diversity_mapper
+        )
+
+
+KEEP:
+
+    EvidenceArtifactFactory
+
+because translating:
+
+    GateResult -> EvidenceArtifact
+
+is different from translating:
+
+    EvidenceArtifact -> ArtifactDescriptor.
+
+
+KEEP:
+
+    EvidencePlanner
+
+because deciding HOW to obtain missing software-assurance evidence is a Component 3 responsibility, not a generic diversity-mapping responsibility.
+
+
+KEEP:
+
+    AssurancePolicyEngine
+
+because deciding WHEN evidence is sufficient is also not the mapper's job.
+
+
+KEEP:
+
+    ReleasePolicyEngine
+
+because release disposition must remain independent of the mapper.
+
+
+================================================================================
+24. FINAL INTEGRATED ARCHITECTURE
+================================================================================
+
+The final Component 3 should therefore be understood as:
+
+
+    ================================================================
+                         COMPONENT 3
+    ================================================================
+
+                      Candidate Change
+                             |
+                             v
+                    ReleaseGateService
+                             |
+                             v
+                         GateResult
+                             |
+                             v
+                  EvidenceArtifactFactory
+                             |
+                             v
+                       EvidenceBundle
+                             |
+                             v
+              EvidenceDiversityMapperAdapter
+                             |
+                             v
+                GENERIC DIVERSITY MAPPER
+                             |
+                             v
+                   CoverageAssessment
+                             |
+                    +--------+--------+
+                    |                 |
+                    v                 v
+             CoverageGap      mapping uncertainty
+                    |
+                    v
+             ExpansionRequest
+                    |
+                    v
+               EvidencePlanner
+                    |
+                    v
+              EvidenceCollectors
+                    |
+                    v
+              acquire evidence
+                    |
+                    v
+             execute + validate
+                    |
+                    v
+              EvidenceArtifact
+                    |
+                    v
+              EvidenceDiversityMapperAdapter
+                    |
+                    v
+                GENERIC DIVERSITY MAPPER
+                    |
+                    v
+           independent expansion assessment
+                    |
+                    v
+             complete bundle re-mapping
+                    |
+                    v
+              AssurancePolicyEngine
+                    |
+             +------+------+
+             |             |
+             v             v
+        SUFFICIENT      INSUFFICIENT
+             |             |
+             v             +----> another bounded round
+        ReleasePolicy
+             |
+             v
+       PASS / FAIL /
+       HUMAN_REVIEW_REQUIRED /
+       MORE_EVIDENCE_REQUIRED
+
+
+The key architectural principle is:
+
+    The Release Gate owns assurance.
+
+    The Evidence Planner owns acquisition strategy.
+
+    The collectors own evidence-production mechanisms.
+
+    The Evidence Diversity Mapper owns measurement of conceptual diversity,
+    coverage, gaps, lineage and mapping uncertainty.
+
+    The EvidenceDiversityMapperAdapter owns translation between the release
+    assurance domain and the generic mapper domain.
+
+    The AssurancePolicy owns the definition of sufficient evidence.
+
+    The ReleasePolicy owns the final release consequence.
+
+
+That is the cleanest way to integrate the Evidence Diversity Mapper and EvidenceDiversityMapperAdapter we developed previously without duplicating their functionality or allowing the mapper to absorb responsibilities that belong to Component 3.
+================================================================================
+END
+================================================================================

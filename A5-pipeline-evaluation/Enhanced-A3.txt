@@ -1,0 +1,3370 @@
+================================================================================
+COMPONENT 3
+ADAPTIVE RELEASE ASSURANCE SERVICE
+REFERENCE IMPLEMENTATION
+================================================================================
+PURPOSE
+=======
+This component implements the release-assurance layer between an AI-generated
+candidate software change and an eventual release decision.
+It contains two cooperating layers:
+1. ReleaseGateService
+   A deterministic kernel that reconstructs the candidate, executes approved
+   engineering controls, normalizes their evidence, and applies explicit
+   ReleasePolicy.
+2. AdaptiveReleaseAssuranceService
+   An assurance controller that examines whether the available evidence is
+   sufficient, invokes the independently owned Evidence Diversity Mapper,
+   plans additional evidence when justified, executes that evidence, verifies
+   whether it actually addressed the requested conceptual gap, and terminates
+   according to explicit policy and budget.
+The important separation is:
+    ChangeExecutionService
+        -> produces candidate software
+    ReleaseGateService
+        -> produces authoritative engineering evidence
+    EvidenceDiversityMapperAdapter
+        -> measures conceptual breadth and gaps in that evidence
+    EvidencePlanner
+        -> determines how an actionable gap should be investigated
+    AdaptiveReleaseAssuranceService
+        -> coordinates the assurance process
+    ReleasePolicy
+        -> determines the consequence of authoritative evidence
+    AssurancePolicy
+        -> determines whether evidence is sufficient to stop investigating
+NO fake production integrations are supplied.
+If an implementation depends on infrastructure that has not actually been
+specified, the corresponding method raises:
+    NOIMPLEMENTTIONError
+The spelling is intentionally retained as requested for this component.
+================================================================================
+FILE: pyproject.toml
+================================================================================
+[project]
+name = "ai-engineering-release-assurance"
+version = "0.3.0"
+description = "Adaptive release assurance for AI-generated software changes"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7,<3",
+    "PyYAML>=6,<7",
+]
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "mypy>=1.10,<2",
+    "ruff>=0.6,<1",
+]
+[project.scripts]
+release-assurance = "ai_engineering_release_assurance.cli:main"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+[tool.ruff]
+line-length = 100
+================================================================================
+FILE: src/ai_engineering_release_assurance/__init__.py
+================================================================================
+"""
+Component 3: Adaptive Release Assurance Service.
+The deterministic ReleaseGateService remains independently executable.
+AdaptiveReleaseAssuranceService adds evidence-diversity measurement and
+budget-constrained evidence acquisition around that deterministic kernel.
+"""
+from .errors import NOIMPLEMENTTIONError
+from .models import GateOutcome
+from .service import ReleaseGateService
+from .assurance_service import AdaptiveReleaseAssuranceService
+__all__ = [
+    "NOIMPLEMENTTIONError",
+    "GateOutcome",
+    "ReleaseGateService",
+    "AdaptiveReleaseAssuranceService",
+]
+================================================================================
+FILE: src/ai_engineering_release_assurance/errors.py
+================================================================================
+class ReleaseAssuranceError(Exception):
+    """Base exception for recoverable Component 3 domain failures."""
+class ConfigurationError(ReleaseAssuranceError):
+    """Raised when supplied configuration is structurally invalid."""
+class CandidateIntegrityError(ReleaseAssuranceError):
+    """Raised when the candidate cannot be reconstructed exactly."""
+class CandidateScopeError(ReleaseAssuranceError):
+    """Raised when a candidate modifies files outside its authorized scope."""
+class ControlExecutionError(ReleaseAssuranceError):
+    """Raised when an engineering control cannot be executed as specified."""
+class EvidenceValidationError(ReleaseAssuranceError):
+    """Raised when candidate evidence cannot be safely qualified."""
+class MapperUnavailableError(ReleaseAssuranceError):
+    """Raised when a required diversity assessment cannot be performed."""
+class PlannerUnavailableError(ReleaseAssuranceError):
+    """Raised when evidence planning cannot be performed."""
+class BudgetExceededError(ReleaseAssuranceError):
+    """Raised when an operation would exceed its authorized assurance budget."""
+class NOIMPLEMENTTIONError(NotImplementedError):
+    """
+    Explicit marker for a production capability that is genuinely unresolved.
+    We deliberately raise this exception rather than returning an empty value,
+    fake success, fabricated endpoint, mock production implementation, or
+    optimistic default.
+    The spelling NOIMPLEMENTTION is retained because this is the explicit error
+    name requested for Component 3.
+    """
+================================================================================
+FILE: src/ai_engineering_release_assurance/models.py
+================================================================================
+from __future__ import annotations
+from enum import Enum
+from pathlib import PurePosixPath
+from typing import Any
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+class StrictModel(BaseModel):
+    """
+    Base model for persisted Component 3 contracts.
+    extra='forbid' is important here. A misspelled configuration field should
+    fail loudly instead of being silently ignored.
+    """
+    model_config = ConfigDict(extra="forbid", frozen=True)
+class GateOutcome(str, Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
+    MORE_EVIDENCE_REQUIRED = "MORE_EVIDENCE_REQUIRED"
+class ControlSeverity(str, Enum):
+    INFORMATIONAL = "informational"
+    ADVISORY = "advisory"
+    MANDATORY = "mandatory"
+    DOMINANT = "dominant"
+class ControlStatus(str, Enum):
+    PASSED = "passed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    ERROR = "error"
+class ComparisonOperator(str, Enum):
+    EQ = "eq"
+    NE = "ne"
+    LT = "lt"
+    LTE = "lte"
+    GT = "gt"
+    GTE = "gte"
+class MissingMetricAction(str, Enum):
+    FAIL = "FAIL"
+    HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
+    MORE_EVIDENCE_REQUIRED = "MORE_EVIDENCE_REQUIRED"
+class ReportParser(str, Enum):
+    NONE = "none"
+    JUNIT_XML = "junit_xml"
+    COVERAGE_JSON = "coverage_json"
+    GENERIC_JSON = "generic_json"
+class ReportSpec(StrictModel):
+    path: str
+    parser: ReportParser
+    metric_prefix: str | None = None
+    @field_validator("path")
+    @classmethod
+    def validate_relative_path(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("Report paths must remain inside the candidate workspace.")
+        return value
+class DeterministicControlSpec(StrictModel):
+    control_id: str
+    command: tuple[str, ...]
+    severity: ControlSeverity = ControlSeverity.MANDATORY
+    timeout_seconds: float = Field(default=300.0, gt=0)
+    reports: tuple[ReportSpec, ...] = ()
+    required: bool = True
+    @field_validator("command")
+    @classmethod
+    def command_must_not_be_empty(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value:
+            raise ValueError("A deterministic control requires a command.")
+        return value
+class RequirementContract(StrictModel):
+    requirement_id: str
+    description: str
+    allowed_paths: tuple[str, ...] = ()
+    @field_validator("allowed_paths")
+    @classmethod
+    def validate_paths(cls, paths: tuple[str, ...]) -> tuple[str, ...]:
+        for item in paths:
+            path = PurePosixPath(item)
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError(f"Unsafe allowed path: {item}")
+        return paths
+class EvaluationSpecification(StrictModel):
+    specification_id: str
+    controls: tuple[DeterministicControlSpec, ...]
+class MetricThreshold(StrictModel):
+    metric_name: str
+    operator: ComparisonOperator
+    threshold: float
+    violation_outcome: GateOutcome
+    missing_metric_action: MissingMetricAction = (
+        MissingMetricAction.MORE_EVIDENCE_REQUIRED
+    )
+class ReleasePolicy(StrictModel):
+    version: str
+    fail_on_mandatory_control_failure: bool = True
+    fail_on_dominant_failure: bool = True
+    human_review_on_advisory_failure: bool = True
+    human_review_on_warning: bool = True
+    more_evidence_on_skipped_mandatory_control: bool = True
+    more_evidence_on_missing_required_report: bool = True
+    metric_thresholds: tuple[MetricThreshold, ...] = ()
+class GateRuntimeSettings(StrictModel):
+    maximum_tool_executions: int = Field(default=50, ge=1)
+    maximum_elapsed_seconds: float = Field(default=1800.0, gt=0)
+class DeterministicGateExecutionRequest(StrictModel):
+    """
+    The candidate is identified by an immutable patch plus its exact base.
+    repository_uri intentionally supports only file:// in this implementation.
+    Supporting arbitrary Git hosting requires authentication, networking, and
+    organization-specific policy and therefore must not be faked here.
+    """
+    run_id: str
+    candidate_change_id: str
+    repository_uri: str
+    base_commit: str
+    candidate_commit: str
+    candidate_patch: str
+    candidate_patch_sha256: str
+    requirement_contract: RequirementContract
+    evaluation_specification: EvaluationSpecification
+    release_policy: ReleasePolicy
+    runtime_settings: GateRuntimeSettings = GateRuntimeSettings()
+    @field_validator("candidate_patch_sha256")
+    @classmethod
+    def validate_sha256(cls, value: str) -> str:
+        value = value.lower()
+        if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+            raise ValueError("candidate_patch_sha256 must be a SHA-256 hex digest.")
+        return value
+class ProcessResult(StrictModel):
+    argv: tuple[str, ...]
+    exit_code: int
+    stdout: str
+    stderr: str
+    elapsed_seconds: float
+    timed_out: bool = False
+class ParsedReport(StrictModel):
+    report_path: str
+    parser: ReportParser
+    metrics: dict[str, float]
+class ControlResult(StrictModel):
+    control_id: str
+    severity: ControlSeverity
+    status: ControlStatus
+    process: ProcessResult | None = None
+    reports: tuple[ParsedReport, ...] = ()
+    metrics: dict[str, float] = {}
+    warnings: tuple[str, ...] = ()
+    rationale: str
+class GateBudgetUsage(StrictModel):
+    tool_executions: int
+    elapsed_seconds: float
+    llm_calls: int = 0
+    llm_tokens: int = 0
+class GateResult(StrictModel):
+    gate_result_id: str
+    run_id: str
+    candidate_change_id: str
+    candidate_commit: str
+    candidate_patch_sha256: str
+    reconstructed_tree: str
+    outcome: GateOutcome
+    control_results: tuple[ControlResult, ...]
+    metrics: dict[str, float]
+    unmet_obligations: tuple[str, ...]
+    warnings: tuple[str, ...]
+    evidence_rounds_completed: int = 1
+    generated_tests_considered: int = 0
+    qualified_generated_tests: int = 0
+    mutants_generated: int = 0
+    meaningful_mutants_survived: int = 0
+    budget_usage: GateBudgetUsage
+    evidence_package_path: str
+    gate_trace_path: str
+================================================================================
+FILE: src/ai_engineering_release_assurance/process.py
+================================================================================
+from __future__ import annotations
+import os
+import subprocess
+import time
+from pathlib import Path
+from .errors import ControlExecutionError
+from .models import ProcessResult
+class SafeProcessRunner:
+    """
+    Executes an already-tokenized command without invoking a shell.
+    shell=False is a deliberate security property. The command must be supplied
+    as an argv sequence such as ("pytest", "-q"), never as a shell expression
+    such as "pytest -q && rm ...".
+    """
+    def run(
+        self,
+        *,
+        argv: tuple[str, ...],
+        cwd: Path,
+        timeout_seconds: float,
+        environment: dict[str, str] | None = None,
+    ) -> ProcessResult:
+        if not argv:
+            raise ControlExecutionError("Cannot execute an empty command.")
+        if not cwd.exists():
+            raise ControlExecutionError(f"Working directory does not exist: {cwd}")
+        # Start with a deliberately bounded environment rather than passing every
+        # host variable into potentially untrusted candidate code.
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": str(cwd),
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "PYTHONUNBUFFERED": "1",
+        }
+        if environment:
+            env.update(environment)
+        started = time.monotonic()
+        try:
+            completed = subprocess.run(
+                list(argv),
+                cwd=cwd,
+                env=env,
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+            elapsed = time.monotonic() - started
+            return ProcessResult(
+                argv=argv,
+                exit_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                elapsed_seconds=elapsed,
+                timed_out=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            elapsed = time.monotonic() - started
+            stdout = exc.stdout or ""
+            stderr = exc.stderr or ""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode(errors="replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode(errors="replace")
+            return ProcessResult(
+                argv=argv,
+                exit_code=124,
+                stdout=stdout,
+                stderr=stderr,
+                elapsed_seconds=elapsed,
+                timed_out=True,
+            )
+        except OSError as exc:
+            raise ControlExecutionError(
+                f"Could not execute command {argv!r}: {exc}"
+            ) from exc
+================================================================================
+FILE: src/ai_engineering_release_assurance/workspace.py
+================================================================================
+from __future__ import annotations
+import hashlib
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path, PurePosixPath
+from .errors import CandidateIntegrityError, CandidateScopeError
+class GateWorkspace:
+    """
+    Reconstructs the candidate from the exact base commit and immutable patch.
+    The candidate_commit supplied by Component 2 is provenance. Component 3
+    independently identifies the evaluated code using:
+        base commit
+        + patch SHA-256
+        + reconstructed Git tree
+    This avoids trusting a mutable external working directory.
+    """
+    def __init__(
+        self,
+        *,
+        repository_uri: str,
+        base_commit: str,
+        candidate_patch: str,
+        expected_patch_sha256: str,
+    ) -> None:
+        self.repository_uri = repository_uri
+        self.base_commit = base_commit
+        self.candidate_patch = candidate_patch
+        self.expected_patch_sha256 = expected_patch_sha256
+        self._temporary_directory: tempfile.TemporaryDirectory[str] | None = None
+        self.path: Path | None = None
+        self.reconstructed_tree: str | None = None
+    def __enter__(self) -> "GateWorkspace":
+        self._verify_patch_digest()
+        source = self._resolve_repository()
+        self._temporary_directory = tempfile.TemporaryDirectory(
+            prefix="release-gate-"
+        )
+        destination = Path(self._temporary_directory.name) / "repository"
+        self._git("clone", "--no-hardlinks", str(source), str(destination))
+        self.path = destination
+        self._git("-C", str(destination), "checkout", "--detach", self.base_commit)
+        patch_file = Path(self._temporary_directory.name) / "candidate.patch"
+        patch_file.write_text(self.candidate_patch, encoding="utf-8")
+        # First check whether Git can apply the patch cleanly.
+        self._git("-C", str(destination), "apply", "--check", str(patch_file))
+        # Apply into both working tree and index so git write-tree can generate
+        # an immutable identity for the reconstructed candidate.
+        self._git(
+            "-C",
+            str(destination),
+            "apply",
+            "--index",
+            "--whitespace=nowarn",
+            str(patch_file),
+        )
+        self.reconstructed_tree = self._git_output(
+            "-C",
+            str(destination),
+            "write-tree",
+        ).strip()
+        return self
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        if self._temporary_directory is not None:
+            self._temporary_directory.cleanup()
+    def _verify_patch_digest(self) -> None:
+        actual = hashlib.sha256(
+            self.candidate_patch.encode("utf-8")
+        ).hexdigest()
+        if actual != self.expected_patch_sha256:
+            raise CandidateIntegrityError(
+                "Candidate patch SHA-256 does not match the supplied identity."
+            )
+    def _resolve_repository(self) -> Path:
+        prefix = "file://"
+        if not self.repository_uri.startswith(prefix):
+            raise CandidateIntegrityError(
+                "This Component 3 implementation supports only file:// "
+                "repositories. A production remote Git integration has not "
+                "been specified."
+            )
+        path = Path(self.repository_uri[len(prefix):]).expanduser().resolve()
+        if not path.exists():
+            raise CandidateIntegrityError(
+                f"Repository does not exist: {path}"
+            )
+        return path
+    def changed_files(self) -> tuple[str, ...]:
+        if self.path is None:
+            raise CandidateIntegrityError("Workspace has not been initialized.")
+        output = self._git_output(
+            "-C",
+            str(self.path),
+            "diff",
+            "--cached",
+            "--name-only",
+            self.base_commit,
+        )
+        return tuple(
+            line.strip()
+            for line in output.splitlines()
+            if line.strip()
+        )
+    def validate_scope(self, allowed_paths: tuple[str, ...]) -> None:
+        """
+        If allowed_paths is empty, the requirement contract imposes no
+        path-level restriction.
+        Otherwise each changed file must be equal to, or descend from, at least
+        one allowed path.
+        """
+        if not allowed_paths:
+            return
+        normalized_allowed = tuple(
+            PurePosixPath(path) for path in allowed_paths
+        )
+        violations: list[str] = []
+        for changed in self.changed_files():
+            changed_path = PurePosixPath(changed)
+            permitted = any(
+                changed_path == allowed
+                or allowed in changed_path.parents
+                for allowed in normalized_allowed
+            )
+            if not permitted:
+                violations.append(changed)
+        if violations:
+            raise CandidateScopeError(
+                "Candidate modifies files outside authorized scope: "
+                + ", ".join(sorted(violations))
+            )
+    def tree_identity(self) -> str:
+        if self.reconstructed_tree is None:
+            raise CandidateIntegrityError(
+                "Reconstructed tree has not been calculated."
+            )
+        return self.reconstructed_tree
+    def assert_candidate_unchanged(self) -> None:
+        """
+        Engineering controls are allowed to create untracked reports, caches,
+        and temporary files, but they must not mutate tracked candidate files.
+        git diff on tracked files catches such mutations.
+        """
+        if self.path is None:
+            raise CandidateIntegrityError("Workspace has not been initialized.")
+        unstaged = self._git_output(
+            "-C",
+            str(self.path),
+            "diff",
+            "--name-only",
+        ).strip()
+        if unstaged:
+            raise CandidateIntegrityError(
+                "An engineering control modified tracked candidate files: "
+                + unstaged.replace("\n", ", ")
+            )
+        current_tree = self._git_output(
+            "-C",
+            str(self.path),
+            "write-tree",
+        ).strip()
+        if current_tree != self.tree_identity():
+            raise CandidateIntegrityError(
+                "Candidate Git tree changed during gate execution."
+            )
+    @staticmethod
+    def _git(*args: str) -> None:
+        completed = subprocess.run(
+            ["git", *args],
+            shell=False,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise CandidateIntegrityError(
+                "Git operation failed: "
+                + completed.stderr.strip()
+            )
+    @staticmethod
+    def _git_output(*args: str) -> str:
+        completed = subprocess.run(
+            ["git", *args],
+            shell=False,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise CandidateIntegrityError(
+                "Git operation failed: "
+                + completed.stderr.strip()
+            )
+        return completed.stdout
+================================================================================
+FILE: src/ai_engineering_release_assurance/artifacts.py
+================================================================================
+from __future__ import annotations
+import hashlib
+import json
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Any
+from .errors import EvidenceValidationError
+from .models import ParsedReport, ReportParser, ReportSpec
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+class ReportReader:
+    """
+    Converts approved machine-readable reports into normalized numeric metrics.
+    Parsing is deterministic. Missing or malformed reports remain explicit
+    evidence problems rather than being guessed from stdout.
+    """
+    def parse(
+        self,
+        *,
+        workspace: Path,
+        specification: ReportSpec,
+    ) -> ParsedReport:
+        path = (workspace / specification.path).resolve()
+        root = workspace.resolve()
+        try:
+            path.relative_to(root)
+        except ValueError as exc:
+            raise EvidenceValidationError(
+                "Report path escapes candidate workspace."
+            ) from exc
+        if not path.exists():
+            raise FileNotFoundError(specification.path)
+        if specification.parser == ReportParser.NONE:
+            metrics: dict[str, float] = {}
+        elif specification.parser == ReportParser.JUNIT_XML:
+            metrics = self._parse_junit(path)
+        elif specification.parser == ReportParser.COVERAGE_JSON:
+            metrics = self._parse_coverage(path)
+        elif specification.parser == ReportParser.GENERIC_JSON:
+            metrics = self._parse_generic_json(path)
+        else:
+            raise EvidenceValidationError(
+                f"Unsupported report parser: {specification.parser}"
+            )
+        if specification.metric_prefix:
+            metrics = {
+                f"{specification.metric_prefix}.{key}": value
+                for key, value in metrics.items()
+            }
+        return ParsedReport(
+            report_path=specification.path,
+            parser=specification.parser,
+            metrics=metrics,
+        )
+    @staticmethod
+    def _parse_junit(path: Path) -> dict[str, float]:
+        try:
+            root = ET.parse(path).getroot()
+        except ET.ParseError as exc:
+            raise EvidenceValidationError(
+                f"Malformed JUnit report: {path}"
+            ) from exc
+        suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+        def total(attribute: str) -> float:
+            return sum(float(node.attrib.get(attribute, 0)) for node in suites)
+        return {
+            "tests": total("tests"),
+            "failures": total("failures"),
+            "errors": total("errors"),
+            "skipped": total("skipped"),
+        }
+    @staticmethod
+    def _parse_coverage(path: Path) -> dict[str, float]:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise EvidenceValidationError(
+                f"Malformed coverage report: {path}"
+            ) from exc
+        totals = raw.get("totals", {})
+        metrics: dict[str, float] = {}
+        # coverage.py commonly emits percent_covered. We only expose values
+        # actually present in the report.
+        for key in (
+            "percent_covered",
+            "covered_lines",
+            "num_statements",
+            "missing_lines",
+        ):
+            value = totals.get(key)
+            if isinstance(value, (int, float)):
+                metrics[key] = float(value)
+        return metrics
+    @staticmethod
+    def _parse_generic_json(path: Path) -> dict[str, float]:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise EvidenceValidationError(
+                f"Malformed JSON report: {path}"
+            ) from exc
+        if not isinstance(raw, dict):
+            raise EvidenceValidationError(
+                "Generic metric report must be a JSON object."
+            )
+        metrics: dict[str, float] = {}
+        for key, value in raw.items():
+            if isinstance(value, bool):
+                # bool is technically a subclass of int in Python, but treating
+                # True as 1.0 would hide semantics. Require explicit numeric
+                # metrics instead.
+                continue
+            if isinstance(value, (int, float)):
+                metrics[str(key)] = float(value)
+        return metrics
+class JsonArtifactWriter:
+    """
+    Writes immutable logical evidence artifacts for the local POC.
+    Component 4 is responsible for durable enterprise evidence storage. This
+    writer gives Component 3 deterministic local artifacts without pretending
+    to be the production evidence repository.
+    """
+    @staticmethod
+    def write(path: Path, payload: dict[str, Any]) -> str:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        encoded = json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        path.write_text(encoded + "\n", encoding="utf-8")
+        return str(path)
+================================================================================
+FILE: src/ai_engineering_release_assurance/evidence.py
+================================================================================
+from __future__ import annotations
+import time
+from pathlib import Path
+from .artifacts import ReportReader
+from .models import (
+    ControlResult,
+    ControlStatus,
+    DeterministicControlSpec,
+)
+from .process import SafeProcessRunner
+class GateBudgetTracker:
+    """
+    Tracks deterministic gate resources only.
+    LLM usage is always zero here. Adaptive evidence acquisition has a separate
+    budget because combining both would obscure where assurance cost originated.
+    """
+    def __init__(
+        self,
+        *,
+        maximum_tool_executions: int,
+        maximum_elapsed_seconds: float,
+    ) -> None:
+        self.maximum_tool_executions = maximum_tool_executions
+        self.maximum_elapsed_seconds = maximum_elapsed_seconds
+        self.started = time.monotonic()
+        self.tool_executions = 0
+    def reserve_tool_execution(self) -> None:
+        self._check_time()
+        if self.tool_executions >= self.maximum_tool_executions:
+            raise RuntimeError("Deterministic gate tool-execution budget exhausted.")
+        self.tool_executions += 1
+    def elapsed_seconds(self) -> float:
+        return time.monotonic() - self.started
+    def _check_time(self) -> None:
+        if self.elapsed_seconds() > self.maximum_elapsed_seconds:
+            raise RuntimeError("Deterministic gate elapsed-time budget exhausted.")
+class DeterministicControlRunner:
+    def __init__(
+        self,
+        *,
+        process_runner: SafeProcessRunner,
+        report_reader: ReportReader,
+    ) -> None:
+        self.process_runner = process_runner
+        self.report_reader = report_reader
+    def execute(
+        self,
+        *,
+        control: DeterministicControlSpec,
+        workspace: Path,
+        budget: GateBudgetTracker,
+    ) -> ControlResult:
+        budget.reserve_tool_execution()
+        process = self.process_runner.run(
+            argv=control.command,
+            cwd=workspace,
+            timeout_seconds=control.timeout_seconds,
+        )
+        reports = []
+        warnings = []
+        for report_spec in control.reports:
+            try:
+                reports.append(
+                    self.report_reader.parse(
+                        workspace=workspace,
+                        specification=report_spec,
+                    )
+                )
+            except FileNotFoundError:
+                warnings.append(
+                    f"required report missing: {report_spec.path}"
+                )
+        metrics: dict[str, float] = {}
+        for report in reports:
+            for metric_name, value in report.metrics.items():
+                metrics[f"{control.control_id}.{metric_name}"] = value
+        if process.timed_out:
+            status = ControlStatus.ERROR
+            rationale = "Control exceeded its configured timeout."
+        elif process.exit_code == 0:
+            status = ControlStatus.PASSED
+            rationale = "Control command completed successfully."
+        else:
+            status = ControlStatus.FAILED
+            rationale = (
+                f"Control command returned exit code {process.exit_code}."
+            )
+        return ControlResult(
+            control_id=control.control_id,
+            severity=control.severity,
+            status=status,
+            process=process,
+            reports=tuple(reports),
+            metrics=metrics,
+            warnings=tuple(warnings),
+            rationale=rationale,
+        )
+================================================================================
+FILE: src/ai_engineering_release_assurance/policy.py
+================================================================================
+from __future__ import annotations
+from .models import (
+    ComparisonOperator,
+    ControlSeverity,
+    ControlStatus,
+    GateOutcome,
+    ReleasePolicy,
+)
+_OUTCOME_PRECEDENCE = {
+    GateOutcome.PASS: 0,
+    GateOutcome.MORE_EVIDENCE_REQUIRED: 1,
+    GateOutcome.HUMAN_REVIEW_REQUIRED: 2,
+    GateOutcome.FAIL: 3,
+}
+def strongest_outcome(*outcomes: GateOutcome) -> GateOutcome:
+    """
+    Fixed precedence is code, not configuration.
+    FAIL > HUMAN_REVIEW_REQUIRED > MORE_EVIDENCE_REQUIRED > PASS
+    """
+    return max(outcomes, key=lambda outcome: _OUTCOME_PRECEDENCE[outcome])
+class ReleasePolicyEngine:
+    """
+    Deterministic policy engine.
+    It does not ask an LLM to interpret control results.
+    """
+    def decide(
+        self,
+        *,
+        control_results,
+        metrics: dict[str, float],
+        policy: ReleasePolicy,
+    ) -> tuple[GateOutcome, tuple[str, ...], tuple[str, ...]]:
+        outcome = GateOutcome.PASS
+        unmet: list[str] = []
+        warnings: list[str] = []
+        for result in control_results:
+            if result.status in (ControlStatus.FAILED, ControlStatus.ERROR):
+                if (
+                    result.severity == ControlSeverity.DOMINANT
+                    and policy.fail_on_dominant_failure
+                ):
+                    outcome = strongest_outcome(outcome, GateOutcome.FAIL)
+                    unmet.append(
+                        f"dominant control failed: {result.control_id}"
+                    )
+                elif (
+                    result.severity == ControlSeverity.MANDATORY
+                    and policy.fail_on_mandatory_control_failure
+                ):
+                    outcome = strongest_outcome(outcome, GateOutcome.FAIL)
+                    unmet.append(
+                        f"mandatory control failed: {result.control_id}"
+                    )
+                elif (
+                    result.severity == ControlSeverity.ADVISORY
+                    and policy.human_review_on_advisory_failure
+                ):
+                    outcome = strongest_outcome(
+                        outcome,
+                        GateOutcome.HUMAN_REVIEW_REQUIRED,
+                    )
+                    warnings.append(
+                        f"advisory control failed: {result.control_id}"
+                    )
+            if (
+                result.status == ControlStatus.SKIPPED
+                and result.severity == ControlSeverity.MANDATORY
+                and policy.more_evidence_on_skipped_mandatory_control
+            ):
+                outcome = strongest_outcome(
+                    outcome,
+                    GateOutcome.MORE_EVIDENCE_REQUIRED,
+                )
+                unmet.append(
+                    f"mandatory control skipped: {result.control_id}"
+                )
+            if result.warnings:
+                warnings.extend(result.warnings)
+                if (
+                    policy.more_evidence_on_missing_required_report
+                    and any(
+                        warning.startswith("required report missing:")
+                        for warning in result.warnings
+                    )
+                ):
+                    outcome = strongest_outcome(
+                        outcome,
+                        GateOutcome.MORE_EVIDENCE_REQUIRED,
+                    )
+        for threshold in policy.metric_thresholds:
+            actual = metrics.get(threshold.metric_name)
+            if actual is None:
+                missing = GateOutcome(threshold.missing_metric_action.value)
+                outcome = strongest_outcome(outcome, missing)
+                unmet.append(
+                    f"required metric missing: {threshold.metric_name}"
+                )
+                continue
+            if not self._satisfies(
+                actual=actual,
+                operator=threshold.operator,
+                threshold=threshold.threshold,
+            ):
+                outcome = strongest_outcome(
+                    outcome,
+                    threshold.violation_outcome,
+                )
+                unmet.append(
+                    f"metric threshold violated: "
+                    f"{threshold.metric_name}={actual}, "
+                    f"required {threshold.operator.value} "
+                    f"{threshold.threshold}"
+                )
+        return outcome, tuple(unmet), tuple(warnings)
+    @staticmethod
+    def _satisfies(
+        *,
+        actual: float,
+        operator: ComparisonOperator,
+        threshold: float,
+    ) -> bool:
+        if operator == ComparisonOperator.EQ:
+            return actual == threshold
+        if operator == ComparisonOperator.NE:
+            return actual != threshold
+        if operator == ComparisonOperator.LT:
+            return actual < threshold
+        if operator == ComparisonOperator.LTE:
+            return actual <= threshold
+        if operator == ComparisonOperator.GT:
+            return actual > threshold
+        if operator == ComparisonOperator.GTE:
+            return actual >= threshold
+        raise ValueError(f"Unsupported comparison operator: {operator}")
+================================================================================
+FILE: src/ai_engineering_release_assurance/service.py
+================================================================================
+from __future__ import annotations
+import uuid
+from pathlib import Path
+from .artifacts import JsonArtifactWriter, ReportReader
+from .evidence import DeterministicControlRunner, GateBudgetTracker
+from .models import (
+    ControlSeverity,
+    ControlStatus,
+    DeterministicGateExecutionRequest,
+    GateBudgetUsage,
+    GateOutcome,
+    GateResult,
+)
+from .policy import ReleasePolicyEngine
+from .process import SafeProcessRunner
+from .workspace import GateWorkspace
+class ReleaseGateService:
+    """
+    Deterministic release-gate kernel.
+    This service deliberately contains no LLM, mapper, planner, or evidence
+    generation calls.
+    It can therefore be replayed independently from the adaptive layer.
+    """
+    def __init__(
+        self,
+        *,
+        artifact_directory: Path,
+        process_runner: SafeProcessRunner | None = None,
+        report_reader: ReportReader | None = None,
+        policy_engine: ReleasePolicyEngine | None = None,
+    ) -> None:
+        self.artifact_directory = artifact_directory
+        process_runner = process_runner or SafeProcessRunner()
+        report_reader = report_reader or ReportReader()
+        self.control_runner = DeterministicControlRunner(
+            process_runner=process_runner,
+            report_reader=report_reader,
+        )
+        self.policy_engine = policy_engine or ReleasePolicyEngine()
+    def evaluate(
+        self,
+        request: DeterministicGateExecutionRequest,
+    ) -> GateResult:
+        gate_result_id = str(uuid.uuid4())
+        budget = GateBudgetTracker(
+            maximum_tool_executions=(
+                request.runtime_settings.maximum_tool_executions
+            ),
+            maximum_elapsed_seconds=(
+                request.runtime_settings.maximum_elapsed_seconds
+            ),
+        )
+        with GateWorkspace(
+            repository_uri=request.repository_uri,
+            base_commit=request.base_commit,
+            candidate_patch=request.candidate_patch,
+            expected_patch_sha256=request.candidate_patch_sha256,
+        ) as workspace:
+            assert workspace.path is not None
+            workspace.validate_scope(
+                request.requirement_contract.allowed_paths
+            )
+            control_results = []
+            # Dominant failure can make later controls irrelevant. We preserve
+            # explicit SKIPPED results so absence of execution remains visible.
+            dominant_failure_seen = False
+            for control in request.evaluation_specification.controls:
+                if dominant_failure_seen:
+                    from .models import ControlResult
+                    control_results.append(
+                        ControlResult(
+                            control_id=control.control_id,
+                            severity=control.severity,
+                            status=ControlStatus.SKIPPED,
+                            rationale=(
+                                "Skipped because an earlier dominant control "
+                                "already established authoritative failure."
+                            ),
+                        )
+                    )
+                    continue
+                result = self.control_runner.execute(
+                    control=control,
+                    workspace=workspace.path,
+                    budget=budget,
+                )
+                control_results.append(result)
+                workspace.assert_candidate_unchanged()
+                if (
+                    result.severity == ControlSeverity.DOMINANT
+                    and result.status in (
+                        ControlStatus.FAILED,
+                        ControlStatus.ERROR,
+                    )
+                ):
+                    dominant_failure_seen = True
+            metrics: dict[str, float] = {}
+            for result in control_results:
+                metrics.update(result.metrics)
+            outcome, unmet, warnings = self.policy_engine.decide(
+                control_results=tuple(control_results),
+                metrics=metrics,
+                policy=request.release_policy,
+            )
+            evidence_directory = (
+                self.artifact_directory
+                / request.run_id
+                / gate_result_id
+            )
+            evidence_package_path = (
+                evidence_directory / "evidence-package.json"
+            )
+            gate_trace_path = (
+                evidence_directory / "gate-trace.json"
+            )
+            evidence_payload = {
+                "gate_result_id": gate_result_id,
+                "run_id": request.run_id,
+                "candidate_change_id": request.candidate_change_id,
+                "candidate_commit": request.candidate_commit,
+                "base_commit": request.base_commit,
+                "candidate_patch_sha256": request.candidate_patch_sha256,
+                "reconstructed_tree": workspace.tree_identity(),
+                "control_results": [
+                    result.model_dump(mode="json")
+                    for result in control_results
+                ],
+                "metrics": metrics,
+            }
+            JsonArtifactWriter.write(
+                evidence_package_path,
+                evidence_payload,
+            )
+            trace_payload = {
+                "gate_result_id": gate_result_id,
+                "release_policy_version": request.release_policy.version,
+                "evaluation_specification_id": (
+                    request.evaluation_specification.specification_id
+                ),
+                "outcome": outcome.value,
+                "unmet_obligations": list(unmet),
+                "warnings": list(warnings),
+                "deterministic_llm_calls": 0,
+                "deterministic_llm_tokens": 0,
+            }
+            JsonArtifactWriter.write(
+                gate_trace_path,
+                trace_payload,
+            )
+            return GateResult(
+                gate_result_id=gate_result_id,
+                run_id=request.run_id,
+                candidate_change_id=request.candidate_change_id,
+                candidate_commit=request.candidate_commit,
+                candidate_patch_sha256=request.candidate_patch_sha256,
+                reconstructed_tree=workspace.tree_identity(),
+                outcome=outcome,
+                control_results=tuple(control_results),
+                metrics=metrics,
+                unmet_obligations=unmet,
+                warnings=warnings,
+                evidence_rounds_completed=1,
+                generated_tests_considered=0,
+                qualified_generated_tests=0,
+                mutants_generated=0,
+                meaningful_mutants_survived=0,
+                budget_usage=GateBudgetUsage(
+                    tool_executions=budget.tool_executions,
+                    elapsed_seconds=budget.elapsed_seconds(),
+                    llm_calls=0,
+                    llm_tokens=0,
+                ),
+                evidence_package_path=str(evidence_package_path),
+                gate_trace_path=str(gate_trace_path),
+            )
+================================================================================
+FILE: src/ai_engineering_release_assurance/assurance_models.py
+================================================================================
+from __future__ import annotations
+from enum import Enum
+from typing import Any
+from pydantic import Field
+from .models import GateOutcome, StrictModel
+class AssuranceStopReason(str, Enum):
+    EVIDENCE_SUFFICIENT = "evidence_sufficient"
+    AUTHORITATIVE_FAILURE = "authoritative_failure"
+    HUMAN_REVIEW_TRIGGERED = "human_review_triggered"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    MAXIMUM_ROUNDS_REACHED = "maximum_rounds_reached"
+    MAPPER_UNAVAILABLE = "mapper_unavailable"
+    PLANNER_UNAVAILABLE = "planner_unavailable"
+    COLLECTOR_UNAVAILABLE = "collector_unavailable"
+    UNADDRESSABLE_GAP = "unaddressable_gap"
+    NO_USEFUL_EXPANSION = "no_useful_expansion"
+    MAPPING_UNCERTAINTY_TOO_HIGH = "mapping_uncertainty_too_high"
+class ExpansionSatisfaction(str, Enum):
+    SATISFIED_REQUEST = "SATISFIED_REQUEST"
+    PARTIALLY_SATISFIED = "PARTIALLY_SATISFIED"
+    DID_NOT_SATISFY = "DID_NOT_SATISFY"
+    UNRESOLVED = "UNRESOLVED"
+class EvidenceBudget(StrictModel):
+    max_assurance_rounds: int = Field(ge=1)
+    max_additional_evidence: int = Field(ge=0)
+    max_model_calls: int = Field(ge=0)
+    max_llm_tokens: int = Field(ge=0)
+    max_evidence_executions: int = Field(ge=0)
+    max_elapsed_seconds: float = Field(gt=0)
+class EvidenceBudgetUsage(StrictModel):
+    assurance_rounds: int = 0
+    additional_evidence: int = 0
+    model_calls: int = 0
+    llm_tokens: int = 0
+    evidence_executions: int = 0
+    elapsed_seconds: float = 0.0
+class EvidenceArtifact(StrictModel):
+    evidence_id: str
+    candidate_change_id: str
+    evidence_type: str
+    observation: str
+    addressed_claims: tuple[str, ...] = ()
+    addressed_behaviors: tuple[str, ...] = ()
+    method: str
+    producer_identity: str
+    result: str
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    parent_evidence_ids: tuple[str, ...] = ()
+    generation_batch_id: str | None = None
+    model_identity: str | None = None
+    prompt_template_identity: str | None = None
+    transformation_history: tuple[str, ...] = ()
+    concept_hints: dict[str, Any] = {}
+    expansion_request_id: str | None = None
+    executed: bool = False
+    validated: bool = False
+class EvidenceBundle(StrictModel):
+    bundle_id: str
+    candidate_change_id: str
+    artifacts: tuple[EvidenceArtifact, ...]
+class EvidenceCoverageGap(StrictModel):
+    gap_id: str
+    dimension_id: str
+    desired_value: Any
+    priority: float = Field(ge=0.0)
+    uncertainty: float = Field(default=0.0, ge=0.0, le=1.0)
+    rationale: str
+class EvidenceExpansionRequest(StrictModel):
+    request_id: str
+    source_gap_id: str
+    requested_characteristics: dict[str, Any]
+    priority: float = Field(ge=0.0)
+    maximum_additional_artifacts: int = Field(default=1, ge=1)
+    rationale: str
+class EvidenceCoverageResult(StrictModel):
+    assessment_id: str
+    schema_id: str
+    schema_version: str
+    mapper_version: str
+    coverage_gaps: tuple[EvidenceCoverageGap, ...]
+    expansion_requests: tuple[EvidenceExpansionRequest, ...]
+    mapping_uncertainty_rate: float = Field(ge=0.0, le=1.0)
+    exact_duplicate_count: int = Field(default=0, ge=0)
+    conceptual_duplicate_count: int = Field(default=0, ge=0)
+    raw_artifact_count: int = Field(default=0, ge=0)
+    lineage_aware_count: int = Field(default=0, ge=0)
+class ExpansionAssessment(StrictModel):
+    expansion_request_id: str
+    evidence_id: str
+    satisfaction: ExpansionSatisfaction
+    rationale: str
+class EvidenceAcquisitionAction(StrictModel):
+    action_id: str
+    expansion_request_id: str
+    collector_id: str
+    requested_characteristics: dict[str, Any]
+    maximum_evidence: int = Field(ge=1)
+    rationale: str
+class EvidenceAcquisitionPlan(StrictModel):
+    plan_id: str
+    assurance_round: int
+    actions: tuple[EvidenceAcquisitionAction, ...]
+    rationale: str
+class EvidenceCollectionResult(StrictModel):
+    action_id: str
+    collector_id: str
+    evidence_candidates: tuple[EvidenceArtifact, ...]
+    model_calls: int = Field(default=0, ge=0)
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    elapsed_seconds: float = Field(default=0.0, ge=0.0)
+    requested_executions: int = Field(default=0, ge=0)
+class AssuranceRoundResult(StrictModel):
+    round_number: int
+    gate_result_id: str
+    evidence_bundle_id: str
+    coverage_assessment_id: str | None
+    expansion_request_ids: tuple[str, ...] = ()
+    acquisition_plan_id: str | None = None
+    acquired_evidence_ids: tuple[str, ...] = ()
+    accepted_expansion_evidence_ids: tuple[str, ...] = ()
+    remaining_gap_ids: tuple[str, ...] = ()
+    mapping_uncertainty_rate: float | None = None
+    budget_usage: EvidenceBudgetUsage
+class AdaptiveGateResult(StrictModel):
+    assurance_result_id: str
+    final_outcome: GateOutcome
+    final_gate_result_id: str
+    assurance_rounds: tuple[AssuranceRoundResult, ...]
+    stop_reason: AssuranceStopReason
+    evidence_sufficient: bool
+    remaining_gap_ids: tuple[str, ...]
+    evidence_bundle_id: str
+    assurance_trace_path: str
+================================================================================
+FILE: src/ai_engineering_release_assurance/evidence_adapter.py
+================================================================================
+from __future__ import annotations
+import uuid
+from abc import ABC, abstractmethod
+from .assurance_models import (
+    EvidenceArtifact,
+    EvidenceBundle,
+    EvidenceCoverageResult,
+    ExpansionAssessment,
+)
+from .errors import NOIMPLEMENTTIONError
+from .models import GateResult
+class EvidenceArtifactFactory:
+    """
+    Translates native ReleaseGateService results into the evidence-domain
+    contract consumed by the Conceptual Diversity Mapper.
+    This is intentionally a translation layer. It does not perform conceptual
+    inference.
+    """
+    def build_bundle(
+        self,
+        *,
+        gate_result: GateResult,
+        accumulated_evidence: tuple[EvidenceArtifact, ...] = (),
+    ) -> EvidenceBundle:
+        artifacts: list[EvidenceArtifact] = []
+        for control in gate_result.control_results:
+            evidence_id = str(uuid.uuid4())
+            artifacts.append(
+                EvidenceArtifact(
+                    evidence_id=evidence_id,
+                    candidate_change_id=gate_result.candidate_change_id,
+                    evidence_type="deterministic_control",
+                    observation=control.rationale,
+                    addressed_claims=(control.control_id,),
+                    method="release_gate_control",
+                    producer_identity=control.control_id,
+                    result=control.status.value,
+                    # A deterministic tool result is not assigned a fabricated
+                    # semantic confidence. Conceptual mapping belongs to the
+                    # mapper.
+                    confidence=None,
+                    concept_hints={},
+                    # The control was actually executed unless explicitly
+                    # skipped. A passing/failing execution is also considered
+                    # structurally validated as gate evidence.
+                    executed=(control.process is not None),
+                    validated=(control.process is not None),
+                )
+            )
+        artifacts.extend(accumulated_evidence)
+        # Reject accidental evidence reuse across candidates.
+        for artifact in artifacts:
+            if artifact.candidate_change_id != gate_result.candidate_change_id:
+                raise ValueError(
+                    "Evidence candidate identity does not match gate candidate."
+                )
+        return EvidenceBundle(
+            bundle_id=str(uuid.uuid4()),
+            candidate_change_id=gate_result.candidate_change_id,
+            artifacts=tuple(artifacts),
+        )
+class EvidenceDiversityMapperPort(ABC):
+    """
+    Strict Component 3 boundary around the independently owned Conceptual
+    Diversity Mapper.
+    The actual mapper already exists outside this component. Component 3 should
+    wire its EvidenceDiversityMapperAdapter into this port.
+    We do not reproduce or fake that product here.
+    """
+    @abstractmethod
+    def assess_evidence_bundle(
+        self,
+        *,
+        bundle: EvidenceBundle,
+        concept_schema,
+        remaining_budget,
+    ) -> EvidenceCoverageResult:
+        raise NOIMPLEMENTTIONError(
+            "Connect the existing EvidenceDiversityMapperAdapter here."
+        )
+    @abstractmethod
+    def assess_generated_evidence(
+        self,
+        *,
+        evidence: tuple[EvidenceArtifact, ...],
+        expansion_requests,
+        concept_schema,
+    ) -> tuple[ExpansionAssessment, ...]:
+        raise NOIMPLEMENTTIONError(
+            "Connect the existing mapper closed-loop expansion assessment here."
+        )
+================================================================================
+FILE: src/ai_engineering_release_assurance/evidence_planner.py
+================================================================================
+from __future__ import annotations
+import uuid
+from abc import ABC, abstractmethod
+from .assurance_models import (
+    EvidenceAcquisitionAction,
+    EvidenceAcquisitionPlan,
+    EvidenceBudgetUsage,
+    EvidenceCoverageResult,
+)
+from .errors import NOIMPLEMENTTIONError
+class EvidencePlanner(ABC):
+    """
+    Production planning boundary.
+    A production planner may eventually use deterministic routing, AI reasoning,
+    optimization, or a hybrid. Component 3 must not fabricate that organization-
+    specific implementation.
+    """
+    @abstractmethod
+    def plan(
+        self,
+        *,
+        assurance_round: int,
+        coverage: EvidenceCoverageResult,
+        candidate_context,
+        existing_evidence,
+        available_collectors,
+        remaining_budget,
+        previous_attempts,
+    ) -> EvidenceAcquisitionPlan:
+        raise NOIMPLEMENTTIONError(
+            "Production EvidencePlanner has not been configured."
+        )
+class DeterministicEvidencePlanner(EvidencePlanner):
+    """
+    A real, executable planner for the POC.
+    This is NOT a placeholder. It implements an explicit routing table from
+    concept dimensions to approved collectors.
+    It is useful before an AI planner exists because the complete assurance
+    loop can be tested independently of model behavior.
+    """
+    def __init__(
+        self,
+        *,
+        dimension_to_collector: dict[str, str],
+        minimum_gap_priority: float,
+    ) -> None:
+        self.dimension_to_collector = dict(dimension_to_collector)
+        self.minimum_gap_priority = minimum_gap_priority
+    def plan(
+        self,
+        *,
+        assurance_round: int,
+        coverage: EvidenceCoverageResult,
+        candidate_context,
+        existing_evidence,
+        available_collectors,
+        remaining_budget,
+        previous_attempts,
+    ) -> EvidenceAcquisitionPlan:
+        del candidate_context
+        del existing_evidence
+        del previous_attempts
+        collector_ids = {
+            collector.collector_id
+            for collector in available_collectors
+        }
+        actions: list[EvidenceAcquisitionAction] = []
+        requests = sorted(
+            coverage.expansion_requests,
+            key=lambda request: request.priority,
+            reverse=True,
+        )
+        remaining_artifacts = remaining_budget.max_additional_evidence
+        for request in requests:
+            if request.priority < self.minimum_gap_priority:
+                continue
+            dimension_ids = tuple(request.requested_characteristics.keys())
+            collector_id = next(
+                (
+                    self.dimension_to_collector[dimension]
+                    for dimension in dimension_ids
+                    if dimension in self.dimension_to_collector
+                ),
+                None,
+            )
+            if collector_id is None:
+                continue
+            if collector_id not in collector_ids:
+                continue
+            if remaining_artifacts <= 0:
+                break
+            maximum = min(
+                request.maximum_additional_artifacts,
+                remaining_artifacts,
+            )
+            actions.append(
+                EvidenceAcquisitionAction(
+                    action_id=str(uuid.uuid4()),
+                    expansion_request_id=request.request_id,
+                    collector_id=collector_id,
+                    requested_characteristics=(
+                        request.requested_characteristics
+                    ),
+                    maximum_evidence=maximum,
+                    rationale=(
+                        "Deterministic routing selected the approved collector "
+                        "for the requested conceptual dimension."
+                    ),
+                )
+            )
+            remaining_artifacts -= maximum
+        return EvidenceAcquisitionPlan(
+            plan_id=str(uuid.uuid4()),
+            assurance_round=assurance_round,
+            actions=tuple(actions),
+            rationale=(
+                "Actions were selected using the configured deterministic "
+                "dimension-to-collector routing policy."
+            ),
+        )
+================================================================================
+FILE: src/ai_engineering_release_assurance/evidence_collectors.py
+================================================================================
+from __future__ import annotations
+from abc import ABC, abstractmethod
+from .assurance_models import (
+    EvidenceAcquisitionAction,
+    EvidenceCollectionResult,
+)
+from .errors import NOIMPLEMENTTIONError
+class EvidenceCollector(ABC):
+    @property
+    @abstractmethod
+    def collector_id(self) -> str:
+        raise NOIMPLEMENTTIONError(
+            "Evidence collector identity is not implemented."
+        )
+    @abstractmethod
+    def can_address(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+    ) -> bool:
+        raise NOIMPLEMENTTIONError(
+            "Evidence collector capability check is not implemented."
+        )
+    @abstractmethod
+    def collect(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+        remaining_budget,
+    ) -> EvidenceCollectionResult:
+        raise NOIMPLEMENTTIONError(
+            "Evidence collector production integration is not implemented."
+        )
+class GeneratedBehavioralTestCollector(EvidenceCollector):
+    """
+    Explicit unresolved integration.
+    Implementing this correctly requires the organization's approved model
+    provider, deployment identity, authentication, structured-output contract,
+    prompt versioning, retry policy, token limits, logging policy, and data
+    handling rules.
+    Inventing any of those values would create a fake production implementation.
+    """
+    COLLECTOR_ID = "generated_behavioral_test"
+    @property
+    def collector_id(self) -> str:
+        return self.COLLECTOR_ID
+    def can_address(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+    ) -> bool:
+        del action
+        del candidate_context
+        return True
+    def collect(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+        remaining_budget,
+    ) -> EvidenceCollectionResult:
+        raise NOIMPLEMENTTIONError(
+            "GeneratedBehavioralTestCollector requires an approved model "
+            "integration. No model endpoint or credential is fabricated here."
+        )
+class MutationEvidenceCollector(EvidenceCollector):
+    COLLECTOR_ID = "mutation_analysis"
+    @property
+    def collector_id(self) -> str:
+        return self.COLLECTOR_ID
+    def can_address(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+    ) -> bool:
+        del action
+        del candidate_context
+        return True
+    def collect(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+        remaining_budget,
+    ) -> EvidenceCollectionResult:
+        raise NOIMPLEMENTTIONError(
+            "MutationEvidenceCollector requires the approved mutation engine "
+            "and language-specific configuration."
+        )
+class StaticAnalysisCollector(EvidenceCollector):
+    COLLECTOR_ID = "static_analysis"
+    @property
+    def collector_id(self) -> str:
+        return self.COLLECTOR_ID
+    def can_address(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+    ) -> bool:
+        del action
+        del candidate_context
+        return True
+    def collect(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+        remaining_budget,
+    ) -> EvidenceCollectionResult:
+        raise NOIMPLEMENTTIONError(
+            "StaticAnalysisCollector requires the approved scanner registry "
+            "and language-specific configuration."
+        )
+class SecurityAnalysisCollector(EvidenceCollector):
+    COLLECTOR_ID = "security_analysis"
+    @property
+    def collector_id(self) -> str:
+        return self.COLLECTOR_ID
+    def can_address(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+    ) -> bool:
+        del action
+        del candidate_context
+        return True
+    def collect(
+        self,
+        *,
+        action: EvidenceAcquisitionAction,
+        candidate_context,
+        remaining_budget,
+    ) -> EvidenceCollectionResult:
+        raise NOIMPLEMENTTIONError(
+            "SecurityAnalysisCollector requires the organization's approved "
+            "security-analysis integration."
+        )
+================================================================================
+FILE: src/ai_engineering_release_assurance/evidence_execution.py
+================================================================================
+from __future__ import annotations
+from abc import ABC, abstractmethod
+from .assurance_models import EvidenceArtifact
+from .errors import NOIMPLEMENTTIONError
+class EvidenceExecutor(ABC):
+    """
+    Executes and qualifies newly collected evidence.
+    Generated executable evidence must not become authoritative simply because
+    a collector produced it.
+    """
+    @abstractmethod
+    def execute_and_validate(
+        self,
+        *,
+        evidence: tuple[EvidenceArtifact, ...],
+        candidate_context,
+        remaining_budget,
+    ) -> tuple[EvidenceArtifact, ...]:
+        raise NOIMPLEMENTTIONError(
+            "Production evidence execution environment is not configured."
+        )
+class ExistingValidatedEvidenceExecutor(EvidenceExecutor):
+    """
+    Executable implementation for evidence that has already been run and
+    validated by an authoritative deterministic collector.
+    It intentionally refuses unexecuted generated evidence.
+    """
+    def execute_and_validate(
+        self,
+        *,
+        evidence: tuple[EvidenceArtifact, ...],
+        candidate_context,
+        remaining_budget,
+    ) -> tuple[EvidenceArtifact, ...]:
+        del remaining_budget
+        candidate_change_id = candidate_context.candidate_change_id
+        qualified: list[EvidenceArtifact] = []
+        for artifact in evidence:
+            if artifact.candidate_change_id != candidate_change_id:
+                raise ValueError(
+                    "Evidence belongs to a different candidate change."
+                )
+            if not artifact.executed or not artifact.validated:
+                raise NOIMPLEMENTTIONError(
+                    "This executor accepts only evidence already executed and "
+                    "validated by an authoritative collector. A sandboxed "
+                    "generated-evidence execution integration is required for "
+                    "unexecuted evidence."
+                )
+            qualified.append(artifact)
+        return tuple(qualified)
+================================================================================
+FILE: src/ai_engineering_release_assurance/assurance_policy.py
+================================================================================
+from __future__ import annotations
+from enum import Enum
+from pydantic import Field
+from .assurance_models import (
+    AssuranceStopReason,
+    EvidenceBudget,
+    EvidenceBudgetUsage,
+    EvidenceCoverageResult,
+)
+from .models import GateOutcome, GateResult, StrictModel
+class MapperFailureAction(str, Enum):
+    MORE_EVIDENCE_REQUIRED = "MORE_EVIDENCE_REQUIRED"
+    HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
+class UnaddressableGapAction(str, Enum):
+    MORE_EVIDENCE_REQUIRED = "MORE_EVIDENCE_REQUIRED"
+    HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
+class AssurancePolicy(StrictModel):
+    version: str
+    require_diversity_assessment: bool = True
+    maximum_mapping_uncertainty_rate: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+    )
+    minimum_gap_priority_requiring_action: float = Field(
+        default=0.5,
+        ge=0.0,
+    )
+    maximum_unresolved_high_priority_gaps: int = Field(
+        default=0,
+        ge=0,
+    )
+    required_evidence_types: tuple[str, ...] = ()
+    mapper_failure_action: MapperFailureAction = (
+        MapperFailureAction.MORE_EVIDENCE_REQUIRED
+    )
+    unaddressable_gap_action: UnaddressableGapAction = (
+        UnaddressableGapAction.MORE_EVIDENCE_REQUIRED
+    )
+    require_independent_expansion_verification: bool = True
+    reject_generator_intent_as_coverage_proof: bool = True
+    require_executed_evidence_for_gap_closure: bool = True
+class SufficiencyDecision(StrictModel):
+    evidence_sufficient: bool
+    stop: bool
+    outcome: GateOutcome | None = None
+    stop_reason: AssuranceStopReason | None = None
+    actionable_gap_ids: tuple[str, ...] = ()
+    reasons: tuple[str, ...] = ()
+class AssurancePolicyEngine:
+    """
+    Deterministic evidence-sufficiency calculation.
+    Conceptual coverage informs sufficiency but does not define it by itself.
+    """
+    def evaluate(
+        self,
+        *,
+        gate_result: GateResult,
+        coverage: EvidenceCoverageResult | None,
+        evidence_types: set[str],
+        policy: AssurancePolicy,
+        budget: EvidenceBudget,
+        usage: EvidenceBudgetUsage,
+    ) -> SufficiencyDecision:
+        # A demonstrated authoritative failure is not something we try to
+        # "average away" with additional generated evidence.
+        if gate_result.outcome == GateOutcome.FAIL:
+            return SufficiencyDecision(
+                evidence_sufficient=True,
+                stop=True,
+                outcome=GateOutcome.FAIL,
+                stop_reason=AssuranceStopReason.AUTHORITATIVE_FAILURE,
+                reasons=("Authoritative ReleasePolicy produced FAIL.",),
+            )
+        # The current gate model does not distinguish overridable from
+        # non-overridable review conditions. Until that richer contract exists,
+        # HUMAN_REVIEW_REQUIRED is treated as authoritative.
+        if gate_result.outcome == GateOutcome.HUMAN_REVIEW_REQUIRED:
+            return SufficiencyDecision(
+                evidence_sufficient=False,
+                stop=True,
+                outcome=GateOutcome.HUMAN_REVIEW_REQUIRED,
+                stop_reason=AssuranceStopReason.HUMAN_REVIEW_TRIGGERED,
+                reasons=("ReleasePolicy requires human review.",),
+            )
+        missing_types = sorted(
+            set(policy.required_evidence_types) - evidence_types
+        )
+        if missing_types:
+            return SufficiencyDecision(
+                evidence_sufficient=False,
+                stop=False,
+                reasons=(
+                    "Required evidence types missing: "
+                    + ", ".join(missing_types),
+                ),
+            )
+        if policy.require_diversity_assessment and coverage is None:
+            return SufficiencyDecision(
+                evidence_sufficient=False,
+                stop=True,
+                outcome=GateOutcome(policy.mapper_failure_action.value),
+                stop_reason=AssuranceStopReason.MAPPER_UNAVAILABLE,
+                reasons=("Required diversity assessment is unavailable.",),
+            )
+        if coverage is not None:
+            if (
+                coverage.mapping_uncertainty_rate
+                > policy.maximum_mapping_uncertainty_rate
+            ):
+                return SufficiencyDecision(
+                    evidence_sufficient=False,
+                    stop=False,
+                    stop_reason=(
+                        AssuranceStopReason.MAPPING_UNCERTAINTY_TOO_HIGH
+                    ),
+                    reasons=(
+                        "Mapping uncertainty exceeds AssurancePolicy.",
+                    ),
+                )
+            actionable = tuple(
+                gap.gap_id
+                for gap in coverage.coverage_gaps
+                if gap.priority
+                >= policy.minimum_gap_priority_requiring_action
+            )
+            if (
+                len(actionable)
+                > policy.maximum_unresolved_high_priority_gaps
+            ):
+                return SufficiencyDecision(
+                    evidence_sufficient=False,
+                    stop=False,
+                    actionable_gap_ids=actionable,
+                    reasons=(
+                        "Material conceptual evidence gaps remain.",
+                    ),
+                )
+        # A deterministic gate can itself ask for more evidence for reasons not
+        # represented by conceptual diversity. We preserve that signal.
+        if gate_result.outcome == GateOutcome.MORE_EVIDENCE_REQUIRED:
+            return SufficiencyDecision(
+                evidence_sufficient=False,
+                stop=False,
+                reasons=(
+                    "ReleaseGateService has unmet evidence obligations.",
+                ),
+            )
+        return SufficiencyDecision(
+            evidence_sufficient=True,
+            stop=True,
+            outcome=GateOutcome.PASS,
+            stop_reason=AssuranceStopReason.EVIDENCE_SUFFICIENT,
+            reasons=(
+                "Deterministic obligations and AssurancePolicy are satisfied.",
+            ),
+        )
+================================================================================
+FILE: src/ai_engineering_release_assurance/assurance_budget.py
+================================================================================
+from __future__ import annotations
+import time
+from .assurance_models import EvidenceBudget, EvidenceBudgetUsage
+class EvidenceBudgetTracker:
+    """
+    Mutable runtime accounting around immutable EvidenceBudget configuration.
+    """
+    def __init__(self, budget: EvidenceBudget) -> None:
+        self.budget = budget
+        self.started = time.monotonic()
+        self.rounds = 0
+        self.additional_evidence = 0
+        self.model_calls = 0
+        self.llm_tokens = 0
+        self.evidence_executions = 0
+    def begin_round(self) -> bool:
+        if self.rounds >= self.budget.max_assurance_rounds:
+            return False
+        if self.elapsed_seconds() >= self.budget.max_elapsed_seconds:
+            return False
+        self.rounds += 1
+        return True
+    def record_collection(
+        self,
+        *,
+        artifacts: int,
+        model_calls: int,
+        llm_tokens: int,
+        evidence_executions: int,
+    ) -> None:
+        if (
+            self.additional_evidence + artifacts
+            > self.budget.max_additional_evidence
+        ):
+            raise RuntimeError("Additional-evidence budget would be exceeded.")
+        if self.model_calls + model_calls > self.budget.max_model_calls:
+            raise RuntimeError("Model-call budget would be exceeded.")
+        if self.llm_tokens + llm_tokens > self.budget.max_llm_tokens:
+            raise RuntimeError("LLM-token budget would be exceeded.")
+        if (
+            self.evidence_executions + evidence_executions
+            > self.budget.max_evidence_executions
+        ):
+            raise RuntimeError("Evidence-execution budget would be exceeded.")
+        self.additional_evidence += artifacts
+        self.model_calls += model_calls
+        self.llm_tokens += llm_tokens
+        self.evidence_executions += evidence_executions
+    def exhausted(self) -> bool:
+        return (
+            self.rounds >= self.budget.max_assurance_rounds
+            or self.additional_evidence >= self.budget.max_additional_evidence
+            or self.elapsed_seconds() >= self.budget.max_elapsed_seconds
+        )
+    def elapsed_seconds(self) -> float:
+        return time.monotonic() - self.started
+    def usage(self) -> EvidenceBudgetUsage:
+        return EvidenceBudgetUsage(
+            assurance_rounds=self.rounds,
+            additional_evidence=self.additional_evidence,
+            model_calls=self.model_calls,
+            llm_tokens=self.llm_tokens,
+            evidence_executions=self.evidence_executions,
+            elapsed_seconds=self.elapsed_seconds(),
+        )
+    def remaining(self) -> EvidenceBudget:
+        return EvidenceBudget(
+            max_assurance_rounds=max(
+                1,
+                self.budget.max_assurance_rounds - self.rounds,
+            ),
+            max_additional_evidence=max(
+                0,
+                self.budget.max_additional_evidence
+                - self.additional_evidence,
+            ),
+            max_model_calls=max(
+                0,
+                self.budget.max_model_calls - self.model_calls,
+            ),
+            max_llm_tokens=max(
+                0,
+                self.budget.max_llm_tokens - self.llm_tokens,
+            ),
+            max_evidence_executions=max(
+                0,
+                self.budget.max_evidence_executions
+                - self.evidence_executions,
+            ),
+            max_elapsed_seconds=max(
+                0.001,
+                self.budget.max_elapsed_seconds - self.elapsed_seconds(),
+            ),
+        )
+================================================================================
+FILE: src/ai_engineering_release_assurance/assurance_service.py
+================================================================================
+from __future__ import annotations
+import uuid
+from pathlib import Path
+from .artifacts import JsonArtifactWriter
+from .assurance_budget import EvidenceBudgetTracker
+from .assurance_models import (
+    AdaptiveGateResult,
+    AssuranceRoundResult,
+    AssuranceStopReason,
+    EvidenceArtifact,
+    EvidenceBudget,
+    ExpansionSatisfaction,
+)
+from .assurance_policy import AssurancePolicy, AssurancePolicyEngine
+from .errors import (
+    MapperUnavailableError,
+    NOIMPLEMENTTIONError,
+)
+from .evidence_adapter import (
+    EvidenceArtifactFactory,
+    EvidenceDiversityMapperPort,
+)
+from .evidence_execution import EvidenceExecutor
+from .evidence_planner import EvidencePlanner
+from .models import (
+    DeterministicGateExecutionRequest,
+    GateOutcome,
+)
+from .service import ReleaseGateService
+class AdaptiveReleaseAssuranceService:
+    """
+    Top-level Component 3 orchestration service.
+    The service does not assume that "more tests" means "more assurance."
+    Every round asks:
+        1. What authoritative evidence do we currently have?
+        2. Where is that evidence conceptually weak?
+        3. Does the weakness matter under AssurancePolicy?
+        4. What approved evidence mechanism can investigate it?
+        5. Did the resulting evidence actually investigate the requested concept?
+        6. Is there enough evidence to stop?
+    The candidate code is not changed by this loop.
+    """
+    def __init__(
+        self,
+        *,
+        release_gate_service: ReleaseGateService,
+        evidence_artifact_factory: EvidenceArtifactFactory,
+        evidence_mapper: EvidenceDiversityMapperPort,
+        evidence_planner: EvidencePlanner,
+        evidence_collectors,
+        evidence_executor: EvidenceExecutor,
+        assurance_policy_engine: AssurancePolicyEngine,
+        concept_schema,
+        assurance_policy: AssurancePolicy,
+        artifact_directory: Path,
+    ) -> None:
+        self.release_gate_service = release_gate_service
+        self.evidence_artifact_factory = evidence_artifact_factory
+        self.evidence_mapper = evidence_mapper
+        self.evidence_planner = evidence_planner
+        self.evidence_collectors = {
+            collector.collector_id: collector
+            for collector in evidence_collectors
+        }
+        self.evidence_executor = evidence_executor
+        self.assurance_policy_engine = assurance_policy_engine
+        self.concept_schema = concept_schema
+        self.assurance_policy = assurance_policy
+        self.artifact_directory = artifact_directory
+    def evaluate(
+        self,
+        *,
+        request: DeterministicGateExecutionRequest,
+        evidence_budget: EvidenceBudget,
+    ) -> AdaptiveGateResult:
+        assurance_result_id = str(uuid.uuid4())
+        budget = EvidenceBudgetTracker(evidence_budget)
+        accumulated_evidence: list[EvidenceArtifact] = []
+        previous_attempts = []
+        rounds: list[AssuranceRoundResult] = []
+        final_gate_result = None
+        final_bundle = None
+        final_coverage = None
+        while budget.begin_round():
+            round_number = budget.rounds
+            # -----------------------------------------------------------------
+            # STEP A
+            # Run the deterministic kernel.
+            #
+            # The current reference implementation reruns the deterministic gate
+            # for each assurance round. This is correct but may be unnecessarily
+            # expensive. Production optimization may reuse immutable controls
+            # whose complete input identity has not changed.
+            # -----------------------------------------------------------------
+            gate_result = self.release_gate_service.evaluate(request)
+            final_gate_result = gate_result
+            # -----------------------------------------------------------------
+            # STEP B
+            # Normalize gate evidence and carry forward qualified evidence from
+            # previous rounds.
+            # -----------------------------------------------------------------
+            bundle = self.evidence_artifact_factory.build_bundle(
+                gate_result=gate_result,
+                accumulated_evidence=tuple(accumulated_evidence),
+            )
+            final_bundle = bundle
+            # Authoritative FAIL terminates before asking AI systems to search
+            # for evidence that might make the failure disappear.
+            if gate_result.outcome == GateOutcome.FAIL:
+                round_result = AssuranceRoundResult(
+                    round_number=round_number,
+                    gate_result_id=gate_result.gate_result_id,
+                    evidence_bundle_id=bundle.bundle_id,
+                    coverage_assessment_id=None,
+                    remaining_gap_ids=(),
+                    budget_usage=budget.usage(),
+                )
+                rounds.append(round_result)
+                return self._finalize(
+                    assurance_result_id=assurance_result_id,
+                    final_outcome=GateOutcome.FAIL,
+                    gate_result=gate_result,
+                    rounds=rounds,
+                    stop_reason=AssuranceStopReason.AUTHORITATIVE_FAILURE,
+                    evidence_sufficient=True,
+                    remaining_gap_ids=(),
+                    bundle_id=bundle.bundle_id,
+                )
+            # -----------------------------------------------------------------
+            # STEP C
+            # Invoke the independently owned Conceptual Diversity Mapper.
+            # -----------------------------------------------------------------
+            try:
+                coverage = self.evidence_mapper.assess_evidence_bundle(
+                    bundle=bundle,
+                    concept_schema=self.concept_schema,
+                    remaining_budget=budget.remaining(),
+                )
+            except NOIMPLEMENTTIONError:
+                # Missing mapper wiring is not candidate failure and certainly
+                # not PASS. It is an unresolved assurance capability.
+                coverage = None
+            except Exception as exc:
+                raise MapperUnavailableError(
+                    f"Evidence diversity assessment failed: {exc}"
+                ) from exc
+            final_coverage = coverage
+            evidence_types = {
+                artifact.evidence_type
+                for artifact in bundle.artifacts
+                if artifact.validated
+            }
+            # -----------------------------------------------------------------
+            # STEP D
+            # Deterministically decide whether current evidence is sufficient.
+            # -----------------------------------------------------------------
+            sufficiency = self.assurance_policy_engine.evaluate(
+                gate_result=gate_result,
+                coverage=coverage,
+                evidence_types=evidence_types,
+                policy=self.assurance_policy,
+                budget=evidence_budget,
+                usage=budget.usage(),
+            )
+            gap_ids = (
+                tuple(gap.gap_id for gap in coverage.coverage_gaps)
+                if coverage is not None
+                else ()
+            )
+            if sufficiency.stop:
+                round_result = AssuranceRoundResult(
+                    round_number=round_number,
+                    gate_result_id=gate_result.gate_result_id,
+                    evidence_bundle_id=bundle.bundle_id,
+                    coverage_assessment_id=(
+                        coverage.assessment_id
+                        if coverage is not None
+                        else None
+                    ),
+                    expansion_request_ids=(
+                        tuple(
+                            request.request_id
+                            for request in coverage.expansion_requests
+                        )
+                        if coverage is not None
+                        else ()
+                    ),
+                    remaining_gap_ids=gap_ids,
+                    mapping_uncertainty_rate=(
+                        coverage.mapping_uncertainty_rate
+                        if coverage is not None
+                        else None
+                    ),
+                    budget_usage=budget.usage(),
+                )
+                rounds.append(round_result)
+                return self._finalize(
+                    assurance_result_id=assurance_result_id,
+                    final_outcome=(
+                        sufficiency.outcome
+                        or GateOutcome.MORE_EVIDENCE_REQUIRED
+                    ),
+                    gate_result=gate_result,
+                    rounds=rounds,
+                    stop_reason=(
+                        sufficiency.stop_reason
+                        or AssuranceStopReason.NO_USEFUL_EXPANSION
+                    ),
+                    evidence_sufficient=sufficiency.evidence_sufficient,
+                    remaining_gap_ids=gap_ids,
+                    bundle_id=bundle.bundle_id,
+                )
+            # -----------------------------------------------------------------
+            # STEP E
+            # We know evidence is insufficient. Determine whether another round
+            # is economically and operationally possible.
+            # -----------------------------------------------------------------
+            if budget.exhausted():
+                rounds.append(
+                    AssuranceRoundResult(
+                        round_number=round_number,
+                        gate_result_id=gate_result.gate_result_id,
+                        evidence_bundle_id=bundle.bundle_id,
+                        coverage_assessment_id=(
+                            coverage.assessment_id
+                            if coverage is not None
+                            else None
+                        ),
+                        remaining_gap_ids=gap_ids,
+                        mapping_uncertainty_rate=(
+                            coverage.mapping_uncertainty_rate
+                            if coverage is not None
+                            else None
+                        ),
+                        budget_usage=budget.usage(),
+                    )
+                )
+                return self._finalize(
+                    assurance_result_id=assurance_result_id,
+                    final_outcome=GateOutcome.MORE_EVIDENCE_REQUIRED,
+                    gate_result=gate_result,
+                    rounds=rounds,
+                    stop_reason=AssuranceStopReason.BUDGET_EXHAUSTED,
+                    evidence_sufficient=False,
+                    remaining_gap_ids=gap_ids,
+                    bundle_id=bundle.bundle_id,
+                )
+            if coverage is None:
+                # Required mapper absence has already been interpreted by the
+                # policy engine. Reaching this point means there is no safe
+                # basis for targeted conceptual expansion.
+                return self._finalize(
+                    assurance_result_id=assurance_result_id,
+                    final_outcome=GateOutcome.MORE_EVIDENCE_REQUIRED,
+                    gate_result=gate_result,
+                    rounds=rounds,
+                    stop_reason=AssuranceStopReason.MAPPER_UNAVAILABLE,
+                    evidence_sufficient=False,
+                    remaining_gap_ids=(),
+                    bundle_id=bundle.bundle_id,
+                )
+            # -----------------------------------------------------------------
+            # STEP F
+            # Plan additional evidence.
+            # -----------------------------------------------------------------
+            try:
+                plan = self.evidence_planner.plan(
+                    assurance_round=round_number,
+                    coverage=coverage,
+                    candidate_context=request,
+                    existing_evidence=bundle,
+                    available_collectors=tuple(
+                        self.evidence_collectors.values()
+                    ),
+                    remaining_budget=budget.remaining(),
+                    previous_attempts=tuple(previous_attempts),
+                )
+            except NOIMPLEMENTTIONError:
+                rounds.append(
+                    AssuranceRoundResult(
+                        round_number=round_number,
+                        gate_result_id=gate_result.gate_result_id,
+                        evidence_bundle_id=bundle.bundle_id,
+                        coverage_assessment_id=coverage.assessment_id,
+                        expansion_request_ids=tuple(
+                            item.request_id
+                            for item in coverage.expansion_requests
+                        ),
+                        remaining_gap_ids=gap_ids,
+                        mapping_uncertainty_rate=(
+                            coverage.mapping_uncertainty_rate
+                        ),
+                        budget_usage=budget.usage(),
+                    )
+                )
+                return self._finalize(
+                    assurance_result_id=assurance_result_id,
+                    final_outcome=GateOutcome.MORE_EVIDENCE_REQUIRED,
+                    gate_result=gate_result,
+                    rounds=rounds,
+                    stop_reason=AssuranceStopReason.PLANNER_UNAVAILABLE,
+                    evidence_sufficient=False,
+                    remaining_gap_ids=gap_ids,
+                    bundle_id=bundle.bundle_id,
+                )
+            if not plan.actions:
+                rounds.append(
+                    AssuranceRoundResult(
+                        round_number=round_number,
+                        gate_result_id=gate_result.gate_result_id,
+                        evidence_bundle_id=bundle.bundle_id,
+                        coverage_assessment_id=coverage.assessment_id,
+                        expansion_request_ids=tuple(
+                            item.request_id
+                            for item in coverage.expansion_requests
+                        ),
+                        acquisition_plan_id=plan.plan_id,
+                        remaining_gap_ids=gap_ids,
+                        mapping_uncertainty_rate=(
+                            coverage.mapping_uncertainty_rate
+                        ),
+                        budget_usage=budget.usage(),
+                    )
+                )
+                return self._finalize(
+                    assurance_result_id=assurance_result_id,
+                    final_outcome=GateOutcome(
+                        self.assurance_policy
+                        .unaddressable_gap_action
+                        .value
+                    ),
+                    gate_result=gate_result,
+                    rounds=rounds,
+                    stop_reason=AssuranceStopReason.UNADDRESSABLE_GAP,
+                    evidence_sufficient=False,
+                    remaining_gap_ids=gap_ids,
+                    bundle_id=bundle.bundle_id,
+                )
+            # -----------------------------------------------------------------
+            # STEP G
+            # Acquire candidate evidence.
+            # -----------------------------------------------------------------
+            collected: list[EvidenceArtifact] = []
+            acquired_ids: list[str] = []
+            for action in plan.actions:
+                collector = self.evidence_collectors.get(
+                    action.collector_id
+                )
+                if collector is None:
+                    continue
+                if not collector.can_address(
+                    action=action,
+                    candidate_context=request,
+                ):
+                    continue
+                try:
+                    collection = collector.collect(
+                        action=action,
+                        candidate_context=request,
+                        remaining_budget=budget.remaining(),
+                    )
+                except NOIMPLEMENTTIONError:
+                    # The capability is genuinely unavailable. We preserve the
+                    # unresolved gap rather than manufacturing evidence.
+                    continue
+                token_count = (
+                    collection.input_tokens
+                    + collection.output_tokens
+                )
+                budget.record_collection(
+                    artifacts=len(collection.evidence_candidates),
+                    model_calls=collection.model_calls,
+                    llm_tokens=token_count,
+                    evidence_executions=collection.requested_executions,
+                )
+                for artifact in collection.evidence_candidates:
+                    if (
+                        artifact.candidate_change_id
+                        != request.candidate_change_id
+                    ):
+                        raise ValueError(
+                            "Collector produced evidence for the wrong candidate."
+                        )
+                    if (
+                        artifact.expansion_request_id
+                        != action.expansion_request_id
+                    ):
+                        raise ValueError(
+                            "Collected evidence does not preserve its "
+                            "expansion-request lineage."
+                        )
+                    collected.append(artifact)
+                    acquired_ids.append(artifact.evidence_id)
+            if not collected:
+                rounds.append(
+                    AssuranceRoundResult(
+                        round_number=round_number,
+                        gate_result_id=gate_result.gate_result_id,
+                        evidence_bundle_id=bundle.bundle_id,
+                        coverage_assessment_id=coverage.assessment_id,
+                        expansion_request_ids=tuple(
+                            item.request_id
+                            for item in coverage.expansion_requests
+                        ),
+                        acquisition_plan_id=plan.plan_id,
+                        acquired_evidence_ids=(),
+                        remaining_gap_ids=gap_ids,
+                        mapping_uncertainty_rate=(
+                            coverage.mapping_uncertainty_rate
+                        ),
+                        budget_usage=budget.usage(),
+                    )
+                )
+                return self._finalize(
+                    assurance_result_id=assurance_result_id,
+                    final_outcome=GateOutcome.MORE_EVIDENCE_REQUIRED,
+                    gate_result=gate_result,
+                    rounds=rounds,
+                    stop_reason=AssuranceStopReason.COLLECTOR_UNAVAILABLE,
+                    evidence_sufficient=False,
+                    remaining_gap_ids=gap_ids,
+                    bundle_id=bundle.bundle_id,
+                )
+            # -----------------------------------------------------------------
+            # STEP H
+            # Execute and validate newly collected evidence.
+            # -----------------------------------------------------------------
+            qualified = self.evidence_executor.execute_and_validate(
+                evidence=tuple(collected),
+                candidate_context=request,
+                remaining_budget=budget.remaining(),
+            )
+            # -----------------------------------------------------------------
+            # STEP I
+            # Independently ask the mapper whether the acquired evidence really
+            # satisfied the conceptual request that caused its generation.
+            # -----------------------------------------------------------------
+            assessments = self.evidence_mapper.assess_generated_evidence(
+                evidence=qualified,
+                expansion_requests=coverage.expansion_requests,
+                concept_schema=self.concept_schema,
+            )
+            assessment_by_evidence = {
+                item.evidence_id: item
+                for item in assessments
+            }
+            accepted: list[EvidenceArtifact] = []
+            for artifact in qualified:
+                assessment = assessment_by_evidence.get(
+                    artifact.evidence_id
+                )
+                if assessment is None:
+                    continue
+                if (
+                    assessment.satisfaction
+                    == ExpansionSatisfaction.SATISFIED_REQUEST
+                ):
+                    accepted.append(artifact)
+                elif (
+                    assessment.satisfaction
+                    == ExpansionSatisfaction.PARTIALLY_SATISFIED
+                ):
+                    # Partial evidence can be retained because it may still
+                    # contribute information. It does NOT establish that the
+                    # requested gap is closed.
+                    accumulated_evidence.append(artifact)
+            accumulated_evidence.extend(accepted)
+            accepted_ids = tuple(
+                artifact.evidence_id
+                for artifact in accepted
+            )
+            rounds.append(
+                AssuranceRoundResult(
+                    round_number=round_number,
+                    gate_result_id=gate_result.gate_result_id,
+                    evidence_bundle_id=bundle.bundle_id,
+                    coverage_assessment_id=coverage.assessment_id,
+                    expansion_request_ids=tuple(
+                        item.request_id
+                        for item in coverage.expansion_requests
+                    ),
+                    acquisition_plan_id=plan.plan_id,
+                    acquired_evidence_ids=tuple(acquired_ids),
+                    accepted_expansion_evidence_ids=accepted_ids,
+                    remaining_gap_ids=gap_ids,
+                    mapping_uncertainty_rate=(
+                        coverage.mapping_uncertainty_rate
+                    ),
+                    budget_usage=budget.usage(),
+                )
+            )
+            previous_attempts.append(
+                {
+                    "round": round_number,
+                    "plan_id": plan.plan_id,
+                    "acquired": tuple(acquired_ids),
+                    "accepted": accepted_ids,
+                }
+            )
+            # -----------------------------------------------------------------
+            # STEP J
+            # Non-progress detection.
+            #
+            # If a complete round produced no evidence that independently
+            # satisfied its requested concept, continuing indefinitely would
+            # turn the assurance system into an uncontrolled generation loop.
+            # -----------------------------------------------------------------
+            if not accepted:
+                return self._finalize(
+                    assurance_result_id=assurance_result_id,
+                    final_outcome=GateOutcome.MORE_EVIDENCE_REQUIRED,
+                    gate_result=gate_result,
+                    rounds=rounds,
+                    stop_reason=AssuranceStopReason.NO_USEFUL_EXPANSION,
+                    evidence_sufficient=False,
+                    remaining_gap_ids=gap_ids,
+                    bundle_id=bundle.bundle_id,
+                )
+            # Accepted evidence now enters the next round, where the complete
+            # bundle is independently re-assessed. We do not manually decrement
+            # gap counts here. The mapper must observe actual coverage change.
+        # ---------------------------------------------------------------------
+        # Loop exhausted.
+        # ---------------------------------------------------------------------
+        if final_gate_result is None or final_bundle is None:
+            raise RuntimeError(
+                "Assurance loop terminated before any gate execution."
+            )
+        remaining_gap_ids = (
+            tuple(
+                gap.gap_id
+                for gap in final_coverage.coverage_gaps
+            )
+            if final_coverage is not None
+            else ()
+        )
+        return self._finalize(
+            assurance_result_id=assurance_result_id,
+            final_outcome=GateOutcome.MORE_EVIDENCE_REQUIRED,
+            gate_result=final_gate_result,
+            rounds=rounds,
+            stop_reason=AssuranceStopReason.MAXIMUM_ROUNDS_REACHED,
+            evidence_sufficient=False,
+            remaining_gap_ids=remaining_gap_ids,
+            bundle_id=final_bundle.bundle_id,
+        )
+    def _finalize(
+        self,
+        *,
+        assurance_result_id,
+        final_outcome,
+        gate_result,
+        rounds,
+        stop_reason,
+        evidence_sufficient,
+        remaining_gap_ids,
+        bundle_id,
+    ) -> AdaptiveGateResult:
+        trace_path = (
+            self.artifact_directory
+            / gate_result.run_id
+            / assurance_result_id
+            / "assurance-trace.json"
+        )
+        payload = {
+            "assurance_result_id": assurance_result_id,
+            "run_id": gate_result.run_id,
+            "candidate_change_id": gate_result.candidate_change_id,
+            "candidate_commit": gate_result.candidate_commit,
+            "candidate_patch_sha256": gate_result.candidate_patch_sha256,
+            "reconstructed_tree": gate_result.reconstructed_tree,
+            "release_policy_outcome": gate_result.outcome.value,
+            "assurance_policy_version": self.assurance_policy.version,
+            "final_outcome": final_outcome.value,
+            "stop_reason": stop_reason.value,
+            "evidence_sufficient": evidence_sufficient,
+            "remaining_gap_ids": list(remaining_gap_ids),
+            "rounds": [
+                item.model_dump(mode="json")
+                for item in rounds
+            ],
+        }
+        JsonArtifactWriter.write(trace_path, payload)
+        return AdaptiveGateResult(
+            assurance_result_id=assurance_result_id,
+            final_outcome=final_outcome,
+            final_gate_result_id=gate_result.gate_result_id,
+            assurance_rounds=tuple(rounds),
+            stop_reason=stop_reason,
+            evidence_sufficient=evidence_sufficient,
+            remaining_gap_ids=tuple(remaining_gap_ids),
+            evidence_bundle_id=bundle_id,
+            assurance_trace_path=str(trace_path),
+        )
+================================================================================
+FILE: src/ai_engineering_release_assurance/mapper_integration.py
+================================================================================
+from __future__ import annotations
+from .assurance_models import (
+    EvidenceCoverageResult,
+    ExpansionAssessment,
+)
+from .evidence_adapter import EvidenceDiversityMapperPort
+from .errors import NOIMPLEMENTTIONError
+class ExistingConceptualDiversityMapperIntegration(
+    EvidenceDiversityMapperPort
+):
+    """
+    Integration location for the separately developed Conceptual Diversity
+    Mapper supplied with this project.
+    This class intentionally does not reproduce the mapper.
+    The production composition root should inject the actual
+    EvidenceDiversityMapperAdapter instance and translate its concrete domain
+    contracts here if their import paths differ from Component 3 contracts.
+    We cannot responsibly invent those Python import paths from a README.
+    """
+    def __init__(self, adapter) -> None:
+        self.adapter = adapter
+    def assess_evidence_bundle(
+        self,
+        *,
+        bundle,
+        concept_schema,
+        remaining_budget,
+    ) -> EvidenceCoverageResult:
+        if self.adapter is None:
+            raise NOIMPLEMENTTIONError(
+                "EvidenceDiversityMapperAdapter instance was not supplied."
+            )
+        result = self.adapter.assess_evidence_bundle(
+            bundle=bundle,
+            schema=concept_schema,
+            budget=remaining_budget,
+        )
+        # If both components share the exact Pydantic contract, this validates
+        # directly. If the mapper owns separate evidence-domain classes, replace
+        # this one conversion with an explicit anti-corruption translation.
+        if isinstance(result, EvidenceCoverageResult):
+            return result
+        if hasattr(result, "model_dump"):
+            return EvidenceCoverageResult.model_validate(
+                result.model_dump(mode="python")
+            )
+        if isinstance(result, dict):
+            return EvidenceCoverageResult.model_validate(result)
+        raise TypeError(
+            "Mapper returned an unsupported EvidenceCoverageResult representation."
+        )
+    def assess_generated_evidence(
+        self,
+        *,
+        evidence,
+        expansion_requests,
+        concept_schema,
+    ) -> tuple[ExpansionAssessment, ...]:
+        if self.adapter is None:
+            raise NOIMPLEMENTTIONError(
+                "EvidenceDiversityMapperAdapter instance was not supplied."
+            )
+        # The README establishes closed-loop assessment as a mapper capability,
+        # but not the exact concrete Python signature. We therefore require the
+        # adapter to expose the documented operation rather than guessing an
+        # alternative method name.
+        method = getattr(
+            self.adapter,
+            "assess_generated_evidence",
+            None,
+        )
+        if method is None:
+            raise NOIMPLEMENTTIONError(
+                "The supplied mapper adapter does not expose "
+                "assess_generated_evidence(). Wire the mapper's concrete "
+                "closed-loop verification method here."
+            )
+        raw = method(
+            generated_evidence=evidence,
+            requests=expansion_requests,
+            schema=concept_schema,
+        )
+        converted = []
+        for item in raw:
+            if isinstance(item, ExpansionAssessment):
+                converted.append(item)
+            elif hasattr(item, "model_dump"):
+                converted.append(
+                    ExpansionAssessment.model_validate(
+                        item.model_dump(mode="python")
+                    )
+                )
+            elif isinstance(item, dict):
+                converted.append(
+                    ExpansionAssessment.model_validate(item)
+                )
+            else:
+                raise TypeError(
+                    "Mapper returned an unsupported expansion-assessment type."
+                )
+        return tuple(converted)
+================================================================================
+FILE: src/ai_engineering_release_assurance/config.py
+================================================================================
+from __future__ import annotations
+from pathlib import Path
+import yaml
+from .assurance_models import EvidenceBudget
+from .assurance_policy import AssurancePolicy
+from .models import (
+    DeterministicGateExecutionRequest,
+    ReleasePolicy,
+)
+def read_yaml(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle)
+    if not isinstance(raw, dict):
+        raise ValueError(f"Expected YAML object in {path}")
+    return raw
+def load_assurance_policy(path: Path) -> AssurancePolicy:
+    return AssurancePolicy.model_validate(read_yaml(path))
+def load_evidence_budget(path: Path) -> EvidenceBudget:
+    return EvidenceBudget.model_validate(read_yaml(path))
+================================================================================
+FILE: src/ai_engineering_release_assurance/composition.py
+================================================================================
+from __future__ import annotations
+from pathlib import Path
+from .assurance_policy import AssurancePolicy, AssurancePolicyEngine
+from .assurance_service import AdaptiveReleaseAssuranceService
+from .evidence_adapter import EvidenceArtifactFactory
+from .evidence_execution import ExistingValidatedEvidenceExecutor
+from .evidence_planner import DeterministicEvidencePlanner
+from .mapper_integration import ExistingConceptualDiversityMapperIntegration
+from .service import ReleaseGateService
+def build_poc_component_3(
+    *,
+    artifact_directory: Path,
+    mapper_adapter,
+    concept_schema,
+    assurance_policy: AssurancePolicy,
+    evidence_collectors,
+    dimension_to_collector: dict[str, str],
+) -> AdaptiveReleaseAssuranceService:
+    """
+    Composition root for the deterministic-mapper/planner POC.
+    This function performs real dependency wiring. It does not create fake model
+    clients or fake evidence collectors.
+    The caller must provide:
+        - the actual Conceptual Diversity Mapper adapter;
+        - the actual ConceptSchema;
+        - actual collectors intended for this environment.
+    """
+    release_gate = ReleaseGateService(
+        artifact_directory=artifact_directory,
+    )
+    mapper = ExistingConceptualDiversityMapperIntegration(
+        mapper_adapter
+    )
+    planner = DeterministicEvidencePlanner(
+        dimension_to_collector=dimension_to_collector,
+        minimum_gap_priority=(
+            assurance_policy.minimum_gap_priority_requiring_action
+        ),
+    )
+    return AdaptiveReleaseAssuranceService(
+        release_gate_service=release_gate,
+        evidence_artifact_factory=EvidenceArtifactFactory(),
+        evidence_mapper=mapper,
+        evidence_planner=planner,
+        evidence_collectors=evidence_collectors,
+        evidence_executor=ExistingValidatedEvidenceExecutor(),
+        assurance_policy_engine=AssurancePolicyEngine(),
+        concept_schema=concept_schema,
+        assurance_policy=assurance_policy,
+        artifact_directory=artifact_directory,
+    )
+================================================================================
+FILE: src/ai_engineering_release_assurance/cli.py
+================================================================================
+from __future__ import annotations
+import argparse
+import json
+import sys
+from pathlib import Path
+from .models import (
+    DeterministicGateExecutionRequest,
+    GateOutcome,
+)
+from .service import ReleaseGateService
+EXIT_CODES = {
+    GateOutcome.PASS: 0,
+    GateOutcome.HUMAN_REVIEW_REQUIRED: 2,
+    GateOutcome.MORE_EVIDENCE_REQUIRED: 3,
+    GateOutcome.FAIL: 4,
+}
+def _read_json(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+    if not isinstance(raw, dict):
+        raise ValueError(f"Expected JSON object in {path}")
+    return raw
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Component 3 release assurance"
+    )
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+    )
+    deterministic = subparsers.add_parser(
+        "evaluate-gate",
+        help="Run the deterministic ReleaseGateService.",
+    )
+    deterministic.add_argument(
+        "--request",
+        required=True,
+        type=Path,
+    )
+    deterministic.add_argument(
+        "--artifacts",
+        required=True,
+        type=Path,
+    )
+    return parser
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    try:
+        if args.command == "evaluate-gate":
+            request = DeterministicGateExecutionRequest.model_validate(
+                _read_json(args.request)
+            )
+            service = ReleaseGateService(
+                artifact_directory=args.artifacts,
+            )
+            result = service.evaluate(request)
+            print(
+                json.dumps(
+                    result.model_dump(mode="json"),
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return EXIT_CODES[result.outcome]
+        raise RuntimeError(f"Unknown command: {args.command}")
+    except Exception as exc:
+        print(
+            json.dumps(
+                {
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                },
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+if __name__ == "__main__":
+    raise SystemExit(main())
+================================================================================
+FILE: config/release-policy.example.yaml
+================================================================================
+version: poc-release-policy-v1
+fail_on_mandatory_control_failure: true
+fail_on_dominant_failure: true
+human_review_on_advisory_failure: true
+human_review_on_warning: true
+more_evidence_on_skipped_mandatory_control: true
+more_evidence_on_missing_required_report: true
+metric_thresholds:
+  - metric_name: pytest.junit.failures
+    operator: eq
+    threshold: 0
+    violation_outcome: FAIL
+    missing_metric_action: MORE_EVIDENCE_REQUIRED
+  - metric_name: pytest.junit.errors
+    operator: eq
+    threshold: 0
+    violation_outcome: FAIL
+    missing_metric_action: MORE_EVIDENCE_REQUIRED
+  - metric_name: coverage.coverage.percent_covered
+    operator: gte
+    threshold: 80
+    violation_outcome: HUMAN_REVIEW_REQUIRED
+    missing_metric_action: MORE_EVIDENCE_REQUIRED
+IMPORTANT:
+The 80 percent coverage threshold above is a POC configuration value.
+It is NOT proposed as an enterprise release standard.
+================================================================================
+FILE: config/assurance-policy.example.yaml
+================================================================================
+version: poc-assurance-policy-v1
+require_diversity_assessment: true
+maximum_mapping_uncertainty_rate: 0.25
+minimum_gap_priority_requiring_action: 0.50
+maximum_unresolved_high_priority_gaps: 0
+required_evidence_types: []
+mapper_failure_action: MORE_EVIDENCE_REQUIRED
+unaddressable_gap_action: MORE_EVIDENCE_REQUIRED
+require_independent_expansion_verification: true
+reject_generator_intent_as_coverage_proof: true
+require_executed_evidence_for_gap_closure: true
+IMPORTANT:
+These values exist only so the POC has executable configuration.
+They are NOT enterprise assurance thresholds.
+They must later be calibrated by task type, criticality, empirical mapper
+validation, false-release tolerance, and organizational risk policy.
+================================================================================
+FILE: tests/test_policy.py
+================================================================================
+from ai_engineering_release_assurance.models import (
+    ControlResult,
+    ControlSeverity,
+    ControlStatus,
+    GateOutcome,
+    ReleasePolicy,
+)
+from ai_engineering_release_assurance.policy import ReleasePolicyEngine
+def test_mandatory_failure_produces_fail():
+    result = ControlResult(
+        control_id="pytest",
+        severity=ControlSeverity.MANDATORY,
+        status=ControlStatus.FAILED,
+        rationale="Tests failed.",
+    )
+    outcome, unmet, warnings = ReleasePolicyEngine().decide(
+        control_results=(result,),
+        metrics={},
+        policy=ReleasePolicy(version="test"),
+    )
+    assert outcome == GateOutcome.FAIL
+    assert unmet
+    assert not warnings
+def test_advisory_failure_requires_human_review():
+    result = ControlResult(
+        control_id="advisory",
+        severity=ControlSeverity.ADVISORY,
+        status=ControlStatus.FAILED,
+        rationale="Advisory check failed.",
+    )
+    outcome, _, _ = ReleasePolicyEngine().decide(
+        control_results=(result,),
+        metrics={},
+        policy=ReleasePolicy(version="test"),
+    )
+    assert outcome == GateOutcome.HUMAN_REVIEW_REQUIRED
+================================================================================
+FILE: tests/test_assurance_policy.py
+================================================================================
+from ai_engineering_release_assurance.assurance_models import (
+    EvidenceBudget,
+    EvidenceBudgetUsage,
+    EvidenceCoverageGap,
+    EvidenceCoverageResult,
+)
+from ai_engineering_release_assurance.assurance_policy import (
+    AssurancePolicy,
+    AssurancePolicyEngine,
+)
+from ai_engineering_release_assurance.models import (
+    GateBudgetUsage,
+    GateOutcome,
+    GateResult,
+)
+def gate_result(outcome: GateOutcome) -> GateResult:
+    return GateResult(
+        gate_result_id="gate-1",
+        run_id="run-1",
+        candidate_change_id="change-1",
+        candidate_commit="candidate-commit",
+        candidate_patch_sha256="a" * 64,
+        reconstructed_tree="tree",
+        outcome=outcome,
+        control_results=(),
+        metrics={},
+        unmet_obligations=(),
+        warnings=(),
+        budget_usage=GateBudgetUsage(
+            tool_executions=1,
+            elapsed_seconds=1.0,
+        ),
+        evidence_package_path="/tmp/evidence.json",
+        gate_trace_path="/tmp/trace.json",
+    )
+def test_authoritative_fail_terminates():
+    decision = AssurancePolicyEngine().evaluate(
+        gate_result=gate_result(GateOutcome.FAIL),
+        coverage=None,
+        evidence_types=set(),
+        policy=AssurancePolicy(version="test"),
+        budget=EvidenceBudget(
+            max_assurance_rounds=3,
+            max_additional_evidence=10,
+            max_model_calls=10,
+            max_llm_tokens=10000,
+            max_evidence_executions=10,
+            max_elapsed_seconds=60,
+        ),
+        usage=EvidenceBudgetUsage(),
+    )
+    assert decision.stop is True
+    assert decision.outcome == GateOutcome.FAIL
+def test_high_priority_gap_prevents_pass():
+    coverage = EvidenceCoverageResult(
+        assessment_id="assessment-1",
+        schema_id="schema",
+        schema_version="1",
+        mapper_version="1",
+        coverage_gaps=(
+            EvidenceCoverageGap(
+                gap_id="gap-1",
+                dimension_id="concurrency",
+                desired_value=True,
+                priority=0.9,
+                rationale="No concurrency evidence.",
+            ),
+        ),
+        expansion_requests=(),
+        mapping_uncertainty_rate=0.05,
+        raw_artifact_count=10,
+        lineage_aware_count=10,
+    )
+    decision = AssurancePolicyEngine().evaluate(
+        gate_result=gate_result(GateOutcome.PASS),
+        coverage=coverage,
+        evidence_types={"deterministic_control"},
+        policy=AssurancePolicy(version="test"),
+        budget=EvidenceBudget(
+            max_assurance_rounds=3,
+            max_additional_evidence=10,
+            max_model_calls=10,
+            max_llm_tokens=10000,
+            max_evidence_executions=10,
+            max_elapsed_seconds=60,
+        ),
+        usage=EvidenceBudgetUsage(),
+    )
+    assert decision.evidence_sufficient is False
+    assert decision.stop is False
+    assert decision.actionable_gap_ids == ("gap-1",)
+================================================================================
+FILE: tests/test_evidence_planner.py
+================================================================================
+from ai_engineering_release_assurance.assurance_models import (
+    EvidenceBudget,
+    EvidenceCoverageGap,
+    EvidenceCoverageResult,
+    EvidenceExpansionRequest,
+)
+from ai_engineering_release_assurance.evidence_planner import (
+    DeterministicEvidencePlanner,
+)
+class Collector:
+    collector_id = "generated_behavioral_test"
+def test_planner_routes_known_dimension():
+    coverage = EvidenceCoverageResult(
+        assessment_id="assessment",
+        schema_id="schema",
+        schema_version="1",
+        mapper_version="1",
+        coverage_gaps=(
+            EvidenceCoverageGap(
+                gap_id="gap",
+                dimension_id="concurrency",
+                desired_value=True,
+                priority=0.9,
+                rationale="Missing concurrency evidence.",
+            ),
+        ),
+        expansion_requests=(
+            EvidenceExpansionRequest(
+                request_id="request",
+                source_gap_id="gap",
+                requested_characteristics={"concurrency": True},
+                priority=0.9,
+                maximum_additional_artifacts=1,
+                rationale="Acquire concurrency evidence.",
+            ),
+        ),
+        mapping_uncertainty_rate=0.0,
+        raw_artifact_count=1,
+        lineage_aware_count=1,
+    )
+    planner = DeterministicEvidencePlanner(
+        dimension_to_collector={
+            "concurrency": "generated_behavioral_test",
+        },
+        minimum_gap_priority=0.5,
+    )
+    plan = planner.plan(
+        assurance_round=1,
+        coverage=coverage,
+        candidate_context=None,
+        existing_evidence=None,
+        available_collectors=(Collector(),),
+        remaining_budget=EvidenceBudget(
+            max_assurance_rounds=2,
+            max_additional_evidence=2,
+            max_model_calls=2,
+            max_llm_tokens=1000,
+            max_evidence_executions=2,
+            max_elapsed_seconds=30,
+        ),
+        previous_attempts=(),
+    )
+    assert len(plan.actions) == 1
+    assert plan.actions[0].collector_id == "generated_behavioral_test"
+    assert plan.actions[0].expansion_request_id == "request"
+================================================================================
+FILE: tests/test_generator_intent_is_not_coverage.py
+================================================================================
+from ai_engineering_release_assurance.assurance_models import (
+    ExpansionAssessment,
+    ExpansionSatisfaction,
+)
+def test_generated_artifact_can_fail_requested_concept():
+    """
+    This is a small but architecturally important test.
+    The fact that the planner requested a concurrency test is not evidence that
+    the generated artifact actually covers concurrency.
+    """
+    assessment = ExpansionAssessment(
+        expansion_request_id="request-concurrency",
+        evidence_id="generated-test-1",
+        satisfaction=ExpansionSatisfaction.DID_NOT_SATISFY,
+        rationale=(
+            "Independent mapping found ordinary sequential behavior only."
+        ),
+    )
+    assert (
+        assessment.satisfaction
+        != ExpansionSatisfaction.SATISFIED_REQUEST
+    )
+================================================================================
+FILE: tests/test_noimplementation.py
+================================================================================
+import pytest
+from ai_engineering_release_assurance.assurance_models import (
+    EvidenceAcquisitionAction,
+    EvidenceBudget,
+)
+from ai_engineering_release_assurance.evidence_collectors import (
+    GeneratedBehavioralTestCollector,
+)
+from ai_engineering_release_assurance.errors import (
+    NOIMPLEMENTTIONError,
+)
+def test_unconfigured_model_collector_fails_explicitly():
+    collector = GeneratedBehavioralTestCollector()
+    action = EvidenceAcquisitionAction(
+        action_id="action",
+        expansion_request_id="request",
+        collector_id=collector.collector_id,
+        requested_characteristics={"boundary": True},
+        maximum_evidence=1,
+        rationale="test",
+    )
+    with pytest.raises(NOIMPLEMENTTIONError):
+        collector.collect(
+            action=action,
+            candidate_context=None,
+            remaining_budget=EvidenceBudget(
+                max_assurance_rounds=1,
+                max_additional_evidence=1,
+                max_model_calls=1,
+                max_llm_tokens=1000,
+                max_evidence_executions=1,
+                max_elapsed_seconds=30,
+            ),
+        )
+================================================================================
+IMPLEMENTATION NOTES
+================================================================================
+1. WHAT IS ACTUALLY IMPLEMENTED
+-------------------------------
+The code above implements:
+- immutable candidate patch verification;
+- clean-room Git reconstruction;
+- exact base-commit checkout;
+- patch application;
+- reconstructed Git-tree identity;
+- path-scope validation;
+- safe subprocess execution with shell=False;
+- execution timeout;
+- bounded deterministic gate environment;
+- candidate-mutation detection;
+- deterministic control execution;
+- JUnit parsing;
+- coverage JSON parsing;
+- generic numeric JSON parsing;
+- normalized control metrics;
+- four-state ReleasePolicy;
+- fixed outcome precedence;
+- missing-report handling;
+- missing-metric handling;
+- deterministic gate resource accounting;
+- immutable local evidence-package generation;
+- immutable local gate-trace generation;
+- evidence-domain normalization;
+- evidence lineage contracts;
+- conceptual coverage contracts;
+- expansion-request contracts;
+- adaptive evidence budgets;
+- deterministic evidence sufficiency;
+- deterministic POC EvidencePlanner;
+- collector registry;
+- explicit collector capability boundaries;
+- independent expansion-verification requirement;
+- adaptive assurance rounds;
+- budget termination;
+- non-progress termination;
+- candidate/evidence identity checks;
+- assurance trace generation;
+- deterministic gate CLI;
+- tests for critical policy invariants.
+2. WHAT DELIBERATELY RETURNS NOIMPLEMENTTIONError
+-------------------------------------------------
+The following capabilities cannot responsibly be invented from the information
+currently available:
+- actual Azure OpenAI generated-test integration;
+- actual mutation-testing infrastructure;
+- actual enterprise static-analysis service;
+- actual enterprise security-analysis service;
+- production sandbox for newly generated executable evidence;
+- production AI EvidencePlanner;
+- exact Python import/signature of the independently developed Conceptual
+  Diversity Mapper if it differs from the README contract.
+Those locations raise:
+    NOIMPLEMENTTIONError
+rather than:
+- pass;
+- None interpreted as success;
+- fabricated evidence;
+- fake URLs;
+- fake credentials;
+- empty production implementations.
+3. WHY THE MAPPER IS NOT REIMPLEMENTED HERE
+-------------------------------------------
+The Conceptual Diversity Mapper is a separate component with its own generic
+core and EvidenceDiversityMapperAdapter.
+Duplicating its implementation inside Component 3 would violate the architecture:
+    Evidence domain
+        |
+        v
+    EvidenceDiversityMapperAdapter
+        |
+        v
+    Generic Diversity Engine
+Component 3 therefore calls the adapter through:
+    EvidenceDiversityMapperPort
+and the concrete integration location is:
+    mapper_integration.py
+        ExistingConceptualDiversityMapperIntegration
+4. THE IMPORTANT CHANGE FROM THE ORIGINAL COMPONENT 3
+------------------------------------------------------
+The original implementation effectively had:
+    ReleaseGateService
+        |
+        v
+    one deterministic evidence round
+        |
+        v
+    PASS / FAIL / HUMAN / MORE
+The enhanced implementation has:
+    AdaptiveReleaseAssuranceService
+        |
+        v
+    ReleaseGateService
+        |
+        v
+    EvidenceArtifactFactory
+        |
+        v
+    EvidenceDiversityMapperAdapter
+        |
+        v
+    AssurancePolicyEngine
+        |
+        +---------------------------+
+        |                           |
+        | sufficient                | insufficient
+        v                           v
+    ReleasePolicy             EvidencePlanner
+                                    |
+                                    v
+                              EvidenceCollector
+                                    |
+                                    v
+                              execute / validate
+                                    |
+                                    v
+                              independent mapper
+                              verification
+                                    |
+                                    v
+                              next assurance round
+5. IMPORTANT RELEASE-SAFETY INVARIANT
+-------------------------------------
+An AI-generated test is not authoritative simply because it fails.
+There are two different propositions:
+    "This generated test fails the candidate."
+and:
+    "This is a valid test of an actual requirement and therefore demonstrates
+     that the candidate is wrong."
+The second proposition requires evidence qualification.
+The current implementation therefore refuses to invent a generic production
+qualification mechanism for arbitrary generated tests.
+Until the real sandbox and validation mechanism is wired:
+    ExistingValidatedEvidenceExecutor
+accepts only evidence already marked:
+    executed = True
+    validated = True
+and raises NOIMPLEMENTTIONError for unexecuted generated evidence.
+6. IMPORTANT DIVERSITY INVARIANT
+--------------------------------
+The following transition is forbidden:
+    requested concurrency evidence
+        ->
+    generator says it generated concurrency evidence
+        ->
+    concurrency gap closed
+The implemented control flow requires:
+    request
+        ->
+    acquisition
+        ->
+    execution / validation
+        ->
+    independent mapper assessment
+        ->
+    SATISFIED_REQUEST
+        ->
+    evidence accepted
+        ->
+    complete bundle re-mapped in next round
+This prevents generator intent from being confused with evidence.
+7. IMPORTANT STATISTICAL INVARIANT
+----------------------------------
+Neither:
+    number of tests
+nor:
+    lineage-aware count
+is represented as a number of statistically independent observations.
+The mapper may use lineage to reduce obvious synthetic inflation, but Component
+3 does not claim that different generators, prompts, models, or lineage roots
+are statistically independent.
+Pipeline-level statistical inference remains Component 5.
+8. IMPORTANT POLICY INVARIANT
+-----------------------------
+Conceptual coverage does not directly determine PASS.
+The actual relationship is:
+    deterministic engineering obligations
+        +
+    required evidence
+        +
+    conceptual coverage
+        +
+    mapping uncertainty
+        +
+    explicit AssurancePolicy
+        |
+        v
+    evidence sufficiency
+        |
+        v
+    ReleasePolicy
+        |
+        v
+    release disposition
+A high mapper coverage score therefore cannot override a failing mandatory
+engineering control.
+9. COMPONENT BOUNDARY
+---------------------
+The resulting architecture remains:
+    Component 1
+        Shared Contracts
+    Component 2
+        ChangeExecutionService
+        Produces SOFTWARE
+    Component 3
+        Adaptive Release Assurance Service
+        Produces EVIDENCE and RELEASE DISPOSITION
+        Component 3 contains:
+            AdaptiveReleaseAssuranceService
+            ReleaseGateService
+            ReleasePolicyEngine
+            AssurancePolicyEngine
+            EvidenceArtifactFactory
+            EvidencePlanner
+            EvidenceCollector ports
+            EvidenceExecutor
+            EvidenceDiversityMapper integration boundary
+            assurance budgeting
+            assurance tracing
+    Component 4
+        Evidence Storage
+        Preserves TRACEABILITY
+    Component 5
+        Pipeline Evaluation and Qualification
+        Produces KNOWLEDGE ABOUT AUTOMATION RELIABILITY
+    Component 6
+        Production Operational Observability
+        Produces KNOWLEDGE ABOUT DEPLOYED BEHAVIOR
+10. FINAL ENGINEERING POSITION
+------------------------------
+Component 3 is therefore not a requirements document waiting for another
+engineering round.
+Its deterministic release-gate kernel is implemented.
+Its adaptive orchestration is implemented.
+Its policy computation is implemented.
+Its evidence contracts, budgeting, planning mechanics, mapper boundary,
+closed-loop verification, failure semantics, and traceability are implemented.
+The only methods that remain intentionally unimplemented are capabilities whose
+real implementation requires information or infrastructure that has not been
+specified. Those methods fail explicitly with NOIMPLEMENTTIONError rather than
+pretending the capability exists.
+The intended production behavior is therefore:
+    KNOW
+        what has actually been implemented;
+    KNOW
+        what evidence has actually been collected;
+    KNOW
+        where conceptual evidence remains weak;
+    KNOW
+        why additional evidence was requested;
+    VERIFY
+        that newly acquired evidence actually addresses that request;
+    STOP
+        when evidence is sufficient, failure is established, human review is
+        required, the budget is exhausted, or further automated investigation
+        is no longer productive;
+    NEVER
+        convert missing implementation, missing evidence, mapper failure,
+        generator intent, or resource exhaustion into artificial release
+        confidence.
+================================================================================
+END COMPONENT 3
+================================================================================
