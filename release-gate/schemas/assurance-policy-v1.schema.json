@@ -1,0 +1,319 @@
+{
+  "$defs": {
+    "Dimension": {
+      "additionalProperties": false,
+      "properties": {
+        "dimension_id": {
+          "minLength": 1,
+          "title": "Dimension Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "definition": {
+          "minLength": 1,
+          "title": "Definition",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dimension_id",
+        "name",
+        "definition",
+        "values"
+      ],
+      "title": "Dimension",
+      "type": "object"
+    },
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_artifacts": {
+          "default": 256,
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Max Artifacts",
+          "type": "integer"
+        },
+        "max_report_bytes": {
+          "default": 4194304,
+          "maximum": 16777216,
+          "minimum": 1,
+          "title": "Max Report Bytes",
+          "type": "integer"
+        },
+        "max_total_report_bytes": {
+          "default": 16777216,
+          "maximum": 33554432,
+          "minimum": 1,
+          "title": "Max Total Report Bytes",
+          "type": "integer"
+        },
+        "max_elapsed_seconds": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "maximum": 300,
+          "title": "Max Elapsed Seconds",
+          "type": "number"
+        }
+      },
+      "title": "Limits",
+      "type": "object"
+    },
+    "Mapping": {
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "$ref": "#/$defs/Selector"
+        },
+        "concepts": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "minProperties": 1,
+          "title": "Concepts",
+          "type": "object"
+        },
+        "sources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 64,
+          "minProperties": 1,
+          "title": "Sources",
+          "type": "object"
+        },
+        "independence_group": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Independence Group"
+        }
+      },
+      "required": [
+        "selector",
+        "concepts",
+        "sources"
+      ],
+      "title": "Mapping",
+      "type": "object"
+    },
+    "Requirement": {
+      "additionalProperties": false,
+      "properties": {
+        "dimension_id": {
+          "title": "Dimension Id",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "title": "Value"
+        },
+        "minimum_independent_support": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Minimum Independent Support",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dimension_id",
+        "value",
+        "minimum_independent_support"
+      ],
+      "title": "Requirement",
+      "type": "object"
+    },
+    "Schema": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_id": {
+          "minLength": 1,
+          "title": "Schema Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "minLength": 1,
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "dimensions": {
+          "items": {
+            "$ref": "#/$defs/Dimension"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Dimensions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_id",
+        "schema_version",
+        "dimensions"
+      ],
+      "title": "Schema",
+      "type": "object"
+    },
+    "Selector": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "minLength": 1,
+          "title": "Check Id",
+          "type": "string"
+        },
+        "report_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Report Id"
+        },
+        "suite": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suite"
+        },
+        "classname": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Classname"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "check_id"
+      ],
+      "title": "Selector",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "mode": {
+      "enum": [
+        "advisory",
+        "enforce"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "concept_schema": {
+      "$ref": "#/$defs/Schema"
+    },
+    "mappings": {
+      "items": {
+        "$ref": "#/$defs/Mapping"
+      },
+      "maxItems": 1024,
+      "title": "Mappings",
+      "type": "array"
+    },
+    "required_regions": {
+      "items": {
+        "$ref": "#/$defs/Requirement"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "title": "Required Regions",
+      "type": "array"
+    },
+    "maximum_mapping_uncertainty_rate": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Maximum Mapping Uncertainty Rate",
+      "type": "number"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    }
+  },
+  "required": [
+    "version",
+    "mode",
+    "concept_schema",
+    "mappings",
+    "required_regions",
+    "maximum_mapping_uncertainty_rate"
+  ],
+  "title": "AssurancePolicy",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:release-gate:schema:assurance-policy:v1"
+}

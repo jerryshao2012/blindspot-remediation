@@ -275,7 +275,7 @@ def test_adapter_metadata_and_body_are_exact(tmp_path: Path) -> None:
     bodies: dict[str, bytes] = {}
     expected_description = (
         "Use only when explicitly invoked by the user to report its version, "
-        "initialize, validate, run, or repair with Release Gate. "
+        "initialize, validate, run, assure, or repair with Release Gate. "
         "Do not invoke implicitly."
     )
     for host in HOSTS:

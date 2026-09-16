@@ -4,6 +4,19 @@ All notable changes to the standalone Release Gate are recorded here.
 
 ## Unreleased
 
+## 0.7.0
+
+- Add `release-gate assure --base <ref>` to run the deterministic gate once,
+  verify retained evidence, apply reviewed conceptual coverage mappings, and
+  emit a separate assurance disposition.
+- Package the generic conceptual diversity mapper as the standalone
+  `conceptual-diversity-mapper` dependency while keeping release-policy evidence
+  contracts inside Release Gate's assurance layer.
+- Add versioned assurance policy, result, and manifest schemas plus atomic
+  assurance evidence packages stored outside finalized gate evidence.
+- Extend qualification, release assets, skills, and installed-wheel smoke tests
+  for 0.7.0 without marking the pending RC as qualified.
+
 ## 0.6.0
 
 - Make the bounded repair skill explicitly repeat eligible attempts from

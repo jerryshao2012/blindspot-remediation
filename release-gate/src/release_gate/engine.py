@@ -124,14 +124,24 @@ def run_gate(
 ) -> RunOutcome:
     """Capture, evaluate, and atomically finalize one gate run."""
 
-    started_wall = datetime.now(UTC)
-    started_clock = time.monotonic_ns()
     try:
         capture = capture_candidate(
             repository, base=base, allow_empty=allow_empty_candidate
         )
     except CaptureError as error:
         raise GateInputError(str(error)) from error
+    return run_captured_gate(capture, output=output, run_id=run_id)
+
+
+def run_captured_gate(
+    capture: CandidateCapture,
+    *,
+    output: Path | None = None,
+    run_id: str | None = None,
+) -> RunOutcome:
+    """Execute the immutable candidate already captured by a trusted caller."""
+    started_wall = datetime.now(UTC)
+    started_clock = time.monotonic_ns()
     family = _platform_name()
     config_bytes = _effective_config(capture.config, family)
     root = _evidence_root(capture, output)

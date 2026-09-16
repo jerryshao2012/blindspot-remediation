@@ -29,7 +29,7 @@ CONTROL_EVIDENCE = WORKBENCH / "control-evidence"
 APPROVALS = WORKBENCH / "approvals"
 REPAIR_TEMP = WORKBENCH / "repair-temp"
 BASE_REF = "release-gate-rate-limiter-base"
-EXPECTED_GATE_VERSION = "release-gate 0.6.0"
+EXPECTED_GATE_VERSION = "release-gate 0.7.0"
 EXPECTED_REPAIR_PATHS = ("README.md", "src/ratelimiter/__init__.py")
 SOURCE_ITEMS = (
     "README.md",

@@ -41,7 +41,7 @@ def _init_failing_repo(path: Path) -> str:
     )
 
     python_exe = sys.executable.replace("\\", "/")
-    policy = f"""\\
+    policy = f"""\
 version: 1
 scope:
   allowed_paths: ["**"]

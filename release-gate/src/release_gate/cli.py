@@ -117,6 +117,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _init(Path(arguments.repo), from_config=source)
         if arguments.command == "validate":
             return _validate(Path(arguments.repo))
+        if arguments.command == "assure":
+            from release_gate.assurance.service import run_assurance
+
+            result, result_path = run_assurance(
+                Path(arguments.repo),
+                base=arguments.base,
+                output=Path(arguments.output) if arguments.output else None,
+                run_id=arguments.run_id,
+            )
+            print(f"GATE_VERDICT: {result.gate_verdict}")
+            print(f"ASSURANCE_DISPOSITION: {result.disposition}")
+            print(f"ASSURANCE_MODE: {result.mode}")
+            print(f"ASSESSMENT_STATUS: {result.assessment_status}")
+            print(f"RESULT: {result_path}")
+            return result.exit_code
         if arguments.command == "run":
             outcome = run_gate(
                 Path(arguments.repo),
@@ -152,9 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         repair_outcome.approval_request_path
                         and repair_outcome.approval_request_path.exists()
                     ):
-                        req_path = (
-                            repair_outcome.approval_request_path.absolute()
-                        )
+                        req_path = repair_outcome.approval_request_path.absolute()
                         print(f"REPAIR_REQUEST: {req_path}")
                     if (
                         repair_outcome.summary_path
@@ -259,6 +272,12 @@ def _build_parser() -> _ArgumentParser:
     run.add_argument("--base", required=True, metavar="REF")
     run.add_argument("--output", metavar="PATH")
     run.add_argument("--run-id", metavar="ID")
+
+    assure = commands.add_parser("assure")
+    assure.add_argument("--repo", default=".", metavar="PATH")
+    assure.add_argument("--base", required=True, metavar="REF")
+    assure.add_argument("--output", metavar="PATH")
+    assure.add_argument("--run-id", metavar="ID")
 
     repair_start = commands.add_parser("repair-start")
     repair_start.add_argument("--repo", default=".", metavar="PATH")

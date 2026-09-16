@@ -13,47 +13,85 @@
     "surfaces"
   ],
   "properties": {
-    "schema_version": {"const": 1},
-    "qualification_status": {"enum": ["pending", "complete"]},
+    "schema_version": {
+      "const": 1
+    },
+    "qualification_status": {
+      "enum": [
+        "pending",
+        "complete"
+      ]
+    },
     "release": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tag", "commit"],
+      "required": [
+        "tag",
+        "commit"
+      ],
       "properties": {
-        "tag": {"type": "string", "pattern": "^release-gate-v[0-9]+\\.[0-9]+\\.[0-9]+-rc\\.1$"},
-        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+        "tag": {
+          "type": "string",
+          "pattern": "^release-gate-v[0-9]+\\.[0-9]+\\.[0-9]+-rc\\.1$"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
       }
     },
     "installer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["skills_cli_version", "node_version"],
+      "required": [
+        "skills_cli_version",
+        "node_version"
+      ],
       "properties": {
-        "skills_cli_version": {"type": "string", "minLength": 1},
-        "node_version": {"type": "string", "minLength": 1}
+        "skills_cli_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node_version": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "assets": {
       "type": "array",
-      "minItems": 7,
-      "maxItems": 7,
-      "items": {"$ref": "#/$defs/asset"}
+      "minItems": 9,
+      "maxItems": 9,
+      "items": {
+        "$ref": "#/$defs/asset"
+      }
     },
     "surfaces": {
       "type": "array",
       "minItems": 6,
       "maxItems": 6,
-      "items": {"$ref": "#/$defs/surface"}
+      "items": {
+        "$ref": "#/$defs/surface"
+      }
     }
   },
   "$defs": {
     "asset": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "sha256"],
+      "required": [
+        "name",
+        "sha256"
+      ],
       "properties": {
-        "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "surface": {
@@ -89,40 +127,97 @@
             "Antigravity CLI"
           ]
         },
-        "host_version": {"type": "string", "minLength": 1},
-        "model_version": {"type": "string", "minLength": 1},
-        "os": {"type": "string", "minLength": 1},
-        "node_version": {"type": "string", "minLength": 1},
-        "cli_wheel": {"$ref": "#/$defs/asset"},
-        "skill_archive": {"$ref": "#/$defs/asset"},
-        "exact_prompt": {"type": "string", "minLength": 1},
-        "explicit_selection": {"type": "boolean"},
-        "invocation": {"type": "string", "minLength": 1},
+        "host_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cli_wheel": {
+          "$ref": "#/$defs/asset"
+        },
+        "skill_archive": {
+          "$ref": "#/$defs/asset"
+        },
+        "exact_prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "explicit_selection": {
+          "type": "boolean"
+        },
+        "invocation": {
+          "type": "string",
+          "minLength": 1
+        },
         "permissions_tools": {
           "type": "array",
           "minItems": 1,
-          "items": {"type": "string", "minLength": 1}
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "baseline_without_skill": {"type": "string", "minLength": 1},
-        "installed_rc_observation": {"type": "string", "minLength": 1},
+        "baseline_without_skill": {
+          "type": "string",
+          "minLength": 1
+        },
+        "installed_rc_observation": {
+          "type": "string",
+          "minLength": 1
+        },
         "result": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "details", "failure_details"],
+          "required": [
+            "status",
+            "details",
+            "failure_details"
+          ],
           "properties": {
-            "status": {"enum": ["pending", "pass", "fail"]},
-            "details": {"type": "string", "minLength": 1},
-            "failure_details": {"type": ["string", "null"]}
+            "status": {
+              "enum": [
+                "pending",
+                "pass",
+                "fail"
+              ]
+            },
+            "details": {
+              "type": "string",
+              "minLength": 1
+            },
+            "failure_details": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         },
-        "timestamp": {"type": "string", "format": "date-time"},
-        "evidence_reference": {"$ref": "#/$defs/evidence_reference"}
-        ,
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidence_reference": {
+          "$ref": "#/$defs/evidence_reference"
+        },
         "case_results": {
           "type": "array",
           "minItems": 0,
-          "maxItems": 21,
-          "items": {"$ref": "#/$defs/case_result"}
+          "maxItems": 26,
+          "items": {
+            "$ref": "#/$defs/case_result"
+          }
         }
       }
     },
@@ -161,16 +256,30 @@
             "run-observability-warning",
             "repair-pass-within-budget",
             "repair-needs-human-stopped",
-            "repair-graphify-adversarial"
+            "repair-graphify-adversarial",
+            "assure-pass",
+            "assure-insufficient",
+            "assure-advisory",
+            "assure-unavailable",
+            "assure-policy-tamper"
           ]
         },
-        "exact_prompt": {"type": "string", "minLength": 1},
+        "exact_prompt": {
+          "type": "string",
+          "minLength": 1
+        },
         "permissions_tools": {
           "type": "array",
           "minItems": 1,
-          "items": {"type": "string", "minLength": 1}
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "observed_effects": {"type": "string", "minLength": 1},
+        "observed_effects": {
+          "type": "string",
+          "minLength": 1
+        },
         "observed_outcome": {
           "enum": [
             "EXPECTED_GUARD",
@@ -184,23 +293,52 @@
         "result": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "details", "failure_details"],
+          "required": [
+            "status",
+            "details",
+            "failure_details"
+          ],
           "properties": {
-            "status": {"enum": ["pending", "pass", "fail"]},
-            "details": {"type": "string", "minLength": 1},
-            "failure_details": {"type": ["string", "null"]}
+            "status": {
+              "enum": [
+                "pending",
+                "pass",
+                "fail"
+              ]
+            },
+            "details": {
+              "type": "string",
+              "minLength": 1
+            },
+            "failure_details": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         },
-        "evidence_reference": {"$ref": "#/$defs/evidence_reference"}
+        "evidence_reference": {
+          "$ref": "#/$defs/evidence_reference"
+        }
       }
     },
     "evidence_reference": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["uri", "sha256"],
+      "required": [
+        "uri",
+        "sha256"
+      ],
       "properties": {
-        "uri": {"type": "string", "minLength": 1},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     }
   }

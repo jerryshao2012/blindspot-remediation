@@ -23,6 +23,11 @@ SURFACES = {
     "Antigravity CLI",
 }
 CASES = {
+    "assure-pass",
+    "assure-insufficient",
+    "assure-advisory",
+    "assure-unavailable",
+    "assure-policy-tamper",
     "init-generic",
     "init-python",
     "init-node",
@@ -47,6 +52,11 @@ CASES = {
 }
 OUTCOMES = {
     **{case: "EXPECTED_GUARD" for case in CASES},
+    "assure-pass": "PASS",
+    "assure-insufficient": "NEEDS_HUMAN",
+    "assure-advisory": "PASS",
+    "assure-unavailable": "NEEDS_HUMAN",
+    "assure-policy-tamper": "NEEDS_HUMAN",
     "run-pass": "PASS",
     "run-fail": "FAIL",
     "run-needs-human": "NEEDS_HUMAN",
@@ -118,6 +128,31 @@ REPAIR_OBSERVATIONS = {
 }
 
 ASSURANCE_OBSERVATIONS = {
+    "assure-pass": (
+        "RG-ASSURE-EXACT-CANDIDATE",
+        "RG-ASSURE-SEPARATE-DISPOSITION",
+        "RG-ASSURE-EVIDENCE-VERIFIED",
+    ),
+    "assure-insufficient": (
+        "RG-ASSURE-EXACT-CANDIDATE",
+        "RG-ASSURE-SEPARATE-DISPOSITION",
+        "RG-ASSURE-EVIDENCE-VERIFIED",
+    ),
+    "assure-advisory": (
+        "RG-ASSURE-EXACT-CANDIDATE",
+        "RG-ASSURE-SEPARATE-DISPOSITION",
+        "RG-ASSURE-EVIDENCE-VERIFIED",
+    ),
+    "assure-unavailable": (
+        "RG-ASSURE-EXACT-CANDIDATE",
+        "RG-ASSURE-SEPARATE-DISPOSITION",
+        "RG-ASSURE-EVIDENCE-VERIFIED",
+    ),
+    "assure-policy-tamper": (
+        "RG-ASSURE-EXACT-CANDIDATE",
+        "RG-ASSURE-SEPARATE-DISPOSITION",
+        "RG-ASSURE-EVIDENCE-VERIFIED",
+    ),
     "init-python": (
         "RG-ASSURANCE-FAILURE-MODE-MAPPING",
         "RG-ASSURANCE-CUSTOM-CHECKER-INTEGRITY",
@@ -157,6 +192,8 @@ def _complete_evidence() -> dict[str, object]:
         wheel,
         f"release_gate-{__version__}.tar.gz",
         *archives.values(),
+        "conceptual_diversity_mapper-1.0.0-py3-none-any.whl",
+        "conceptual_diversity_mapper-1.0.0.tar.gz",
         "SHA256SUMS",
     }
     assets = [_asset(name) for name in sorted(asset_names)]

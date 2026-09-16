@@ -51,7 +51,7 @@ The required version is:
 
 <!-- release-version-sync:start -->
 ```text
-release-gate 0.6.0
+release-gate 0.7.0
 ```
 <!-- release-version-sync:end -->
 

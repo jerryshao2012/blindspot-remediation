@@ -1,0 +1,161 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "engine_version": {
+      "default": "0.6.0",
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "gate_result_path": {
+      "title": "Gate Result Path",
+      "type": "string"
+    },
+    "gate_result_sha256": {
+      "title": "Gate Result Sha256",
+      "type": "string"
+    },
+    "gate_manifest_sha256": {
+      "title": "Gate Manifest Sha256",
+      "type": "string"
+    },
+    "base_commit": {
+      "title": "Base Commit",
+      "type": "string"
+    },
+    "candidate_tree": {
+      "title": "Candidate Tree",
+      "type": "string"
+    },
+    "patch_sha256": {
+      "title": "Patch Sha256",
+      "type": "string"
+    },
+    "policy_sha256": {
+      "title": "Policy Sha256",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "advisory",
+        "enforce"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "gate_verdict": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "NEEDS_HUMAN"
+      ],
+      "title": "Gate Verdict",
+      "type": "string"
+    },
+    "disposition": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "NEEDS_HUMAN"
+      ],
+      "title": "Disposition",
+      "type": "string"
+    },
+    "exit_code": {
+      "enum": [
+        0,
+        1,
+        2
+      ],
+      "title": "Exit Code",
+      "type": "integer"
+    },
+    "assessment_status": {
+      "enum": [
+        "COMPLETE",
+        "UNAVAILABLE",
+        "NOT_EVALUATED"
+      ],
+      "title": "Assessment Status",
+      "type": "string"
+    },
+    "evidence_sufficient": {
+      "title": "Evidence Sufficient",
+      "type": "boolean"
+    },
+    "reason_codes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "artifacts": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "coverage": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Coverage"
+    },
+    "unmet_requirements": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Unmet Requirements",
+      "type": "array"
+    },
+    "duration_ms": {
+      "minimum": 0,
+      "title": "Duration Ms",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "run_id",
+    "gate_result_path",
+    "gate_result_sha256",
+    "gate_manifest_sha256",
+    "base_commit",
+    "candidate_tree",
+    "patch_sha256",
+    "policy_sha256",
+    "mode",
+    "gate_verdict",
+    "disposition",
+    "exit_code",
+    "assessment_status",
+    "evidence_sufficient",
+    "reason_codes",
+    "artifacts",
+    "coverage",
+    "unmet_requirements",
+    "duration_ms"
+  ],
+  "title": "AssuranceResult",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:release-gate:schema:assurance-result:v1"
+}

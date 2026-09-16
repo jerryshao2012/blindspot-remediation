@@ -35,7 +35,7 @@ currently available.
 <!-- release-version-sync:start -->
 The commands below are release-ready examples for use only after the final
 GitHub release is published with its checksum manifest. They use the immutable
-`release-gate-v0.6.0` tag, but do not claim that those assets are currently
+`release-gate-v0.7.0` tag, but do not claim that those assets are currently
 available. Candidate assets and URLs belong only in the separate qualification
 procedure and are not substitutes for these end-user commands.
 
@@ -45,28 +45,30 @@ Python checksum command itself is also safe to run from PowerShell.
 
 ## Download and verify the CLI
 
-Download the release checksum manifest and exact wheel:
+Download the release checksum manifest and exact wheels:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release_gate-0.6.0-py3-none-any.whl
-grep '  release_gate-0.6.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release_gate-0.7.0-py3-none-any.whl
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/conceptual_diversity_mapper-1.0.0-py3-none-any.whl
+grep '  release_gate-0.7.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+grep '  conceptual_diversity_mapper-1.0.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
 ```
 
 Review that the checksum line came from the same GitHub release, names exactly
-one wheel, and reports `OK`. On systems that provide `sha256sum` instead of
+one asset, and reports `OK`. On systems that provide `sha256sum` instead of
 `shasum`, use the equivalent check against that single manifest line. Stop if
 the file is absent, duplicated, or mismatched.
 
-Install only the verified local wheel, replacing any existing `uv` tool with
-the same name, and confirm both the wheel and the resolved executable:
+Install only the verified local wheels, replacing any existing `uv` tool with
+the same name, and confirm the resolved executable:
 
 ```bash
-uv tool install --force ./release_gate-0.6.0-py3-none-any.whl
+uv tool install --force --with ./conceptual_diversity_mapper-1.0.0-py3-none-any.whl ./release_gate-0.7.0-py3-none-any.whl
 release-gate --version
 ```
 
-The required output is `release-gate 0.6.0`. This is a `uv` tool installation;
+The required output is `release-gate 0.7.0`. This is a `uv` tool installation;
 do not activate a project `.venv` to select it. The executable is normally
 under `$HOME/.local/bin` on Windows (`$HOME\.local\bin` in PowerShell).
 
@@ -75,16 +77,16 @@ prove that the wheel itself is correct and then inspect every executable that
 PowerShell can resolve:
 
 ```powershell
-uv tool run --from .\release_gate-0.6.0-py3-none-any.whl release-gate --version
+uv tool run --with .\conceptual_diversity_mapper-1.0.0-py3-none-any.whl --from .\release_gate-0.7.0-py3-none-any.whl release-gate --version
 Get-Command release-gate -All
 uv tool list
 release-gate --version
 ```
 
-The direct `uv tool run` check must report `release-gate 0.6.0`. The wheel
+The direct `uv tool run` check must report `release-gate 0.7.0`. The wheel
 filename does not control the reported version; the version is embedded in the
-wheel metadata and package. If the direct check reports `0.6.0` but the final
-command does not, PowerShell is resolving a stale launcher. Open a fresh
+wheel metadata and package. If the direct check reports the expected version
+but the final command does not, PowerShell is resolving a stale launcher. Open a fresh
 PowerShell process after reinstalling the tool, or use the stale-launcher
 recovery below. Do not invoke the skill until the CLI and skill versions match.
 
@@ -94,20 +96,22 @@ CLI in that venv separately from the global tool:
 
 ```powershell
 $venv = 'C:\path\to\release-gate\.venv\Scripts\python.exe'
-uv pip install --python $venv --reinstall --no-deps --offline 'C:\path\to\release-gate\dist\release_gate-0.6.0-py3-none-any.whl'
+uv pip install --python $venv --reinstall --no-deps --offline 'C:\path\to\release-gate\dist\release_gate-0.7.0-py3-none-any.whl'
+uv pip install --python $venv --reinstall --no-deps --offline 'C:\path\to\release-gate\dist\conceptual_diversity_mapper-1.0.0-py3-none-any.whl'
 release-gate --version
 ```
 
 Alternatively, do not activate the repository `.venv` when using the global
 CLI. Use `Get-Command release-gate -All` to confirm which executable wins.
 
-The checksum covers the Release Gate wheel itself and proves nothing about
-transitive package bytes. `uv tool install` resolves the declared dependency
-ranges from the configured package index at install time, and those dependency
-bytes are outside the release asset checksum. The development `uv.lock` is not
-consumed by `uv tool install`. If the entire installed environment must be
-reproducible, separately control the package index and retain the resolved
-dependency names, versions, and hashes used by the installation.
+The checksum manifest covers the Release Gate wheel, mapper wheel, host skill
+archives, and source distributions. `uv tool install` still resolves ordinary
+third-party dependency ranges from the configured package index at install time,
+and those dependency bytes are outside the release asset checksum. The
+development `uv.lock` is not consumed by `uv tool install`. If the entire
+installed environment must be reproducible, separately control the package
+index and retain the resolved dependency names, versions, and hashes used by
+the installation.
 
 ## Download, verify, and install one host archive
 
@@ -120,25 +124,25 @@ target. Do not replace the pinned installer version with `latest`.
 ### GitHub Copilot CLI
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-copilot-0.6.0.tar.gz
-grep '  release-gate-skill-copilot-0.6.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-copilot-0.6.0.tar.gz --global --copy --agent github-copilot
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-copilot-0.7.0.tar.gz
+grep '  release-gate-skill-copilot-0.7.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-copilot-0.7.0.tar.gz --global --copy --agent github-copilot
 ```
 
 ### Codex CLI and IDE
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-codex-0.6.0.tar.gz
-grep '  release-gate-skill-codex-0.6.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-codex-0.6.0.tar.gz --global --copy --agent codex
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-codex-0.7.0.tar.gz
+grep '  release-gate-skill-codex-0.7.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-codex-0.7.0.tar.gz --global --copy --agent codex
 ```
 
 ### Claude Code
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-claude-code-0.6.0.tar.gz
-grep '  release-gate-skill-claude-code-0.6.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-claude-code-0.6.0.tar.gz --global --copy --agent claude-code
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-claude-code-0.7.0.tar.gz
+grep '  release-gate-skill-claude-code-0.7.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-claude-code-0.7.0.tar.gz --global --copy --agent claude-code
 ```
 
 ### Antigravity IDE or CLI
@@ -147,10 +151,10 @@ The same verified archive is used for both Antigravity surfaces, but the
 installer target is surface-specific:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz
-grep '  release-gate-skill-antigravity-0.6.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz --global --copy --agent antigravity
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz --global --copy --agent antigravity-cli
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz
+grep '  release-gate-skill-antigravity-0.7.0.tar.gz$' SHA256SUMS | shasum -a 256 --check -
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz --global --copy --agent antigravity-cli
 ```
 
 Install only the line for the surface being used. After installation, use the
@@ -178,14 +182,14 @@ If the command resolves to `$HOME\.local\bin\release-gate.exe`, it is typically 
 ```powershell
 $root = 'C:\path\to\release-gate'
 uv tool uninstall release-gate
-uv tool install --offline (Join-Path $root 'dist\\release_gate-0.6.0-py3-none-any.whl')
+uv tool install --offline --with (Join-Path $root 'dist\\conceptual_diversity_mapper-1.0.0-py3-none-any.whl') (Join-Path $root 'dist\\release_gate-0.7.0-py3-none-any.whl')
 release-gate --version
 ```
 
 The wheel must be built from the checkout containing the desired source
-version. Installing a file named `release_gate-0.6.0-...whl` cannot correct a
+version. Installing a file named `release_gate-0.7.0-...whl` cannot correct a
 wheel whose embedded metadata still says `0.3.0`; inspect the wheel's direct
-version with `uv tool run --from` before diagnosing `PATH`.
+version with `uv tool run --with .\conceptual_diversity_mapper-1.0.0-py3-none-any.whl --from .\release_gate-0.7.0-py3-none-any.whl` before diagnosing `PATH`.
 
 If `uv` cannot resolve dependencies because the package index is unavailable or returns an authorization error, first verify the checkout's isolated launcher:
 
@@ -229,15 +233,15 @@ The standalone skill accepts informational `--version` and the three
 operational subcommands `init`, `validate`, and `run`. A missing or unknown
 input displays help and performs no operational tool call. The informational
 command reads the bundled compatibility reference and prints exactly
-`release-gate 0.6.0`; it does not call the CLI, inspect the repository, consider
+`release-gate 0.7.0`; it does not call the CLI, inspect the repository, consider
 Graphify, or perform an operation.
 
-| Host | Version | Initialize | Validate | Run |
-|---|---|---|---|---|
-| GitHub Copilot CLI | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
-| Codex CLI/IDE | `$release-gate --version` | `$release-gate init` | `$release-gate validate` | `$release-gate run --base <trusted-ref>` |
-| Claude Code | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
-| Antigravity IDE/CLI | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` |
+| Host | Version | Initialize | Validate | Run | Assure |
+|---|---|---|---|---|---|
+| GitHub Copilot CLI | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` | `/release-gate assure --base <trusted-ref>` |
+| Codex CLI/IDE | `$release-gate --version` | `$release-gate init` | `$release-gate validate` | `$release-gate run --base <trusted-ref>` | `$release-gate assure --base <trusted-ref>` |
+| Claude Code | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` | `/release-gate assure --base <trusted-ref>` |
+| Antigravity IDE/CLI | `/release-gate --version` | `/release-gate init` | `/release-gate validate` | `/release-gate run --base <trusted-ref>` | `/release-gate assure --base <trusted-ref>` |
 
 Codex uses `$release-gate`; it does not provide arbitrary custom slash
 commands. `/skills` can be used to find and select the installed skill.
@@ -346,73 +350,74 @@ tamper-evident when budget and artifact slots permit it.
 ## Upgrade, uninstall, and rollback
 
 Never use self-update, and never use an unpinned `skills update`. Retain the
-prior wheel, host archive, and `SHA256SUMS` in a separate rollback directory.
-Then download the 0.6.0 `SHA256SUMS`, wheel, and exactly one archive for the
-host target into a fresh directory:
+prior wheels, host archive, and `SHA256SUMS` in a separate rollback directory.
+Then download the 0.7.0 `SHA256SUMS`, Release Gate wheel, mapper wheel, and
+exactly one archive for the host target into a fresh directory:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release_gate-0.6.0-py3-none-any.whl
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release_gate-0.7.0-py3-none-any.whl
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/conceptual_diversity_mapper-1.0.0-py3-none-any.whl
 ```
 
 Choose exactly one matching host download-and-check pair below. Do not download
 several host archives into the upgrade directory. The `uv run --no-project`
 verification command is identical in macOS shells and Windows PowerShell. It
-validates every `SHA256SUMS` line, requires exactly one entry for both selected
-assets, and compares both bytestring digests before any removal.
+validates every `SHA256SUMS` line, requires exactly one entry for each selected
+asset, and compares all bytestring digests before any removal.
 
 ```bash
 # GitHub Copilot CLI
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-copilot-0.6.0.tar.gz
-uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.6.0-py3-none-any.whl release-gate-skill-copilot-0.6.0.tar.gz
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-copilot-0.7.0.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl conceptual_diversity_mapper-1.0.0-py3-none-any.whl release-gate-skill-copilot-0.7.0.tar.gz
 
 # Codex CLI and IDE
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-codex-0.6.0.tar.gz
-uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.6.0-py3-none-any.whl release-gate-skill-codex-0.6.0.tar.gz
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-codex-0.7.0.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl conceptual_diversity_mapper-1.0.0-py3-none-any.whl release-gate-skill-codex-0.7.0.tar.gz
 
 # Claude Code
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-claude-code-0.6.0.tar.gz
-uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.6.0-py3-none-any.whl release-gate-skill-claude-code-0.6.0.tar.gz
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-claude-code-0.7.0.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl conceptual_diversity_mapper-1.0.0-py3-none-any.whl release-gate-skill-claude-code-0.7.0.tar.gz
 
 # Antigravity IDE or CLI (one shared archive)
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz
-uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.6.0-py3-none-any.whl release-gate-skill-antigravity-0.6.0.tar.gz
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl conceptual_diversity_mapper-1.0.0-py3-none-any.whl release-gate-skill-antigravity-0.7.0.tar.gz
 ```
 
-Stop unless the manifest came from the same immutable 0.6.0 release and both
+Stop unless the manifest came from the same immutable 0.7.0 release and both
 selected asset checks report `OK` exactly once. Complete these checks before
 removing or replacing anything. Then run exactly one host block. Each block
 removes the old copied skill with the exact pinned installer, installs the
-immutable 0.6.0 URL with `--global --copy` for the same target, and uses
+immutable 0.7.0 URL with `--global --copy` for the same target, and uses
 `skills list` to discover the installed skill without invoking it:
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent github-copilot --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-copilot-0.6.0.tar.gz --global --copy --agent github-copilot
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-copilot-0.7.0.tar.gz --global --copy --agent github-copilot
 npx --yes skills@1.5.23 list --global --agent github-copilot
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent codex --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-codex-0.6.0.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-codex-0.7.0.tar.gz --global --copy --agent codex
 npx --yes skills@1.5.23 list --global --agent codex
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent claude-code --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-claude-code-0.6.0.tar.gz --global --copy --agent claude-code
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-claude-code-0.7.0.tar.gz --global --copy --agent claude-code
 npx --yes skills@1.5.23 list --global --agent claude-code
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz --global --copy --agent antigravity
 npx --yes skills@1.5.23 list --global --agent antigravity
 ```
 
 ```bash
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity-cli --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz --global --copy --agent antigravity-cli
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz --global --copy --agent antigravity-cli
 npx --yes skills@1.5.23 list --global --agent antigravity-cli
 ```
 
@@ -423,9 +428,9 @@ never from a package index, and confirm the exact version:
 ```bash
 uv tool uninstall release-gate
 python -m build --wheel --no-isolation
-uv tool install --offline .\dist\release_gate-0.6.0-py3-none-any.whl
+uv tool install --offline --with .\dist\conceptual_diversity_mapper-1.0.0-py3-none-any.whl .\dist\release_gate-0.7.0-py3-none-any.whl
 release-gate --version
-# required output: release-gate 0.6.0
+# required output: release-gate 0.7.0
 ```
 
 To uninstall without upgrading, run only the matching `skills remove` line
@@ -436,7 +441,7 @@ uv tool uninstall release-gate
 ```
 
 For rollback to the retained prior pair, stop invoking the skill, remove the
-0.6.0 copied skill with the same pinned removal command, and reinstall the
+0.7.0 copied skill with the same pinned removal command, and reinstall the
 retained checksum-verified prior archive with `skills@1.5.23 --global --copy`
 for the same agent target. Then uninstall the current CLI and install the
 retained verified local prior wheel. Confirm the prior `release-gate --version`
@@ -463,7 +468,7 @@ Release Gate is designed to run in standard SDLC CI/CD pipelines (like GitHub Ac
 
 1. **Use the Trusted Base:** Always pass the explicitly trusted target branch (e.g., `origin/main` or `HEAD^`) as `--base`. Never allow the candidate code to specify the base revision or alter the installation of Release Gate itself.
 2. **Immutable Install:** Install the exact, checksum-verified release wheel URL (never a floating `latest` tag).
-3. **Handle Pipeline Exits:** `release-gate run` exits 0 (PASS), 1 (FAIL), or 2 (NEEDS_HUMAN). Treat these as your business-logic verdicts. Exits 3 or 4 indicate operational pipeline failures (e.g., malformed configuration, missing dependencies) and should fail the pipeline directly.
+3. **Handle Pipeline Exits:** `release-gate run` and `release-gate assure` both exit 0 (PASS), 1 (FAIL), or 2 (NEEDS_HUMAN) after finalizing a result. Use `run` for deterministic gate enforcement and `assure` when CI should enforce the reviewed conceptual coverage policy. Exits 3 or 4 indicate operational pipeline failures (e.g., malformed configuration, missing dependencies) and should fail the pipeline directly.
 4. **Preserve Evidence:** Store the `.release-gate/runs/` evidence directory as a pipeline artifact. This provides a detailed, tamper-evident `result.json` explaining the verdict.
 5. **Matrix Testing:** Repositories claiming cross-platform support should run the gate on all claimed operating systems (Linux, macOS, Windows) because argv handling, executable names, and path casing differ natively.
 
@@ -497,14 +502,16 @@ jobs:
       - name: Install and verify Release Gate
         run: |
           # Download immutable manifest and wheel
-          curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/SHA256SUMS
-          curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release_gate-0.6.0-py3-none-any.whl
+          curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/SHA256SUMS
+          curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release_gate-0.7.0-py3-none-any.whl
+          curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/conceptual_diversity_mapper-1.0.0-py3-none-any.whl
           
           # Verify checksum
-          grep '  release_gate-0.6.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+          grep '  release_gate-0.7.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+          grep '  conceptual_diversity_mapper-1.0.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
           
           # Install CLI
-          uv tool install ./release_gate-0.6.0-py3-none-any.whl
+          uv tool install --with ./conceptual_diversity_mapper-1.0.0-py3-none-any.whl ./release_gate-0.7.0-py3-none-any.whl
 
       - name: Run Release Gate Validate
         run: release-gate validate --repo .

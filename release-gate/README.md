@@ -69,22 +69,24 @@ The following are release-ready commands, not an availability announcement. Run 
 <!-- release-version-sync:start -->
 All fenced `bash` download commands require a POSIX shell. On Windows, run them in Git Bash; do not paste the `curl` lines into PowerShell.
 
-For example, download `SHA256SUMS` and `release_gate-0.6.0-py3-none-any.whl` from the immutable `release-gate-v0.6.0` release, verify the wheel entry, and then install it:
+For example, download `SHA256SUMS`, `release_gate-0.7.0-py3-none-any.whl`, and `conceptual_diversity_mapper-1.0.0-py3-none-any.whl` from the immutable `release-gate-v0.7.0` release, verify both wheel entries, and then install them together:
 
 ```bash
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/SHA256SUMS
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release_gate-0.6.0-py3-none-any.whl
-grep '  release_gate-0.6.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-uv tool install ./release_gate-0.6.0-py3-none-any.whl
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/SHA256SUMS
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release_gate-0.7.0-py3-none-any.whl
+curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/conceptual_diversity_mapper-1.0.0-py3-none-any.whl
+grep '  release_gate-0.7.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+grep '  conceptual_diversity_mapper-1.0.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
+uv tool install --with ./conceptual_diversity_mapper-1.0.0-py3-none-any.whl ./release_gate-0.7.0-py3-none-any.whl
 release-gate --version
 ```
 
-The published SHA-256 checksum covers the Release Gate wheel itself, not its transitive dependencies. `uv tool install` resolves the declared dependency ranges from the configured package index at install time; those dependency bytes are outside the release asset checksum. The development `uv.lock` is not consumed by this tool installation. Operators that require a reproducible complete environment must separately control and record the index and resolved dependency artifacts.
+The published SHA-256 checksums cover the Release Gate wheel, mapper wheel, host skill archives, and source distributions. `uv tool install` still resolves ordinary third-party dependency ranges from the configured package index at install time; those dependency bytes are outside the release asset checksum. The development `uv.lock` is not consumed by this tool installation. Operators that require a reproducible complete environment must separately control and record the index and resolved dependency artifacts.
 
 Then install the matching assistant archive with `skills@1.5.23`, always using `--global`, `--copy`, and the explicit host target. This Codex example passes the immutable release asset URL directly, after the separate download and checksum review described in [Adoption](docs/adoption.md):
 
 ```bash
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-codex-0.6.0.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-codex-0.7.0.tar.gz --global --copy --agent codex
 ```
 
 ## Updating an Existing Installation
@@ -96,35 +98,35 @@ After verifying the new wheel and exactly one host archive, run exactly one matc
 ```bash
 # GitHub Copilot CLI
 npx --yes skills@1.5.23 remove release-gate --global --agent github-copilot --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-copilot-0.6.0.tar.gz --global --copy --agent github-copilot
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-copilot-0.7.0.tar.gz --global --copy --agent github-copilot
 npx --yes skills@1.5.23 list --global --agent github-copilot
 ```
 
 ```bash
 # Codex CLI and IDE
 npx --yes skills@1.5.23 remove release-gate --global --agent codex --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-codex-0.6.0.tar.gz --global --copy --agent codex
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-codex-0.7.0.tar.gz --global --copy --agent codex
 npx --yes skills@1.5.23 list --global --agent codex
 ```
 
 ```bash
 # Claude Code
 npx --yes skills@1.5.23 remove release-gate --global --agent claude-code --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-claude-code-0.6.0.tar.gz --global --copy --agent claude-code
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-claude-code-0.7.0.tar.gz --global --copy --agent claude-code
 npx --yes skills@1.5.23 list --global --agent claude-code
 ```
 
 ```bash
 # Antigravity IDE
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz --global --copy --agent antigravity
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz --global --copy --agent antigravity
 npx --yes skills@1.5.23 list --global --agent antigravity
 ```
 
 ```bash
 # Antigravity CLI
 npx --yes skills@1.5.23 remove release-gate --global --agent antigravity-cli --yes
-npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.6.0/release-gate-skill-antigravity-0.6.0.tar.gz --global --copy --agent antigravity-cli
+npx --yes skills@1.5.23 add https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz --global --copy --agent antigravity-cli
 npx --yes skills@1.5.23 list --global --agent antigravity-cli
 ```
 
@@ -132,14 +134,14 @@ The skill and CLI versions now differ temporarily. Do not invoke Release Gate wh
 
 ```bash
 uv tool uninstall release-gate
-uv tool install ./release_gate-0.6.0-py3-none-any.whl
+uv tool install --with ./conceptual_diversity_mapper-1.0.0-py3-none-any.whl ./release_gate-0.7.0-py3-none-any.whl
 release-gate --version
-# required output: release-gate 0.6.0
+# required output: release-gate 0.7.0
 ```
 
 For Copilot, Claude Code, and Antigravity, run `/release-gate --version`; for Codex, run `$release-gate --version`. Resume only when the bundled skill version and executable version match.
 
-Invoke the skill explicitly: `/release-gate init` in Copilot and Claude Code, `$release-gate init` in Codex, and `/release-gate init` in Antigravity. Codex does not support arbitrary custom slash commands; `/skills` can select the installed skill. `/release-gate --version` (or `$release-gate --version` in Codex) reports exactly `release-gate 0.6.0` from the bundled skill version; it does not call the CLI or inspect the repository. The only operational subcommands are `init`, `validate`, and `run`.
+Invoke the skill explicitly: `/release-gate init` in Copilot and Claude Code, `$release-gate init` in Codex, and `/release-gate init` in Antigravity. Codex does not support arbitrary custom slash commands; `/skills` can select the installed skill. `/release-gate --version` (or `$release-gate --version` in Codex) reports exactly `release-gate 0.7.0` from the bundled skill version; it does not call the CLI or inspect the repository. The operational subcommands are `init`, `validate`, `run`, `assure`, and `repair`.
 <!-- release-version-sync:end -->
 
 After guided initialization, review and commit `.release-gate.yaml`. From the target repository directory, validate and run it against an explicit trusted base revision:
@@ -167,10 +169,11 @@ After a run, the skill reports each exact check status and labels `ERROR` and `S
 
 | Command | Invocation Layer | Purpose |
 |---|---|---|
-| `release-gate --version` | CLI / Skill | Report the exact installed CLI version or bundled skill compatibility version (`release-gate 0.6.0`). |
+| `release-gate --version` | CLI / Skill | Report the exact installed CLI version or bundled skill compatibility version (`release-gate 0.7.0`). |
 | `release-gate init [--repo PATH] [--from-config PATH]` | CLI / Skill (`/release-gate init`) | Create a generic draft or copy an already validated policy byte-for-byte. |
 | `release-gate validate [--repo PATH]` | CLI / Skill (`/release-gate validate`) | Validate working-copy policy draft without running repository commands. |
 | `release-gate run [--repo PATH] --base REF [--output PATH] [--run-id ID]` | CLI / Skill (`/release-gate run --base REF`) | Reconstruct candidate, run policy checks, finalize evidence, and emit stable verdict (`PASS`, `FAIL`, `NEEDS_HUMAN`). |
+| `release-gate assure [--repo PATH] --base REF [--output PATH] [--run-id ID]` | CLI / Skill (`/release-gate assure --base REF`) | Run the deterministic gate once, map verified evidence through the reviewed assurance policy, and emit `GATE_VERDICT` plus `ASSURANCE_DISPOSITION`. |
 | `/release-gate repair --base REF` | Assistant Skill | Orchestrate full human-in-the-loop bounded repair loop ($C0 \to C1 \to C2$) in isolated workspaces. |
 
 ### Private Repair Protocol Commands
@@ -281,4 +284,3 @@ changes and release notes before committing. CI enforces the same source with
 
 Source and releases live in the [blindspot-remediation repository](https://github.com/jerryshao2012/blindspot-remediation).
 Use [GitHub issues](https://github.com/jerryshao2012/blindspot-remediation/issues) for non-sensitive inquiries. Report vulnerabilities through [private vulnerability reporting](https://github.com/jerryshao2012/blindspot-remediation/security/advisories/new) per the [security policy](SECURITY.md).
-

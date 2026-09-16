@@ -133,9 +133,7 @@ def test_load_playbooks_from_base(tmp_path: Path) -> None:
     )
 
     # Load from base commit -> should read base commit playbook, not worktree
-    playbooks = load_playbooks_from_base(
-        repo, base_commit, failed_check_ids=["pytest"]
-    )
+    playbooks = load_playbooks_from_base(repo, base_commit, failed_check_ids=["pytest"])
     assert playbooks.is_custom
     assert "tests/conftest.py" in playbooks.extra_approved_paths
     assert "Pytest Repair Guide" in playbooks.guidance_for_checks(["pytest"])

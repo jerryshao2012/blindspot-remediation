@@ -34,7 +34,7 @@ def _init_repo(path: Path) -> str:
     )
 
     python_exe = sys.executable.replace("\\", "/")
-    policy = f"""\\
+    policy = f"""\
 version: 1
 scope:
   allowed_paths: ["**"]
@@ -211,9 +211,7 @@ def test_repair_integration_multi_attempt_pass(
     repo = tmp_path / "repo"
     repo.mkdir()
     _init_repo(repo)
-    (repo / "app.py").write_text(
-        "def add(a, b):\n    return a - b\n", encoding="utf-8"
-    )
+    (repo / "app.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
 
     assert main(["repair-start", "--repo", str(repo), "--base", "HEAD"]) == 0
     start_out = capsys.readouterr().out
@@ -332,9 +330,7 @@ def test_repair_integration_repeated_candidate_stops_without_retry(
     repo = tmp_path / "repo"
     repo.mkdir()
     _init_repo(repo)
-    (repo / "app.py").write_text(
-        "def add(a, b):\n    return a - b\n", encoding="utf-8"
-    )
+    (repo / "app.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
 
     assert main(["repair-start", "--repo", str(repo), "--base", "HEAD"]) == 0
     start_out = capsys.readouterr().out

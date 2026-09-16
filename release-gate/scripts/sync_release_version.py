@@ -30,7 +30,7 @@ MARKED_PATTERNS = (
 )
 
 MARKED_RELEASE_FILES = {
-    Path("release-gate/README.md"): (MARKED_PATTERNS, 22),
+    Path("release-gate/README.md"): (MARKED_PATTERNS, 23),
     Path("release-gate/demo/python-slugify/README.md"): (MARKED_PATTERNS, 1),
     Path("release-gate/demo/rate-limiter/README.md"): (MARKED_PATTERNS, 2),
     Path("release-gate/docs/adoption.md"): (
@@ -41,7 +41,7 @@ MARKED_RELEASE_FILES = {
             re.compile(rf"(?<=same immutable ){SEMVER}(?= release)"),
             re.compile(rf"(?m)^{SEMVER}(?= copied skill)"),
         ),
-        70,
+        73,
     ),
     Path("release-gate/docs/cli.md"): (
         (*MARKED_PATTERNS, re.compile(rf"(?<=The ){SEMVER}(?= assistant archives)")),

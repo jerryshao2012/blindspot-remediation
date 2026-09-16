@@ -59,9 +59,9 @@ def test_parser_exposes_rate_limiter_demo_commands() -> None:
     parsed_repair = parser.parse_args(["prepare-repair"])
     assert parsed_repair.command == "prepare-repair"
     assert parsed_repair.graphify == "missing"
-    assert parser.parse_args(
-        ["prepare-repair", "--graphify", "stale"]
-    ).graphify == "stale"
+    assert (
+        parser.parse_args(["prepare-repair", "--graphify", "stale"]).graphify == "stale"
+    )
     with pytest.raises(SystemExit):
         parser.parse_args(["prepare-repair", "--graphify", "fresh"])
     for command in ("inspect", "grade"):

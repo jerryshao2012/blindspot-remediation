@@ -31,6 +31,9 @@ def test_package_contains_all_v1_schemas() -> None:
         "manifest-v1.schema.json",
         "gate-decisions-v1.schema.json",
         "qualification-v1.schema.json",
+        "assurance-policy-v1.schema.json",
+        "assurance-result-v1.schema.json",
+        "assurance-manifest-v1.schema.json",
     }
 
 

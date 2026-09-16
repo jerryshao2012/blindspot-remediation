@@ -1,7 +1,7 @@
 # Release qualification
 
 <!-- release-version-sync:start -->
-Release Gate 0.6.0 is not qualified or published yet. In particular, this
+Release Gate 0.7.0 is not qualified or published yet. In particular, this
 repository does **not** claim that `skills@1.5.23` has been obtained and tested,
 or that any of the six advertised assistant surfaces has passed. Promotion is
 designed to stop until the exact installer is available and complete evidence
@@ -10,7 +10,7 @@ passes both the JSON Schema and semantic validator.
 ## Immutable candidate
 
 The protected release workflow builds the wheel, source distribution, and four
-host archives once for `release-gate-v0.6.0-rc.1`. It emits a sorted
+host archives once for `release-gate-v0.7.0-rc.1`. It emits a sorted
 `SHA256SUMS`, verifies source/wheel/CLI/compatibility/archive version agreement,
 and publishes only after approval through the `release-gate-production`
 environment. An existing tag or release is never replaced.
@@ -25,7 +25,7 @@ job. Until those environment rules exist, maintainers must treat the workflow
 as unprotected and must not dispatch a release.
 
 Final promotion downloads those existing RC assets. It does not rebuild them.
-The final `release-gate-v0.6.0` tag must target the same commit and receives the
+The final `release-gate-v0.7.0` tag must target the same commit and receives the
 same bytes only after qualification passes. The previous release is retained
 for rollback.
 
@@ -83,15 +83,15 @@ result, or manifest schema versions. The qualification v1 case registry adds
 the two observability cases above and the three repair cases above.
 
 The checked-in
-[`release-gate-v0.6.0-rc.1.pending.json`](../qualification/release-gate-v0.6.0-rc.1.pending.json)
+[`release-gate-v0.7.0-rc.1.pending.json`](../qualification/release-gate-v0.7.0-rc.1.pending.json)
 is an explicitly non-promotable example. Its zero hashes, placeholder commit,
 and pending results are not qualification evidence. After external testing,
-create `qualification/release-gate-v0.6.0-rc.1.json` with actual values and run:
+create `qualification/release-gate-v0.7.0-rc.1.json` with actual values and run:
 
 ```bash
 uv run python scripts/validate_qualification.py \
-  qualification/release-gate-v0.6.0-rc.1.json \
-  --expected-tag release-gate-v0.6.0-rc.1 \
+  qualification/release-gate-v0.7.0-rc.1.json \
+  --expected-tag release-gate-v0.7.0-rc.1 \
   --expected-commit FULL_RC_COMMIT \
   --assets-dir /path/to/downloaded-rc-assets
 ```

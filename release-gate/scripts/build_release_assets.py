@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the deterministic v0.6.0 RC asset set exactly once."""
+"""Build the deterministic v0.7.0 RC asset set exactly once."""
 
 from __future__ import annotations
 
@@ -71,6 +71,21 @@ def build_release_assets(root: Path, output_dir: Path, tag: str) -> None:
                 str(package_dir),
             ],
             cwd=root,
+            env=environment,
+            check=True,
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--no-isolation",
+                "--wheel",
+                "--sdist",
+                "--outdir",
+                str(package_dir),
+            ],
+            cwd=root.parent / "E1-E2-conceptual-diversity-mapper",
             env=environment,
             check=True,
         )

@@ -44,6 +44,8 @@ def expected_asset_names(version: str) -> set[str]:
     return {
         f"release_gate-{version}-py3-none-any.whl",
         f"release_gate-{version}.tar.gz",
+        "conceptual_diversity_mapper-1.0.0-py3-none-any.whl",
+        "conceptual_diversity_mapper-1.0.0.tar.gz",
         *(f"release-gate-skill-{host}-{version}.tar.gz" for host in HOSTS),
     }
 
@@ -98,7 +100,7 @@ def _metadata_version(content: str, label: str) -> str:
     return versions[0]
 
 
-def _verify_wheel(path: Path, version: str) -> None:
+def _verify_wheel(path: Path, version: str, *, mapper: bool = False) -> None:
     with zipfile.ZipFile(path) as archive:
         entries = archive.infolist()
         names = [entry.filename for entry in entries]
@@ -125,11 +127,11 @@ def _verify_wheel(path: Path, version: str) -> None:
         entrypoints = [
             name for name in names if name.endswith(".dist-info/entry_points.txt")
         ]
-        if len(metadata) != 1 or len(entrypoints) != 1:
+        if len(metadata) != 1 or (not mapper and len(entrypoints) != 1):
             raise ValueError("wheel metadata or entry points are missing")
         if _metadata_version(archive.read(metadata[0]).decode(), "wheel") != version:
             raise ValueError("wheel METADATA version does not match source")
-        if (
+        if not mapper and (
             "release-gate = release_gate.cli:main"
             not in archive.read(entrypoints[0]).decode()
         ):
@@ -271,6 +273,11 @@ def _verify_installed_cli(wheel: Path, version: str) -> None:
         with zipfile.ZipFile(wheel) as archive:
             # _verify_wheel has already rejected traversal and absolute paths.
             archive.extractall(installed)
+        mapper_wheel = (
+            wheel.parent / "conceptual_diversity_mapper-1.0.0-py3-none-any.whl"
+        )
+        with zipfile.ZipFile(mapper_wheel) as archive:
+            archive.extractall(installed)
         environment = os.environ.copy()
         existing_path = environment.get("PYTHONPATH")
         environment["PYTHONPATH"] = str(installed) + (
@@ -280,6 +287,7 @@ def _verify_installed_cli(wheel: Path, version: str) -> None:
             [
                 sys.executable,
                 "-c",
+                "from release_gate.assurance.service import run_assurance; "
                 "from release_gate.cli import main; raise SystemExit(main())",
                 "--version",
             ],
@@ -347,6 +355,9 @@ def verify_assets(
     expected_repair = _normalized_text_bytes(
         root / "skills/release-gate/references/repair.md"
     )
+    mapper_wheel = assets_dir / "conceptual_diversity_mapper-1.0.0-py3-none-any.whl"
+    _verify_wheel(mapper_wheel, "1.0.0", mapper=True)
+    _verify_sdist(assets_dir / "conceptual_diversity_mapper-1.0.0.tar.gz", "1.0.0")
     _verify_wheel(wheel, version)
     _verify_sdist(assets_dir / f"release_gate-{version}.tar.gz", version)
     for host in HOSTS:

@@ -2,14 +2,14 @@
 name: release-gate
 description: >-
   Use only when explicitly invoked by the user to report its version,
-  initialize, validate, run, or repair with Release Gate. Do not invoke implicitly.
+  initialize, validate, run, assure, or repair with Release Gate. Do not invoke implicitly.
 ---
 
 # Release Gate
 
 Use the installed `release-gate` CLI as the sole policy validator and verdict
 engine. This skill dispatches informational `--version` or the explicit
-operations `init | validate | run | repair`.
+operations `init | validate | run | assure | repair`.
 
 ## Explicit invocation guard
 
@@ -17,28 +17,28 @@ Proceed only when the user explicitly invoked Release Gate and supplied
 `--version` or one of the supported subcommands. A host may load this
 skill implicitly; loading is not authorization for operational effects.
 Missing or unknown subcommand or input: show
-`release-gate <--version|init|validate|run|repair> [options]` usage and make no operational tool call.
+`release-gate <--version|init|validate|run|assure|repair> [options]` usage and make no operational tool call.
 Do not infer a subcommand from repository context.
 
 <!-- release-version-sync:start -->
 ## Informational `--version`
 
 For explicit `/release-gate --version` (or `$release-gate --version` in Codex),
-read `references/compatibility.json`. Report exactly `release-gate 0.6.0` and
+read `references/compatibility.json`. Report exactly `release-gate 0.7.0` and
 stop. Do not call the CLI, do not run compatibility preflight, do not consider
 Graphify, and do not perform an `init`, `validate`, or `run` operation or any
 repository operation.
 
 ## Compatibility preflight
 
-For each of `init`, `validate`, `run`, and `repair`, the first operational call is exactly:
+For each of `init`, `validate`, `run`, `assure`, and `repair`, the first operational call is exactly:
 
 ```text
 release-gate --version
 ```
 
 Read `references/compatibility.json` and require exact output
-`release-gate 0.6.0`. If the executable is missing, the reference is unreadable,
+`release-gate 0.7.0`. If the executable is missing, the reference is unreadable,
 or the output differs, stop safely. Do not install, upgrade, retry, or continue.
 <!-- release-version-sync:end -->
 
@@ -180,3 +180,18 @@ After preflight, for explicit `repair --base <ref>`:
 - Do not retry automatically after a command or completed verdict.
 - Never retry, merge, or deploy, and never suppress or change `NEEDS_HUMAN`.
 - Do not claim sandboxing, security review, merge approval, or deployment authority.
+
+
+## `assure`
+
+After exact compatibility preflight, execute `release-gate assure --base <ref>`
+with the user-supplied repository, output and run ID options, once. Read
+`references/assurance.md` for assessment semantics. This command requires a
+reviewed `.release-gate-assurance.yaml` in the base commit. Never author or weaken
+that policy while running assurance. Do not generate tests, retry, repair, merge,
+or deploy. Do not run Graphify during `assure`.
+
+Report `GATE_VERDICT`, `ASSURANCE_DISPOSITION`, `ASSURANCE_MODE`, and
+`ASSESSMENT_STATUS` exactly, and link the result. The final assurance disposition
+and exit code govern this operation. An advisory PASS is not a claim of sufficient
+conceptual coverage. Exits 3 and 4 are errors and must not be reported as PASS.

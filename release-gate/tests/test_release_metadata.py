@@ -50,7 +50,7 @@ def test_package_metadata_uses_the_license_file_and_authoritative_urls() -> None
 
 
 def test_version_agrees_across_release_metadata() -> None:
-    assert __version__ == "0.6.0"
+    assert __version__ == "0.7.0"
     compatibility = json.loads(
         _read("skills/release-gate/references/compatibility.json")
     )
@@ -63,6 +63,9 @@ def test_version_agrees_across_release_metadata() -> None:
     assert "GitHub release page is authoritative" in changelog
     assert "pending release" not in changelog
     for phrase in (
+        "release-gate assure",
+        "conceptual-diversity-mapper",
+        "assurance evidence packages",
         "assurance-aware initialization",
         "honest run reporting",
         "gauntlet hardening",
@@ -165,7 +168,9 @@ def test_current_release_workflows_and_qualification_use_package_version() -> No
     assert template["release"]["tag"] == rc_tag
     for asset in template["assets"]:
         if asset["name"] != "SHA256SUMS":
-            assert __version__ in asset["name"]
+            assert __version__ in asset["name"] or asset["name"].startswith(
+                "conceptual_diversity_mapper-1.0.0"
+            )
 
 
 def test_build_backend_and_uv_are_exactly_locked() -> None:
@@ -184,8 +189,8 @@ def test_install_docs_bound_checksums_to_release_assets_not_dependencies() -> No
         "\n".join((_read("README.md"), _read("docs/adoption.md"))).split()
     )
 
-    assert "checksum covers the Release Gate wheel itself" in release_docs
-    assert "resolves the declared dependency ranges" in release_docs
+    assert "checksums cover the Release Gate wheel, mapper wheel" in release_docs
+    assert "resolves ordinary third-party dependency ranges" in release_docs
     assert "outside the release asset checksum" in release_docs
     assert "development `uv.lock` is not consumed" in release_docs
 
@@ -228,10 +233,15 @@ def test_install_examples_are_gated_on_publication_and_explain_redownload() -> N
 def test_upgrade_commands_remove_then_install_verified_pinned_artifacts() -> None:
     adoption = _read("docs/adoption.md")
     wheel = f"release_gate-{__version__}-py3-none-any.whl"
+    mapper = "conceptual_diversity_mapper-1.0.0-py3-none-any.whl"
     wheel_url = f"{REPOSITORY}/releases/download/{RELEASE_TAG}/{wheel}"
 
     assert f"curl --fail --location --remote-name {wheel_url}" in adoption
-    assert "uv tool uninstall release-gate\nuv tool install ./" + wheel in adoption
+    assert "uv tool uninstall release-gate" in adoption
+    assert (
+        f"uv tool install --offline --with .\\dist\\{mapper} .\\dist\\{wheel}"
+        in adoption
+    )
     for host, agent in HOST_AGENTS.items():
         archive = f"release-gate-skill-{host}-{__version__}.tar.gz"
         archive_url = f"{REPOSITORY}/releases/download/{RELEASE_TAG}/{archive}"
@@ -250,6 +260,7 @@ def test_readme_documents_safe_updates_for_every_host() -> None:
     upgrade = readme.split(heading, 1)[1].split("Invoke the skill explicitly", 1)[0]
     normalized = " ".join(upgrade.split())
     wheel = f"release_gate-{__version__}-py3-none-any.whl"
+    mapper = "conceptual_diversity_mapper-1.0.0-py3-none-any.whl"
 
     for phrase in (
         "only after the final GitHub release is published",
@@ -297,7 +308,7 @@ def test_readme_documents_safe_updates_for_every_host() -> None:
     cli_block = (
         "```bash\n"
         "uv tool uninstall release-gate\n"
-        f"uv tool install ./{wheel}\n"
+        f"uv tool install --with ./{mapper} ./{wheel}\n"
         "release-gate --version\n"
         f"# required output: release-gate {__version__}\n"
         "```"
@@ -339,7 +350,7 @@ def test_upgrade_retains_and_verifies_both_pairs_before_removal() -> None:
     wheel = f"release_gate-{__version__}-py3-none-any.whl"
 
     for phrase in (
-        "Retain the prior wheel, host archive, and `SHA256SUMS`",
+        "Retain the prior wheels, host archive, and `SHA256SUMS`",
         "exactly one archive for the host target",
         "before removing or replacing anything",
         "verified local wheel",
@@ -371,7 +382,9 @@ def test_upgrade_retains_and_verifies_both_pairs_before_removal() -> None:
 
 def test_upgrade_checksum_commands_are_cross_platform_and_require_one_entry() -> None:
     adoption = _read("docs/adoption.md")
-    upgrade = adoption.split("## Upgrade, uninstall, and rollback", 1)[1]
+    upgrade = adoption.split("## Upgrade, uninstall, and rollback", 1)[1].split(
+        "## Distribution limits", 1
+    )[0]
     verification = "uv run --no-project python -c"
 
     assert "grep " not in upgrade
@@ -385,9 +398,10 @@ def test_upgrade_checksum_commands_are_cross_platform_and_require_one_entry() ->
     ):
         assert upgrade.count(guard) == 4
     wheel = f"release_gate-{__version__}-py3-none-any.whl"
+    mapper = "conceptual_diversity_mapper-1.0.0-py3-none-any.whl"
     for host in HOST_AGENTS:
         archive = f"release-gate-skill-{host}-{__version__}.tar.gz"
-        assert f'" {wheel} {archive}' in upgrade
+        assert f'" {wheel} {mapper} {archive}' in upgrade
     assert "PowerShell" in upgrade
     assert "macOS" in upgrade
     for document in (adoption, _read("README.md")):

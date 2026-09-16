@@ -28,7 +28,7 @@ def test_skill_dispatches_only_explicit_operations() -> None:
     text = SKILL.read_text(encoding="utf-8")
     required = [
         "Explicit invocation guard",
-        "init | validate | run | repair",
+        "init | validate | run | assure | repair",
         "Missing or unknown subcommand",
         "no operational tool call",
         "release-gate --version",
@@ -310,9 +310,7 @@ def test_repair_reference_is_present_and_well_formed() -> None:
 def test_repair_contract_explicitly_loops_and_bounds_graphify() -> None:
     text = " ".join(SKILL.read_text(encoding="utf-8").split())
     repair_reference = " ".join(
-        (SKILL.parent / "references" / "repair.md")
-        .read_text(encoding="utf-8")
-        .split()
+        (SKILL.parent / "references" / "repair.md").read_text(encoding="utf-8").split()
     )
     for phrase in (
         "`repairing` / `edit_workspace`",

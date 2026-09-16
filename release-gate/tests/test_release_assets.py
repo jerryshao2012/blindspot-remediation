@@ -52,6 +52,8 @@ def test_verifier_rejects_version_or_archive_name_mismatch(tmp_path: Path) -> No
     names = expected_asset_names(__version__)
     assert f"release_gate-{__version__}-py3-none-any.whl" in names
     assert f"release_gate-{__version__}.tar.gz" in names
+    assert "conceptual_diversity_mapper-1.0.0-py3-none-any.whl" in names
+    assert "conceptual_diversity_mapper-1.0.0.tar.gz" in names
     assert f"release-gate-skill-codex-{__version__}.tar.gz" in names
     with pytest.raises(ValueError):
         expected_asset_names("0.2.0/../unsafe")

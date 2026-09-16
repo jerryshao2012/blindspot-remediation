@@ -5,6 +5,7 @@ on:
     paths:
       - ".gitignore"
       - "release-gate/**"
+      - "E1-E2-conceptual-diversity-mapper/**"
       - "!release-gate/demo/*.html"
       - "!release-gate/**/*.md"
       - "!release-gate/**/README*"
@@ -14,6 +15,7 @@ on:
     paths:
       - ".gitignore"
       - "release-gate/**"
+      - "E1-E2-conceptual-diversity-mapper/**"
       - "!release-gate/demo/*.html"
       - "!release-gate/**/*.md"
       - "!release-gate/**/README*"
@@ -71,8 +73,8 @@ jobs:
       - name: Validate pending qualification template shape
         run: >-
           uv run python scripts/validate_qualification.py
-          qualification/release-gate-v0.6.0-rc.1.pending.json
-          --expected-tag release-gate-v0.6.0-rc.1
+          qualification/release-gate-v0.7.0-rc.1.pending.json
+          --expected-tag release-gate-v0.7.0-rc.1
           --allow-pending-schema-only
       - name: Build deterministic skill archives twice
         shell: bash
@@ -107,7 +109,7 @@ jobs:
           python-version: "3.12"
           version: "0.12.5"
       - name: Install Release Gate from this checkout
-        run: uv tool install ./release-gate
+        run: uv tool install --with ./E1-E2-conceptual-diversity-mapper ./release-gate
       - name: Verify PASS, FAIL, and NEEDS_HUMAN controls
         run: python release-gate/demo/python-slugify/demo.py verify
 
@@ -137,6 +139,6 @@ jobs:
           python-version: "3.12"
           version: "0.12.5"
       - name: Install Release Gate from this checkout
-        run: uv tool install ./release-gate
+        run: uv tool install --with ./E1-E2-conceptual-diversity-mapper ./release-gate
       - name: Verify oracle and PASS, FAIL, and NEEDS_HUMAN controls
         run: python release-gate/demo/rate-limiter/demo.py verify

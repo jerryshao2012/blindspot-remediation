@@ -217,6 +217,49 @@ rolling 100 use partial warm-up windows. The series exposes the latest 100
 points from up to 199 retained source summaries. A custom `--output` defines a
 shared scope; using one root across repositories intentionally combines them.
 
+## `assure`
+
+```text
+release-gate assure [--repo PATH] --base REF [--output PATH] [--run-id ID]
+```
+
+`assure` runs the deterministic gate once, verifies the finalized gate evidence
+package, extracts retained evidence, maps it through the reviewed conceptual
+diversity policy from the same base commit, and writes a separate assurance
+package under `<evidence-root>/_assurance/<run-id>/`. It never modifies the
+finalized gate package and never updates the deterministic dashboard.
+
+The base commit MUST contain `.release-gate-assurance.yaml`. Missing, malformed,
+or invalid assurance policy is an input/configuration error and exits 3. A
+candidate-side edit to `.release-gate-assurance.yaml` cannot weaken the policy:
+the gate still runs, but assurance records `ASSURANCE_POLICY_CHANGED` and the
+final disposition is `NEEDS_HUMAN`.
+
+Successful stdout ends with these stable lines:
+
+```text
+GATE_VERDICT: PASS|FAIL|NEEDS_HUMAN
+ASSURANCE_DISPOSITION: PASS|FAIL|NEEDS_HUMAN
+ASSURANCE_MODE: advisory|enforce
+ASSESSMENT_STATUS: COMPLETE|UNAVAILABLE|NOT_EVALUATED
+RESULT: <absolute-path-to-assurance-result.json>
+```
+
+Disposition preserves the deterministic verdict precedence. A gate `FAIL` stays
+`FAIL`, and a gate `NEEDS_HUMAN` stays `NEEDS_HUMAN`; assurance is recorded as
+`NOT_EVALUATED`. For a gate `PASS`, advisory mode returns `PASS` with assessment
+findings. Enforced mode returns `PASS` only when every explicit required concept
+region has the configured independent support and mapping uncertainty is within
+the configured maximum. If enforced assessment is unavailable or insufficient,
+the disposition is `NEEDS_HUMAN`.
+
+Assurance awards positive support only for verified candidate-side passing
+checks or JUnit cases with trusted reviewed mappings. JUnit case identity is the
+configured check ID, report ID, suite path, classname, and case name. Ambiguous
+duplicate case identities, failed/skipped/unknown cases, missing reports,
+changed reviewed sources, candidate-supplied labels, and unmapped observations
+are preserved diagnostically but do not satisfy required regions.
+
 ## Exit codes
 
 | Exit | Meaning | `result.json` guaranteed? |
@@ -264,8 +307,9 @@ commands and their 0/1/2 behavior remain intact. There is no A3 request-file,
 execution-result, plugin, or adapter mode in v1.
 
 <!-- release-version-sync:start -->
-The 0.6.0 assistant archives bundle `references/compatibility.json` and require
-the exact output `release-gate 0.6.0` before `init`, `validate`, `run`, or `repair`.
+The 0.7.0 assistant archives bundle `references/compatibility.json` and require
+the exact output `release-gate 0.7.0` before `init`, `validate`, `run`,
+`assure`, or `repair`.
 A missing executable or different version is a safe stop. Install the CLI wheel
 and host archive as a separately verified, version-matched pair using the
 [adoption procedure](adoption.md).

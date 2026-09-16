@@ -16,6 +16,21 @@ def main() -> int:
     if len(wheels) != 1:
         raise SystemExit(f"expected exactly one wheel, found {len(wheels)}")
     with tempfile.TemporaryDirectory(prefix="release-gate-wheel-") as temporary:
+        mapper_dist = Path(temporary) / "mapper"
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--no-isolation",
+                "--wheel",
+                "--outdir",
+                str(mapper_dist),
+            ],
+            cwd=root.parent / "E1-E2-conceptual-diversity-mapper",
+            check=True,
+        )
+        mapper_wheel = next(mapper_dist.glob("*.whl"))
         environment = Path(temporary) / "venv"
         subprocess.run(
             [sys.executable, "-m", "venv", "--system-site-packages", str(environment)],
@@ -29,7 +44,15 @@ def main() -> int:
             / ("release-gate.exe" if os.name == "nt" else "release-gate")
         )
         subprocess.run(
-            [str(python), "-m", "pip", "install", "--no-deps", str(wheels[0])],
+            [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                "--no-deps",
+                str(mapper_wheel),
+                str(wheels[0]),
+            ],
             check=True,
         )
         inherited_dependencies = os.pathsep.join(site.getsitepackages())
@@ -48,7 +71,14 @@ def main() -> int:
             )
         if not all(
             cmd in result.stdout
-            for cmd in ("init", "validate", "run", "repair-start", "repair-apply")
+            for cmd in (
+                "init",
+                "validate",
+                "run",
+                "assure",
+                "repair-start",
+                "repair-apply",
+            )
         ):
             raise SystemExit("installed command did not expose the expected CLI")
         version = subprocess.run(
@@ -58,7 +88,7 @@ def main() -> int:
             env=process_environment,
             check=False,
         )
-        if version.returncode != 0 or version.stdout != "release-gate 0.6.0\n":
+        if version.returncode != 0 or version.stdout != "release-gate 0.7.0\n":
             raise SystemExit(
                 "installed command reported the wrong version:\n"
                 f"stdout:\n{version.stdout}stderr:\n{version.stderr}"
@@ -69,6 +99,7 @@ def main() -> int:
                 "-c",
                 (
                     "import json; from importlib import resources; "
+                    "from release_gate.assurance.service import run_assurance; "
                     "from jsonschema import Draft202012Validator; "
                     "value=json.loads((resources.files('release_gate')/"
                     "'schemas'/'gate-decisions-v1.schema.json').read_text()); "

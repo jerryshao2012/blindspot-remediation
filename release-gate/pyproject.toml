@@ -11,6 +11,7 @@ requires-python = ">=3.11,<3.14"
 license = { file = "LICENSE" }
 authors = [{ name = "Blindspot Remediation contributors" }]
 dependencies = [
+  "conceptual-diversity-mapper==1.0.0",
   "pydantic>=2.12,<3",
   "PyYAML>=6.0,<7",
   "jsonschema[format]>=4.25,<5",
@@ -89,3 +90,6 @@ select = ["E", "F", "I", "B", "UP", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
+
+[tool.uv.sources]
+conceptual-diversity-mapper = { path = "../E1-E2-conceptual-diversity-mapper" }
