@@ -557,10 +557,18 @@ def test_trusted_base_validation_checks_origin_parent_and_policy(
     monkeypatch.setattr(driver, "UPSTREAM_SHA", upstream)
 
     driver._verify_repository()
+    (repository / ".release-gate.yaml").write_bytes(POLICY.read_bytes() + b"\n")
+    git("add", ".release-gate.yaml")
+    git("commit", "--amend", "-qm", "tampered primary policy")
+    git("tag", "-f", driver.BASE_REF)
+    with pytest.raises(driver.DemoError, match="trusted base policy"):
+        driver._verify_repository()
+
+    (repository / ".release-gate.yaml").write_bytes(POLICY.read_bytes())
     (repository / ".release-gate-assurance.yaml").write_text(
         "version: 1\nmode: enforce\n", encoding="utf-8"
     )
-    git("add", ".release-gate-assurance.yaml")
+    git("add", ".release-gate.yaml", ".release-gate-assurance.yaml")
     git("commit", "--amend", "-qm", "tampered assurance policy")
     git("tag", "-f", driver.BASE_REF)
     with pytest.raises(driver.DemoError, match="assurance policy"):

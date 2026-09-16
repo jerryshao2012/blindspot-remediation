@@ -541,9 +541,9 @@ def _verify_repository() -> None:
     parent = _git("rev-parse", f"{BASE_REF}^", capture=True)
     if len(base) != 40 or parent != UPSTREAM_SHA:
         raise DemoError(f"trusted base {BASE_REF} does not extend {UPSTREAM_SHA}")
-    policy = _git("show", f"{BASE_REF}:.release-gate.yaml", capture=True)
-    expected_policy = (ASSETS / ".release-gate.yaml").read_text(encoding="utf-8")
-    if policy.rstrip("\n") != expected_policy.rstrip("\n"):
+    policy = _git_blob(f"{BASE_REF}:.release-gate.yaml")
+    expected_policy = (ASSETS / ".release-gate.yaml").read_bytes()
+    if policy != expected_policy:
         raise DemoError("trusted base policy does not match the committed demo asset")
     assurance_policy = _git_blob(f"{BASE_REF}:.release-gate-assurance.yaml")
     expected_assurance_policy = (ASSETS / ".release-gate-assurance.yaml").read_bytes()
