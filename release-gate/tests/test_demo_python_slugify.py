@@ -637,9 +637,11 @@ def test_setup_installs_both_trusted_policies_before_tagging(
     )
     assert staged in git_calls
     commit = ("commit", "--quiet", "-m", "chore: add release gate demo policy")
-    assert git_calls.index(staged) < git_calls.index(commit)
-    assert git_calls.index(staged) < git_calls.index(("tag", driver.BASE_REF))
-    assert any("init" in command for command in run_calls)
+    tag = ("tag", driver.BASE_REF)
+    assert git_calls.index(staged) < git_calls.index(commit) < git_calls.index(tag)
+    assert [command[-5:] for command in run_calls if "init" in command] == [
+        ("init", "--repo", str(repository), "--from-config", str(POLICY))
+    ]
 
 
 def test_owned_directory_removal_refuses_paths_outside_workbench(
