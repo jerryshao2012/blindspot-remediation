@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -353,22 +354,20 @@ def test_verify_runs_assurance_for_all_controls(
     repository.mkdir()
     calls: list[tuple[str, ...]] = []
     graded: list[Path] = []
-    scenarios = iter(
-        (
-            ("pass", 0, "PASS", "PASS", "COMPLETE", True, (), 0.25),
-            ("fail", 1, "FAIL", "FAIL", "NOT_EVALUATED", False, (), None),
-            (
-                "needs-human",
-                2,
-                "NEEDS_HUMAN",
-                "NEEDS_HUMAN",
-                "NOT_EVALUATED",
-                False,
-                (),
-                None,
-            ),
-        )
-    )
+    controlled: list[str] = []
+    scenario_results = {
+        "pass": (0, "PASS", "PASS", "COMPLETE", True, (), 0.25),
+        "fail": (1, "FAIL", "FAIL", "NOT_EVALUATED", False, (), None),
+        "needs-human": (
+            2,
+            "NEEDS_HUMAN",
+            "NEEDS_HUMAN",
+            "NOT_EVALUATED",
+            False,
+            (),
+            None,
+        ),
+    }
 
     def fake_run(
         argv: tuple[str | Path, ...],
@@ -378,16 +377,10 @@ def test_verify_runs_assurance_for_all_controls(
         capture: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, check, capture
-        (
-            scenario,
-            code,
-            verdict,
-            disposition,
-            status,
-            sufficient,
-            unmet,
-            uncertainty,
-        ) = next(scenarios)
+        scenario = controlled[-1]
+        code, verdict, disposition, status, sufficient, unmet, uncertainty = (
+            scenario_results[scenario]
+        )
         command = tuple(str(item) for item in argv)
         calls.append(command)
         run_id = command[command.index("--run-id") + 1]
@@ -462,7 +455,7 @@ def test_verify_runs_assurance_for_all_controls(
     monkeypatch.setattr(driver, "REPOSITORY", repository)
     monkeypatch.setattr(driver, "CONTROL_EVIDENCE", evidence)
     monkeypatch.setattr(driver, "setup", lambda: None)
-    monkeypatch.setattr(driver, "control", lambda scenario: None)
+    monkeypatch.setattr(driver, "control", controlled.append)
     monkeypatch.setattr(driver, "reset", lambda: None)
     monkeypatch.setattr(driver, "_gate_argv", lambda *args: ("release-gate", *args))
     monkeypatch.setattr(driver, "_run", fake_run)
@@ -470,6 +463,7 @@ def test_verify_runs_assurance_for_all_controls(
 
     driver.verify()
 
+    assert controlled == ["pass", "fail", "needs-human"]
     assert len(calls) == 3
     run_ids: set[str] = set()
     for command in calls:
@@ -504,6 +498,66 @@ def test_verify_runs_assurance_for_all_controls(
         "verify: gate verdicts and assurance dispositions matched expectations",
     ):
         assert line in output
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [
+        ({"coverage": {"mapping_uncertainty_rate": True}}, "mapping uncertainty"),
+        ({"coverage": {"mapping_uncertainty_rate": "0.25"}}, "mapping uncertainty"),
+        ({"coverage": {"mapping_uncertainty_rate": 0.96}}, "mapping uncertainty"),
+        ({"coverage": {"mapping_uncertainty_rate": math.nan}}, "mapping uncertainty"),
+        ({"coverage": {"mapping_uncertainty_rate": math.inf}}, "mapping uncertainty"),
+        ({"coverage": {"mapping_uncertainty_rate": -0.01}}, "mapping uncertainty"),
+        ({"evidence_sufficient": False}, "insufficient"),
+        ({"unmet_requirements": ({"dimension_id": "boundary"},)}, "unmet"),
+    ],
+)
+def test_validate_pass_assurance_rejects_invalid_evidence(
+    replacement: dict[str, object], message: str
+) -> None:
+    driver = load_driver()
+    values = {
+        "run_id": "verify-pass",
+        "gate_result_path": "/absolute/gate/result.json",
+        "mode": "advisory",
+        "gate_verdict": "PASS",
+        "disposition": "PASS",
+        "assessment_status": "COMPLETE",
+        "evidence_sufficient": True,
+        "reason_codes": (),
+        "coverage": {"mapping_uncertainty_rate": 0.25},
+        "unmet_requirements": (),
+    }
+    values.update(replacement)
+    summary = driver.AssuranceSummary(**values)
+
+    with pytest.raises(driver.DemoError, match=message):
+        driver._validate_assurance_control(
+            "pass", summary, "PASS", "PASS", "COMPLETE"
+        )
+
+
+@pytest.mark.parametrize("verdict", ["FAIL", "NEEDS_HUMAN"])
+def test_validate_nonpass_assurance_rejects_claimed_coverage(verdict: str) -> None:
+    driver = load_driver()
+    summary = driver.AssuranceSummary(
+        run_id=f"verify-{verdict.lower()}",
+        gate_result_path="/absolute/gate/result.json",
+        mode="advisory",
+        gate_verdict=verdict,
+        disposition=verdict,
+        assessment_status="NOT_EVALUATED",
+        evidence_sufficient=False,
+        reason_codes=(),
+        coverage={"mapping_uncertainty_rate": 0.25},
+        unmet_requirements=(),
+    )
+
+    with pytest.raises(driver.DemoError, match="claimed coverage"):
+        driver._validate_assurance_control(
+            verdict.lower(), summary, verdict, verdict, "NOT_EVALUATED"
+        )
 
 
 def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:

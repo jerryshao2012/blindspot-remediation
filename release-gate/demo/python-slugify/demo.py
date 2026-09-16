@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -470,6 +471,54 @@ def grade(path: Path) -> str:
     return box
 
 
+def _validate_assurance_control(
+    scenario: str,
+    summary: AssuranceSummary,
+    verdict: str,
+    disposition: str,
+    status: str,
+) -> None:
+    if summary.gate_verdict != verdict:
+        raise DemoError(
+            f"{scenario}: expected gate verdict {verdict}, got {summary.gate_verdict}"
+        )
+    if summary.disposition != disposition:
+        raise DemoError(
+            f"{scenario}: expected assurance disposition {disposition}, "
+            f"got {summary.disposition}"
+        )
+    if summary.mode != "advisory":
+        raise DemoError(
+            f"{scenario}: expected assurance mode advisory, got {summary.mode}"
+        )
+    if summary.assessment_status != status:
+        raise DemoError(
+            f"{scenario}: expected assessment status {status}, "
+            f"got {summary.assessment_status}"
+        )
+    if verdict == "PASS":
+        uncertainty = (
+            summary.coverage.get("mapping_uncertainty_rate")
+            if summary.coverage is not None
+            else None
+        )
+        if not summary.evidence_sufficient:
+            raise DemoError(f"{scenario}: assurance evidence was insufficient")
+        if summary.unmet_requirements:
+            raise DemoError(f"{scenario}: assurance requirements were unmet")
+        if (
+            isinstance(uncertainty, bool)
+            or not isinstance(uncertainty, (int, float))
+            or not math.isfinite(uncertainty)
+            or not 0 <= uncertainty <= 0.95
+        ):
+            raise DemoError(
+                f"{scenario}: mapping uncertainty must be numeric and within [0, 0.95]"
+            )
+    elif summary.coverage is not None:
+        raise DemoError(f"{scenario}: unevaluated assurance claimed coverage")
+
+
 def verify() -> None:
     if WORKBENCH.exists():
         _verify_repository()
@@ -513,45 +562,9 @@ def verify() -> None:
             )
         result_path = _result_path(result.stdout)
         summary = inspect_assurance_result(result_path)
-        if summary.gate_verdict != verdict:
-            raise DemoError(
-                f"{scenario}: expected gate verdict {verdict}, "
-                f"got {summary.gate_verdict}"
-            )
-        if summary.disposition != disposition:
-            raise DemoError(
-                f"{scenario}: expected assurance disposition {disposition}, "
-                f"got {summary.disposition}"
-            )
-        if summary.mode != "advisory":
-            raise DemoError(
-                f"{scenario}: expected assurance mode advisory, got {summary.mode}"
-            )
-        if summary.assessment_status != status:
-            raise DemoError(
-                f"{scenario}: expected assessment status {status}, "
-                f"got {summary.assessment_status}"
-            )
-        if verdict == "PASS":
-            uncertainty = (
-                summary.coverage.get("mapping_uncertainty_rate")
-                if summary.coverage is not None
-                else None
-            )
-            if not summary.evidence_sufficient:
-                raise DemoError(f"{scenario}: assurance evidence was insufficient")
-            if summary.unmet_requirements:
-                raise DemoError(f"{scenario}: assurance requirements were unmet")
-            if (
-                isinstance(uncertainty, bool)
-                or not isinstance(uncertainty, (int, float))
-                or not uncertainty <= 0.95
-            ):
-                raise DemoError(
-                    f"{scenario}: mapping uncertainty exceeded 0.95 or was unavailable"
-                )
-        elif summary.coverage is not None:
-            raise DemoError(f"{scenario}: unevaluated assurance claimed coverage")
+        _validate_assurance_control(
+            scenario, summary, verdict, disposition, status
+        )
         actual_box = grade(Path(summary.gate_result_path))
         if actual_box != box:
             raise DemoError(f"{scenario}: expected {box}, got {actual_box}")
