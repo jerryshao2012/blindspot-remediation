@@ -385,7 +385,7 @@ def control(scenario: str) -> None:
 
 
 def inspect_result(path: Path) -> ResultSummary:
-    resolved = path.expanduser().resolve(strict=True)
+    resolved = _resolve_result_path(path)
     summary = read_result_summary(resolved)
     manifest = resolved.parent / summary.manifest_path
     if not manifest.is_file() or (resolved.parent / ".incomplete").exists():
@@ -412,10 +412,7 @@ def inspect_result(path: Path) -> ResultSummary:
 
 
 def inspect_assurance_result(path: Path) -> AssuranceSummary:
-    try:
-        resolved = path.expanduser().resolve(strict=True)
-    except OSError as error:
-        raise DemoError(f"assurance result does not exist: {path}") from error
+    resolved = _resolve_result_path(path)
     manifest = resolved.parent / "manifest.json"
     if not manifest.is_file() or (resolved.parent / ".incomplete").exists():
         raise DemoError("assurance package is incomplete or missing manifest.json")
@@ -445,6 +442,13 @@ def inspect_assurance_result(path: Path) -> AssuranceSummary:
         print("unmet requirements: none")
     print(f"manifest: {manifest}")
     return summary
+
+
+def _resolve_result_path(path: Path) -> Path:
+    try:
+        return path.expanduser().resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise DemoError(f"result does not exist or cannot be resolved: {path}") from error
 
 
 def grade(path: Path) -> str:

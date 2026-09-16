@@ -305,6 +305,22 @@ def test_main_dispatches_inspect_assurance(
     assert "linked gate result:" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("inspector", ["inspect_result", "inspect_assurance_result"])
+def test_inspectors_report_symlink_loops_as_demo_errors(
+    tmp_path: Path, inspector: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    result = tmp_path / "result.json"
+
+    def raise_symlink_loop(path: Path, *, strict: bool = False) -> Path:
+        raise RuntimeError("Symlink loop from test")
+
+    monkeypatch.setattr(driver.Path, "resolve", raise_symlink_loop)
+
+    with pytest.raises(driver.DemoError, match="result does not exist"):
+        getattr(driver, inspector)(result)
+
+
 def test_gate_invocation_prefers_sibling_python(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
