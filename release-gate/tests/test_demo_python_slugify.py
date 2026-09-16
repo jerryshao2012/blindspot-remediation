@@ -486,6 +486,7 @@ def test_committed_demo_assets_and_windows_guidance_are_self_contained() -> None
         DEMO / ".gitignore",
         DEMO / "README.md",
         POLICY,
+        ASSURANCE_POLICY,
         DEMO / "assets" / "TASK.md",
         DEMO / "controls" / "pass.patch",
         DEMO / "controls" / "fail.patch",
@@ -543,8 +544,11 @@ def test_trusted_base_validation_checks_origin_parent_and_policy(
     git("commit", "-qm", "upstream")
     upstream = git("rev-parse", "HEAD")
     (repository / ".release-gate.yaml").write_bytes(POLICY.read_bytes())
+    (repository / ".release-gate-assurance.yaml").write_bytes(
+        ASSURANCE_POLICY.read_bytes()
+    )
     (repository / ".gitignore").write_text("/.release-gate/runs/\n", encoding="utf-8")
-    git("add", ".release-gate.yaml", ".gitignore")
+    git("add", ".release-gate.yaml", ".release-gate-assurance.yaml", ".gitignore")
     git("commit", "-qm", "policy")
     git("tag", driver.BASE_REF)
 
@@ -553,9 +557,81 @@ def test_trusted_base_validation_checks_origin_parent_and_policy(
     monkeypatch.setattr(driver, "UPSTREAM_SHA", upstream)
 
     driver._verify_repository()
+    (repository / ".release-gate-assurance.yaml").write_text(
+        "version: 1\nmode: enforce\n", encoding="utf-8"
+    )
+    git("add", ".release-gate-assurance.yaml")
+    git("commit", "--amend", "-qm", "tampered assurance policy")
+    git("tag", "-f", driver.BASE_REF)
+    with pytest.raises(driver.DemoError, match="assurance policy"):
+        driver._verify_repository()
+
+    git("remote", "set-url", "origin", driver.UPSTREAM_URL)
     git("remote", "set-url", "origin", "https://example.invalid/wrong.git")
     with pytest.raises(driver.DemoError, match="unexpected workbench origin"):
         driver._verify_repository()
+
+
+def test_setup_installs_both_trusted_policies_before_tagging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    workbench = tmp_path / "workbench"
+    repository = workbench / "python-slugify"
+    git_calls: list[tuple[str, ...]] = []
+    run_calls: list[tuple[str, ...]] = []
+
+    def fake_run(
+        argv: tuple[object, ...],
+        *,
+        cwd: Path | None = None,
+        check: bool = True,
+        capture: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        command = tuple(str(item) for item in argv)
+        run_calls.append(command)
+        if command[:3] == ("git", "clone", "--quiet"):
+            repository.mkdir(parents=True)
+            (repository / ".git").mkdir()
+        elif "init" in command:
+            (repository / ".release-gate.yaml").write_bytes(POLICY.read_bytes())
+            (repository / ".gitignore").write_text(
+                "/.release-gate/runs/\n", encoding="utf-8"
+            )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    def fake_git(*arguments: str, **kwargs: object) -> str:
+        git_calls.append(arguments)
+        return ""
+
+    monkeypatch.setattr(driver, "WORKBENCH", workbench)
+    monkeypatch.setattr(driver, "REPOSITORY", repository)
+    monkeypatch.setattr(driver, "TASK_VENV", workbench / "task-venv")
+    monkeypatch.setattr(driver, "require_supported_platform", lambda: None)
+    monkeypatch.setattr(driver, "_which", lambda name: name)
+    monkeypatch.setattr(driver, "_require_gate_version", lambda: None)
+    monkeypatch.setattr(driver, "_run", fake_run)
+    monkeypatch.setattr(driver, "_git", fake_git)
+    monkeypatch.setattr(driver, "_verify_repository", lambda: None)
+    monkeypatch.setattr(driver, "_create_task_environment", lambda path: None)
+    monkeypatch.setattr(driver, "_verify_upstream_tests", lambda: None)
+
+    driver.setup()
+
+    assert (repository / ".release-gate-assurance.yaml").read_bytes() == (
+        ASSURANCE_POLICY.read_bytes()
+    )
+    staged = (
+        "add",
+        ".release-gate.yaml",
+        ".release-gate-assurance.yaml",
+        ".gitignore",
+    )
+    assert staged in git_calls
+    commit = ("commit", "--quiet", "-m", "chore: add release gate demo policy")
+    assert git_calls.index(staged) < git_calls.index(commit)
+    assert git_calls.index(staged) < git_calls.index(("tag", driver.BASE_REF))
+    assert any("init" in command for command in run_calls)
 
 
 def test_owned_directory_removal_refuses_paths_outside_workbench(

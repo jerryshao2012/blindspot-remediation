@@ -341,7 +341,16 @@ def setup() -> None:
                 ASSETS / ".release-gate.yaml",
             )
         )
-        _git("add", ".release-gate.yaml", ".gitignore")
+        shutil.copyfile(
+            ASSETS / ".release-gate-assurance.yaml",
+            REPOSITORY / ".release-gate-assurance.yaml",
+        )
+        _git(
+            "add",
+            ".release-gate.yaml",
+            ".release-gate-assurance.yaml",
+            ".gitignore",
+        )
         _git("commit", "--quiet", "-m", "chore: add release gate demo policy")
         _git("tag", BASE_REF)
         _verify_repository()
@@ -536,6 +545,27 @@ def _verify_repository() -> None:
     expected_policy = (ASSETS / ".release-gate.yaml").read_text(encoding="utf-8")
     if policy.rstrip("\n") != expected_policy.rstrip("\n"):
         raise DemoError("trusted base policy does not match the committed demo asset")
+    assurance_policy = _git_blob(f"{BASE_REF}:.release-gate-assurance.yaml")
+    expected_assurance_policy = (ASSETS / ".release-gate-assurance.yaml").read_bytes()
+    if assurance_policy != expected_assurance_policy:
+        raise DemoError(
+            "trusted base assurance policy does not match the committed demo asset"
+        )
+
+
+def _git_blob(specification: str) -> bytes:
+    try:
+        return subprocess.run(
+            ["git", "show", specification],
+            cwd=REPOSITORY,
+            check=True,
+            capture_output=True,
+        ).stdout
+    except FileNotFoundError as error:
+        raise DemoError("required executable is unavailable: git") from error
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.decode(errors="replace").strip()
+        raise DemoError(f"command failed: git show {specification} ({detail})") from error
 
 
 def _create_task_environment(venv: Path) -> None:
