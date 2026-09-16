@@ -1,0 +1,93 @@
+version: 1
+mode: advisory
+concept_schema:
+  schema_id: python-slugify-behavior
+  schema_version: 1.0.0
+  dimensions:
+    - dimension_id: behavior_region
+      name: Behavior region
+      definition: The python-slugify behavior exercised by a reviewed upstream test.
+      values:
+        - transliteration
+        - unicode
+        - boundary
+        - customization
+        - cli_contract
+mappings:
+  - selector:
+      check_id: tests-and-coverage
+      report_id: junit
+      suite: pytest
+      classname: test.TestSlugify
+      name: test_cyrillic_text
+    concepts:
+      behavior_region: transliteration
+    sources:
+      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+    independence_group: upstream-test.py
+  - selector:
+      check_id: tests-and-coverage
+      report_id: junit
+      suite: pytest
+      classname: test.TestSlugifyUnicode
+      name: test_emojis
+    concepts:
+      behavior_region: unicode
+    sources:
+      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+    independence_group: upstream-test.py
+  - selector:
+      check_id: tests-and-coverage
+      report_id: junit
+      suite: pytest
+      classname: test.TestSlugify
+      name: test_max_length_cutoff_not_required
+    concepts:
+      behavior_region: boundary
+    sources:
+      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+    independence_group: upstream-test.py
+  - selector:
+      check_id: tests-and-coverage
+      report_id: junit
+      suite: pytest
+      classname: test.TestSlugify
+      name: test_replacements_german_umlaut_custom
+    concepts:
+      behavior_region: customization
+    sources:
+      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+    independence_group: upstream-test.py
+  - selector:
+      check_id: tests-and-coverage
+      report_id: junit
+      suite: pytest
+      classname: test.TestCommandParams
+      name: test_two_text_sources_fails
+    concepts:
+      behavior_region: cli_contract
+    sources:
+      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+    independence_group: upstream-test.py
+required_regions:
+  - dimension_id: behavior_region
+    value: transliteration
+    minimum_independent_support: 1
+  - dimension_id: behavior_region
+    value: unicode
+    minimum_independent_support: 1
+  - dimension_id: behavior_region
+    value: boundary
+    minimum_independent_support: 1
+  - dimension_id: behavior_region
+    value: customization
+    minimum_independent_support: 1
+  - dimension_id: behavior_region
+    value: cli_contract
+    minimum_independent_support: 1
+maximum_mapping_uncertainty_rate: 0.95
+limits:
+  max_artifacts: 256
+  max_report_bytes: 4194304
+  max_total_report_bytes: 16777216
+  max_elapsed_seconds: 30.0

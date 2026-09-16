@@ -9,6 +9,7 @@ from types import ModuleType
 
 import pytest
 
+from release_gate.assurance.policy import load_policy
 from release_gate.config import load_config
 from release_gate.models import PlatformName
 
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEMO = ROOT / "demo" / "python-slugify"
 DRIVER = DEMO / "demo.py"
 POLICY = DEMO / "assets" / ".release-gate.yaml"
+ASSURANCE_POLICY = DEMO / "assets" / ".release-gate-assurance.yaml"
 
 
 def load_driver() -> ModuleType:
@@ -179,6 +181,96 @@ def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:
     for platform in (PlatformName.WINDOWS, PlatformName.MACOS):
         for control in (*config.prepare, *config.checks):
             assert control.resolve(platform).argv
+
+
+def test_demo_assurance_policy_is_reviewed_and_valid() -> None:
+    policy = load_policy(ASSURANCE_POLICY.read_bytes())
+
+    assert policy.version == 1
+    assert policy.mode == "advisory"
+    assert policy.concept_schema.schema_id == "python-slugify-behavior"
+    assert policy.concept_schema.schema_version == "1.0.0"
+
+    [dimension] = policy.concept_schema.dimensions
+    assert dimension.dimension_id == "behavior_region"
+    assert dimension.values == [
+        "transliteration",
+        "unicode",
+        "boundary",
+        "customization",
+        "cli_contract",
+    ]
+    assert [
+        (region.dimension_id, region.value, region.minimum_independent_support)
+        for region in policy.required_regions
+    ] == [("behavior_region", value, 1) for value in dimension.values]
+    assert policy.maximum_mapping_uncertainty_rate == 0.95
+    assert policy.limits.max_artifacts <= 256
+    assert policy.limits.max_report_bytes <= 4_194_304
+    assert policy.limits.max_total_report_bytes <= 16_777_216
+    assert policy.limits.max_elapsed_seconds <= 30.0
+
+    source = {
+        "test.py": "5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1"
+    }
+    assert len(policy.mappings) == 5
+    assert all(mapping.sources == source for mapping in policy.mappings)
+    assert all(
+        mapping.independence_group == "upstream-test.py"
+        for mapping in policy.mappings
+    )
+    assert [
+        (
+            mapping.selector.check_id,
+            mapping.selector.report_id,
+            mapping.selector.suite,
+            mapping.selector.classname,
+            mapping.selector.name,
+            mapping.concepts,
+        )
+        for mapping in policy.mappings
+    ] == [
+        (
+            "tests-and-coverage",
+            "junit",
+            "pytest",
+            "test.TestSlugify",
+            "test_cyrillic_text",
+            {"behavior_region": "transliteration"},
+        ),
+        (
+            "tests-and-coverage",
+            "junit",
+            "pytest",
+            "test.TestSlugifyUnicode",
+            "test_emojis",
+            {"behavior_region": "unicode"},
+        ),
+        (
+            "tests-and-coverage",
+            "junit",
+            "pytest",
+            "test.TestSlugify",
+            "test_max_length_cutoff_not_required",
+            {"behavior_region": "boundary"},
+        ),
+        (
+            "tests-and-coverage",
+            "junit",
+            "pytest",
+            "test.TestSlugify",
+            "test_replacements_german_umlaut_custom",
+            {"behavior_region": "customization"},
+        ),
+        (
+            "tests-and-coverage",
+            "junit",
+            "pytest",
+            "test.TestCommandParams",
+            "test_two_text_sources_fails",
+            {"behavior_region": "cli_contract"},
+        ),
+    ]
 
 
 def test_demo_dependency_preparation_is_build_isolation_safe() -> None:
