@@ -476,17 +476,23 @@ def verify() -> None:
     else:
         setup()
     expected = {
-        "pass": (0, "PASS", "good_pass"),
-        "fail": (1, "FAIL", "good_catch"),
-        "needs-human": (2, "NEEDS_HUMAN", "escalated"),
+        "pass": (0, "PASS", "PASS", "COMPLETE", "good_pass"),
+        "fail": (1, "FAIL", "FAIL", "NOT_EVALUATED", "good_catch"),
+        "needs-human": (
+            2,
+            "NEEDS_HUMAN",
+            "NEEDS_HUMAN",
+            "NOT_EVALUATED",
+            "escalated",
+        ),
     }
     CONTROL_EVIDENCE.mkdir(mode=0o700, exist_ok=True)
-    for scenario, (exit_code, verdict, box) in expected.items():
+    for scenario, (exit_code, verdict, disposition, status, box) in expected.items():
         control(scenario)
         run_id = f"verify-{scenario}-{uuid.uuid4().hex[:8]}"
         result = _run(
             _gate_argv(
-                "run",
+                "assure",
                 "--repo",
                 REPOSITORY,
                 "--base",
@@ -506,16 +512,51 @@ def verify() -> None:
                 f"{scenario}: expected exit {exit_code}, got {result.returncode}"
             )
         result_path = _result_path(result.stdout)
-        summary = inspect_result(result_path)
-        if summary.verdict != verdict:
+        summary = inspect_assurance_result(result_path)
+        if summary.gate_verdict != verdict:
             raise DemoError(
-                f"{scenario}: expected verdict {verdict}, got {summary.verdict}"
+                f"{scenario}: expected gate verdict {verdict}, "
+                f"got {summary.gate_verdict}"
             )
-        actual_box = grade(result_path)
+        if summary.disposition != disposition:
+            raise DemoError(
+                f"{scenario}: expected assurance disposition {disposition}, "
+                f"got {summary.disposition}"
+            )
+        if summary.mode != "advisory":
+            raise DemoError(
+                f"{scenario}: expected assurance mode advisory, got {summary.mode}"
+            )
+        if summary.assessment_status != status:
+            raise DemoError(
+                f"{scenario}: expected assessment status {status}, "
+                f"got {summary.assessment_status}"
+            )
+        if verdict == "PASS":
+            uncertainty = (
+                summary.coverage.get("mapping_uncertainty_rate")
+                if summary.coverage is not None
+                else None
+            )
+            if not summary.evidence_sufficient:
+                raise DemoError(f"{scenario}: assurance evidence was insufficient")
+            if summary.unmet_requirements:
+                raise DemoError(f"{scenario}: assurance requirements were unmet")
+            if (
+                isinstance(uncertainty, bool)
+                or not isinstance(uncertainty, (int, float))
+                or not uncertainty <= 0.95
+            ):
+                raise DemoError(
+                    f"{scenario}: mapping uncertainty exceeded 0.95 or was unavailable"
+                )
+        elif summary.coverage is not None:
+            raise DemoError(f"{scenario}: unevaluated assurance claimed coverage")
+        actual_box = grade(Path(summary.gate_result_path))
         if actual_box != box:
             raise DemoError(f"{scenario}: expected {box}, got {actual_box}")
     reset()
-    print("verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations")
+    print("verify: gate verdicts and assurance dispositions matched expectations")
 
 
 def _require_gate_version() -> None:

@@ -342,6 +342,170 @@ def test_gate_invocation_prefers_sibling_python(
     )
 
 
+def test_verify_runs_assurance_for_all_controls(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    driver = load_driver()
+    repository = tmp_path / "repository"
+    evidence = tmp_path / "evidence"
+    repository.mkdir()
+    calls: list[tuple[str, ...]] = []
+    graded: list[Path] = []
+    scenarios = iter(
+        (
+            ("pass", 0, "PASS", "PASS", "COMPLETE", True, (), 0.25),
+            ("fail", 1, "FAIL", "FAIL", "NOT_EVALUATED", False, (), None),
+            (
+                "needs-human",
+                2,
+                "NEEDS_HUMAN",
+                "NEEDS_HUMAN",
+                "NOT_EVALUATED",
+                False,
+                (),
+                None,
+            ),
+        )
+    )
+
+    def fake_run(
+        argv: tuple[str | Path, ...],
+        *,
+        cwd: Path | None = None,
+        check: bool = True,
+        capture: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, check, capture
+        (
+            scenario,
+            code,
+            verdict,
+            disposition,
+            status,
+            sufficient,
+            unmet,
+            uncertainty,
+        ) = next(scenarios)
+        command = tuple(str(item) for item in argv)
+        calls.append(command)
+        run_id = command[command.index("--run-id") + 1]
+        gate_package = evidence / scenario / "gate"
+        assurance_package = evidence / scenario / "assurance"
+        gate_package.mkdir(parents=True)
+        assurance_package.mkdir(parents=True)
+        gate_result = (gate_package / "result.json").resolve()
+        gate_result.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "run_id": f"gate-{scenario}",
+                    "base_commit": "a" * 40,
+                    "candidate_tree": "b" * 40,
+                    "patch_sha256": "c" * 64,
+                    "config_sha256": "d" * 64,
+                    "verdict": verdict,
+                    "reason_codes": [],
+                    "scope": {
+                        "changed_paths": ["setup.py"],
+                        "outside_allowed_paths": [],
+                        "forbidden_paths": [],
+                        "review_required_paths": [],
+                    },
+                    "checks": [],
+                    "manifest_path": "manifest.json",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (gate_package / "manifest.json").write_text("{}", encoding="utf-8")
+        assurance = assurance_result(gate_result)
+        assurance.update(
+            {
+                "run_id": run_id,
+                "gate_verdict": verdict,
+                "disposition": disposition,
+                "assessment_status": status,
+                "evidence_sufficient": sufficient,
+                "reason_codes": [],
+                "coverage": (
+                    {"mapping_uncertainty_rate": uncertainty}
+                    if uncertainty is not None
+                    else None
+                ),
+                "unmet_requirements": list(unmet),
+            }
+        )
+        assurance_result_path = (assurance_package / "result.json").resolve()
+        assurance_result_path.write_text(json.dumps(assurance), encoding="utf-8")
+        (assurance_package / "manifest.json").write_text("{}", encoding="utf-8")
+        stdout = "\n".join(
+            (
+                f"GATE_VERDICT: {verdict}",
+                f"ASSURANCE_DISPOSITION: {disposition}",
+                "ASSURANCE_MODE: advisory",
+                f"ASSESSMENT_STATUS: {status}",
+                f"RESULT: {assurance_result_path}",
+                "",
+            )
+        )
+        return subprocess.CompletedProcess(command, code, stdout, "")
+
+    classifications = iter(("good_pass", "good_catch", "escalated"))
+
+    def fake_grade(path: Path) -> str:
+        graded.append(path)
+        return next(classifications)
+
+    monkeypatch.setattr(driver, "WORKBENCH", tmp_path / "missing-workbench")
+    monkeypatch.setattr(driver, "REPOSITORY", repository)
+    monkeypatch.setattr(driver, "CONTROL_EVIDENCE", evidence)
+    monkeypatch.setattr(driver, "setup", lambda: None)
+    monkeypatch.setattr(driver, "control", lambda scenario: None)
+    monkeypatch.setattr(driver, "reset", lambda: None)
+    monkeypatch.setattr(driver, "_gate_argv", lambda *args: ("release-gate", *args))
+    monkeypatch.setattr(driver, "_run", fake_run)
+    monkeypatch.setattr(driver, "grade", fake_grade)
+
+    driver.verify()
+
+    assert len(calls) == 3
+    run_ids: set[str] = set()
+    for command in calls:
+        assert command[:2] == ("release-gate", "assure")
+        assert command[2:8] == (
+            "--repo",
+            str(repository),
+            "--base",
+            driver.BASE_REF,
+            "--output",
+            str(evidence),
+        )
+        assert command[8] == "--run-id"
+        run_ids.add(command[9])
+    assert len(run_ids) == 3
+    assert graded == [
+        (evidence / scenario / "gate" / "result.json").resolve()
+        for scenario in ("pass", "fail", "needs-human")
+    ]
+    output = capsys.readouterr().out
+    for line in (
+        "GATE_VERDICT: PASS",
+        "ASSURANCE_DISPOSITION: PASS",
+        "ASSURANCE_MODE: advisory",
+        "ASSESSMENT_STATUS: COMPLETE",
+        "GATE_VERDICT: FAIL",
+        "ASSURANCE_DISPOSITION: FAIL",
+        "GATE_VERDICT: NEEDS_HUMAN",
+        "ASSURANCE_DISPOSITION: NEEDS_HUMAN",
+        "ASSESSMENT_STATUS: NOT_EVALUATED",
+        "RESULT: ",
+        "verify: gate verdicts and assurance dispositions matched expectations",
+    ):
+        assert line in output
+
+
 def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:
     config = load_config(POLICY)
 
