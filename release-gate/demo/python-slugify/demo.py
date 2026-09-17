@@ -658,22 +658,43 @@ def _load_assurance_policy_sources(path: Path) -> list[dict[str, str]]:
 
 
 def _verify_reviewed_source_blobs() -> None:
-    trusted_digest = hashlib.sha256(_git_blob("HEAD:test.py")).hexdigest()
     sources = _load_assurance_policy_sources(
         ASSETS / ".release-gate-assurance.yaml"
     )
     if not sources:
         raise DemoError("assurance policy has no reviewed source mappings")
-    for index, mapping_sources in enumerate(sources, start=1):
-        reviewed_digest = mapping_sources.get("test.py")
-        if not isinstance(reviewed_digest, str):
+    expectations: dict[str, str] = {}
+    for mapping_sources in sources:
+        for path, digest in mapping_sources.items():
+            previous = expectations.get(path)
+            if previous is not None and previous != digest:
+                raise DemoError(
+                    f"assurance policy has conflicting SHA-256 digests for {path}"
+                )
+            expectations[path] = digest
+    if not expectations:
+        raise DemoError("assurance policy has no reviewed sources")
+
+    for path, expected_digest in sorted(expectations.items()):
+        entry = _git("ls-tree", "HEAD", "--", path, capture=True)
+        if not entry:
+            raise DemoError(f"reviewed source {path} is missing from trusted HEAD")
+        fields = entry.split(maxsplit=3)
+        if len(fields) != 4 or fields[0] not in {"100644", "100755"} or fields[1] != "blob":
             raise DemoError(
-                f"assurance mapping {index} is missing reviewed source test.py"
+                f"reviewed source {path} is not a regular file in trusted HEAD"
             )
-        if reviewed_digest != trusted_digest:
+        try:
+            contents = _git_blob(f"HEAD:{path}")
+        except DemoError as error:
             raise DemoError(
-                "reviewed source test.py SHA-256 does not match the trusted Git "
-                f"blob contents at HEAD (mapping {index})"
+                f"reviewed source {path} could not be read from trusted HEAD: {error}"
+            ) from error
+        actual_digest = hashlib.sha256(contents).hexdigest()
+        if expected_digest != actual_digest:
+            raise DemoError(
+                f"reviewed source {path} SHA-256 does not match the trusted Git "
+                "blob contents at HEAD"
             )
 
 

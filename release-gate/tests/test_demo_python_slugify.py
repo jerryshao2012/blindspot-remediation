@@ -700,26 +700,28 @@ def test_reviewed_source_validation_uses_trusted_git_blob_not_checkout_bytes(
     )
     source = repository / "test.py"
     source.write_bytes(b"first line\nsecond line\n")
-    subprocess.run(["git", "add", "test.py"], cwd=repository, check=True)
+    secondary = repository / "support.txt"
+    secondary.write_bytes(b"reviewed support\n")
+    subprocess.run(["git", "add", "test.py", "support.txt"], cwd=repository, check=True)
     subprocess.run(["git", "commit", "-qm", "upstream"], cwd=repository, check=True)
 
-    policy = ASSURANCE_POLICY.read_bytes().replace(
-        b"f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda",
-        hashlib.sha256(b"first line\nsecond line\n").hexdigest().encode(),
-    )
     assets = tmp_path / "assets"
     assets.mkdir()
-    (assets / ".release-gate-assurance.yaml").write_bytes(policy)
+    (assets / ".release-gate-assurance.yaml").write_bytes(
+        ASSURANCE_POLICY.read_bytes()
+    )
     source.write_bytes(b"first line\r\nsecond line\r\n")
+    expected_sources = {
+        "test.py": hashlib.sha256(b"first line\nsecond line\n").hexdigest(),
+        "support.txt": hashlib.sha256(b"reviewed support\n").hexdigest(),
+    }
 
     monkeypatch.setattr(driver, "REPOSITORY", repository)
     monkeypatch.setattr(driver, "ASSETS", assets)
     monkeypatch.setattr(
         driver,
         "_load_assurance_policy_sources",
-        lambda path: [
-            mapping.sources for mapping in load_policy(path.read_bytes()).mappings
-        ],
+        lambda path: [expected_sources, expected_sources.copy()],
     )
 
     driver._verify_reviewed_source_blobs()
@@ -766,6 +768,116 @@ def test_reviewed_source_validation_rejects_stale_policy_digest(
 
     with pytest.raises(driver.DemoError, match=r"test.py.*trusted Git blob contents"):
         driver._verify_reviewed_source_blobs()
+
+
+def test_reviewed_source_validation_rejects_stale_secondary_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    (repository / "test.py").write_bytes(b"primary\n")
+    (repository / "support.txt").write_bytes(b"secondary\n")
+    subprocess.run(["git", "add", "test.py", "support.txt"], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Demo Test",
+            "-c",
+            "user.email=demo-test@example.invalid",
+            "commit",
+            "-qm",
+            "upstream",
+        ],
+        cwd=repository,
+        check=True,
+    )
+    monkeypatch.setattr(driver, "REPOSITORY", repository)
+    monkeypatch.setattr(
+        driver,
+        "_load_assurance_policy_sources",
+        lambda path: [
+            {
+                "test.py": hashlib.sha256(b"primary\n").hexdigest(),
+                "support.txt": "0" * 64,
+            }
+        ],
+    )
+
+    with pytest.raises(
+        driver.DemoError, match=r"support.txt.*trusted Git blob contents"
+    ):
+        driver._verify_reviewed_source_blobs()
+
+
+def test_reviewed_source_validation_rejects_missing_secondary_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    (repository / "test.py").write_bytes(b"primary\n")
+    subprocess.run(["git", "add", "test.py"], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Demo Test",
+            "-c",
+            "user.email=demo-test@example.invalid",
+            "commit",
+            "-qm",
+            "upstream",
+        ],
+        cwd=repository,
+        check=True,
+    )
+    monkeypatch.setattr(driver, "REPOSITORY", repository)
+    monkeypatch.setattr(
+        driver,
+        "_load_assurance_policy_sources",
+        lambda path: [{"support.txt": "0" * 64}],
+    )
+
+    with pytest.raises(
+        driver.DemoError, match=r"reviewed source support.txt is missing"
+    ):
+        driver._verify_reviewed_source_blobs()
+
+
+def test_reviewed_source_validation_rejects_conflicting_digests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = load_driver()
+    monkeypatch.setattr(
+        driver,
+        "_load_assurance_policy_sources",
+        lambda path: [{"test.py": "0" * 64}, {"test.py": "1" * 64}],
+    )
+
+    with pytest.raises(driver.DemoError, match=r"conflicting.*test.py"):
+        driver._verify_reviewed_source_blobs()
+
+
+def test_assurance_policy_sources_load_through_release_gate_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    monkeypatch.setattr(driver, "_release_gate_python", lambda: Path(sys.executable))
+    monkeypatch.setenv("PYTHONPATH", str(ROOT / "src"))
+
+    sources = driver._load_assurance_policy_sources(ASSURANCE_POLICY)
+
+    assert len(sources) == 5
+    assert all(set(mapping) == {"test.py"} for mapping in sources)
+
+    invalid = tmp_path / "invalid.yaml"
+    invalid.write_text("mode: advisory\n", encoding="utf-8")
+    with pytest.raises(driver.DemoError, match="invalid assurance policy"):
+        driver._load_assurance_policy_sources(invalid)
 
 
 def test_demo_dependency_preparation_is_build_isolation_safe() -> None:
