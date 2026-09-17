@@ -519,8 +519,17 @@ def _validate_assurance_control(
             raise DemoError(
                 f"{scenario}: mapping uncertainty must be numeric and within [0, 0.95]"
             )
-    elif summary.coverage is not None:
-        raise DemoError(f"{scenario}: unevaluated assurance claimed coverage")
+    else:
+        if summary.evidence_sufficient:
+            raise DemoError(
+                f"{scenario}: unevaluated assurance claimed sufficient evidence"
+            )
+        if summary.unmet_requirements:
+            raise DemoError(
+                f"{scenario}: unevaluated assurance claimed unmet requirements"
+            )
+        if summary.coverage is not None:
+            raise DemoError(f"{scenario}: unevaluated assurance claimed coverage")
 
 
 def verify() -> None:
@@ -680,7 +689,11 @@ def _verify_reviewed_source_blobs() -> None:
         if not entry:
             raise DemoError(f"reviewed source {path} is missing from trusted HEAD")
         fields = entry.split(maxsplit=3)
-        if len(fields) != 4 or fields[0] not in {"100644", "100755"} or fields[1] != "blob":
+        if (
+            len(fields) != 4
+            or fields[0] not in {"100644", "100755"}
+            or fields[1] != "blob"
+        ):
             raise DemoError(
                 f"reviewed source {path} is not a regular file in trusted HEAD"
             )

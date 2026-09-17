@@ -32,8 +32,8 @@ values `transliteration`, `unicode`, `boundary`, `customization`, and
 | `cli_contract` | `pytest` | `test.TestCommandParams` | `test_two_text_sources_fails` |
 
 Every selector uses check `tests-and-coverage` and report `junit`. Every mapping
-records source `test.py` with reviewed SHA-256
-`5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1`.
+records source `test.py` with the trusted Git blob content SHA-256
+`f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda`.
 All five mappings use the conservative independence group
 `upstream-test.py`, because they share one source file and suite lineage.
 

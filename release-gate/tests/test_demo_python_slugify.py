@@ -559,6 +559,42 @@ def test_validate_nonpass_assurance_rejects_claimed_coverage(verdict: str) -> No
         )
 
 
+@pytest.mark.parametrize("verdict", ["FAIL", "NEEDS_HUMAN"])
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [
+        ({"evidence_sufficient": True}, "claimed sufficient evidence"),
+        (
+            {"unmet_requirements": ({"dimension_id": "boundary"},)},
+            "claimed unmet requirements",
+        ),
+    ],
+)
+def test_validate_nonpass_assurance_rejects_evidence_claims(
+    verdict: str, replacement: dict[str, object], message: str
+) -> None:
+    driver = load_driver()
+    values = {
+        "run_id": f"verify-{verdict.lower()}",
+        "gate_result_path": "/absolute/gate/result.json",
+        "mode": "advisory",
+        "gate_verdict": verdict,
+        "disposition": verdict,
+        "assessment_status": "NOT_EVALUATED",
+        "evidence_sufficient": False,
+        "reason_codes": (),
+        "coverage": None,
+        "unmet_requirements": (),
+    }
+    values.update(replacement)
+    summary = driver.AssuranceSummary(**values)
+
+    with pytest.raises(driver.DemoError, match=message):
+        driver._validate_assurance_control(
+            verdict.lower(), summary, verdict, verdict, "NOT_EVALUATED"
+        )
+
+
 def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:
     config = load_config(POLICY)
 
