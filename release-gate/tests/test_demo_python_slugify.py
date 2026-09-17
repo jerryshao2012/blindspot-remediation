@@ -623,9 +623,10 @@ def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:
     )
     assert coverage_floor == 85
     for platform in (PlatformName.WINDOWS, PlatformName.MACOS):
-        assert f"--cov-fail-under={coverage_floor}" in tests_and_coverage.resolve(
-            platform
-        ).argv
+        assert (
+            f"--cov-fail-under={coverage_floor}"
+            in tests_and_coverage.resolve(platform).argv
+        )
     for platform in (PlatformName.WINDOWS, PlatformName.MACOS):
         for control in (*config.prepare, *config.checks):
             assert control.resolve(platform).argv
@@ -743,9 +744,7 @@ def test_reviewed_source_validation_uses_trusted_git_blob_not_checkout_bytes(
 
     assets = tmp_path / "assets"
     assets.mkdir()
-    (assets / ".release-gate-assurance.yaml").write_bytes(
-        ASSURANCE_POLICY.read_bytes()
-    )
+    (assets / ".release-gate-assurance.yaml").write_bytes(ASSURANCE_POLICY.read_bytes())
     source.write_bytes(b"first line\r\nsecond line\r\n")
     expected_sources = {
         "test.py": hashlib.sha256(b"first line\nsecond line\n").hexdigest(),
@@ -788,9 +787,7 @@ def test_reviewed_source_validation_rejects_stale_policy_digest(
     )
     assets = tmp_path / "assets"
     assets.mkdir()
-    (assets / ".release-gate-assurance.yaml").write_bytes(
-        ASSURANCE_POLICY.read_bytes()
-    )
+    (assets / ".release-gate-assurance.yaml").write_bytes(ASSURANCE_POLICY.read_bytes())
 
     monkeypatch.setattr(driver, "REPOSITORY", repository)
     monkeypatch.setattr(driver, "ASSETS", assets)

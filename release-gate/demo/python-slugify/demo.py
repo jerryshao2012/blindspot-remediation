@@ -639,8 +639,10 @@ def _release_gate_python() -> Path:
     executable = shutil.which("release-gate")
     if executable is None:
         raise DemoError("required executable is unavailable: release-gate")
-    sibling = Path(executable).resolve().with_name(
-        "python.exe" if sys.platform == "win32" else "python"
+    sibling = (
+        Path(executable)
+        .resolve()
+        .with_name("python.exe" if sys.platform == "win32" else "python")
     )
     if not sibling.is_file():
         raise DemoError(
@@ -667,9 +669,7 @@ def _load_assurance_policy_sources(path: Path) -> list[dict[str, str]]:
 
 
 def _verify_reviewed_source_blobs() -> None:
-    sources = _load_assurance_policy_sources(
-        ASSETS / ".release-gate-assurance.yaml"
-    )
+    sources = _load_assurance_policy_sources(ASSETS / ".release-gate-assurance.yaml")
     if not sources:
         raise DemoError("assurance policy has no reviewed source mappings")
     expectations: dict[str, str] = {}
