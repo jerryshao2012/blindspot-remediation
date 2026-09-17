@@ -285,7 +285,7 @@ def test_inspect_assurance_result_requires_complete_package(
         (package / "manifest.json").write_text("{}", encoding="utf-8")
         (package / ".incomplete").touch()
 
-    with pytest.raises(driver.DemoError, match="incomplete or missing manifest.json"):
+    with pytest.raises(driver.DemoError, match=r"incomplete or missing manifest.json"):
         driver.inspect_assurance_result(result)
 
 
@@ -533,9 +533,7 @@ def test_validate_pass_assurance_rejects_invalid_evidence(
     summary = driver.AssuranceSummary(**values)
 
     with pytest.raises(driver.DemoError, match=message):
-        driver._validate_assurance_control(
-            "pass", summary, "PASS", "PASS", "COMPLETE"
-        )
+        driver._validate_assurance_control("pass", summary, "PASS", "PASS", "COMPLETE")
 
 
 @pytest.mark.parametrize("verdict", ["FAIL", "NEEDS_HUMAN"])
@@ -616,8 +614,7 @@ def test_demo_assurance_policy_is_reviewed_and_valid() -> None:
     assert len(policy.mappings) == 5
     assert all(mapping.sources == source for mapping in policy.mappings)
     assert all(
-        mapping.independence_group == "upstream-test.py"
-        for mapping in policy.mappings
+        mapping.independence_group == "upstream-test.py" for mapping in policy.mappings
     )
     assert [
         (
@@ -779,10 +776,11 @@ def test_demo_walkthrough_documents_conceptual_diversity_assurance() -> None:
     )
     assert windows_assure in normalized
     assert macos_assure in normalized
-    assert (
-        'demo.py inspect-assurance --result "C:\\absolute\\path\\to\\assurance\\result.json"'
-        in normalized
+    windows_inspect = (
+        "demo.py inspect-assurance --result "
+        '"C:\\absolute\\path\\to\\assurance\\result.json"'
     )
+    assert windows_inspect in normalized
     assert (
         'demo.py inspect-assurance --result "/absolute/path/to/assurance/result.json"'
         in normalized

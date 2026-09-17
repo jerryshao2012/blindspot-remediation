@@ -458,7 +458,9 @@ def _resolve_result_path(path: Path) -> Path:
     try:
         return path.expanduser().resolve(strict=True)
     except (OSError, RuntimeError) as error:
-        raise DemoError(f"result does not exist or cannot be resolved: {path}") from error
+        raise DemoError(
+            f"result does not exist or cannot be resolved: {path}"
+        ) from error
 
 
 def grade(path: Path) -> str:
@@ -562,9 +564,7 @@ def verify() -> None:
             )
         result_path = _result_path(result.stdout)
         summary = inspect_assurance_result(result_path)
-        _validate_assurance_control(
-            scenario, summary, verdict, disposition, status
-        )
+        _validate_assurance_control(scenario, summary, verdict, disposition, status)
         actual_box = grade(Path(summary.gate_result_path))
         if actual_box != box:
             raise DemoError(f"{scenario}: expected {box}, got {actual_box}")
@@ -619,7 +619,9 @@ def _git_blob(specification: str) -> bytes:
         raise DemoError("required executable is unavailable: git") from error
     except subprocess.CalledProcessError as error:
         detail = error.stderr.decode(errors="replace").strip()
-        raise DemoError(f"command failed: git show {specification} ({detail})") from error
+        raise DemoError(
+            f"command failed: git show {specification} ({detail})"
+        ) from error
 
 
 def _create_task_environment(venv: Path) -> None:
