@@ -223,8 +223,9 @@ command. The three deterministic scenarios produce:
 The reviewed `.release-gate-assurance.yaml` names five behavior regions:
 `transliteration`, `unicode`, `boundary`, `customization`, and `cli_contract`.
 Each mapping selects an exact JUnit identity (check, report, suite, class, and
-test name) and trusts this exact source hash:
-`test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1`.
+test name) and trusts the Git blob identity at `release-gate-demo-base`, before
+checkout line-ending conversion:
+`test.py: f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda`.
 All five mappings share the `upstream-test.py` independence group, so they are
 reviewed examples from one independent source rather than five independent
 sources.

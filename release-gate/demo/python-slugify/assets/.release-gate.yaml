@@ -142,6 +142,7 @@ checks:
       - "--junitxml=junit.xml"
       - "--cov=slugify"
       - "--cov-report=json:coverage.json"
+      - "--cov-fail-under=85"
     cwd: "."
     timeout: 600
     inherit_environment: ["PATH"]
@@ -164,6 +165,7 @@ checks:
           - "--junitxml=junit.xml"
           - "--cov=slugify"
           - "--cov-report=json:coverage.json"
+          - "--cov-fail-under=85"
         inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
     reports:
       - id: junit

@@ -19,6 +19,9 @@ DEMO = ROOT / "demo" / "python-slugify"
 DRIVER = DEMO / "demo.py"
 POLICY = DEMO / "assets" / ".release-gate.yaml"
 ASSURANCE_POLICY = DEMO / "assets" / ".release-gate-assurance.yaml"
+TRUSTED_TEST_BLOB_SHA256 = (
+    "f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda"
+)
 
 
 def load_driver() -> ModuleType:
@@ -576,6 +579,19 @@ def test_demo_policy_is_valid_and_resolves_on_both_platforms() -> None:
         "task-consistency",
         "types",
     ]
+    tests_and_coverage = config.checks[0]
+    coverage_floor = next(
+        assertion.value
+        for assertion in tests_and_coverage.assertions
+        if assertion.report == "coverage"
+        and assertion.metric == "/percent_covered"
+        and assertion.comparison == "candidate"
+    )
+    assert coverage_floor == 85
+    for platform in (PlatformName.WINDOWS, PlatformName.MACOS):
+        assert f"--cov-fail-under={coverage_floor}" in tests_and_coverage.resolve(
+            platform
+        ).argv
     for platform in (PlatformName.WINDOWS, PlatformName.MACOS):
         for control in (*config.prepare, *config.checks):
             assert control.resolve(platform).argv
@@ -608,11 +624,13 @@ def test_demo_assurance_policy_is_reviewed_and_valid() -> None:
     assert policy.limits.max_total_report_bytes <= 16_777_216
     assert policy.limits.max_elapsed_seconds <= 30.0
 
-    source = {
-        "test.py": "5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1"
-    }
+    source = {"test.py": TRUSTED_TEST_BLOB_SHA256}
     assert len(policy.mappings) == 5
     assert all(mapping.sources == source for mapping in policy.mappings)
+    # Assurance identifies the trusted Git blob, independent of checkout line endings.
+    assert TRUSTED_TEST_BLOB_SHA256 != (
+        "5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1"
+    )
     assert all(
         mapping.independence_group == "upstream-test.py" for mapping in policy.mappings
     )

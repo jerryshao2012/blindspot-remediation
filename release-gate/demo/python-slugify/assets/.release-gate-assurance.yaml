@@ -23,7 +23,7 @@ mappings:
     concepts:
       behavior_region: transliteration
     sources:
-      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+      test.py: f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda
     independence_group: upstream-test.py
   - selector:
       check_id: tests-and-coverage
@@ -34,7 +34,7 @@ mappings:
     concepts:
       behavior_region: unicode
     sources:
-      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+      test.py: f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda
     independence_group: upstream-test.py
   - selector:
       check_id: tests-and-coverage
@@ -45,7 +45,7 @@ mappings:
     concepts:
       behavior_region: boundary
     sources:
-      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+      test.py: f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda
     independence_group: upstream-test.py
   - selector:
       check_id: tests-and-coverage
@@ -56,7 +56,7 @@ mappings:
     concepts:
       behavior_region: customization
     sources:
-      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+      test.py: f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda
     independence_group: upstream-test.py
   - selector:
       check_id: tests-and-coverage
@@ -67,7 +67,7 @@ mappings:
     concepts:
       behavior_region: cli_contract
     sources:
-      test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1
+      test.py: f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda
     independence_group: upstream-test.py
 required_regions:
   - dimension_id: behavior_region
