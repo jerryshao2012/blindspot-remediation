@@ -41,12 +41,25 @@ class NormalizationInput(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class NormalizationReport:
+    id: str
+    parser: str
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationCheck:
+    id: str
+    reports: tuple[NormalizationReport, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class NormalizationCapture:
     repository: Path
     base_commit: str
     candidate_tree: str
     patch_sha256: str
     changed_paths: tuple[str, ...]
+    checks: tuple[NormalizationCheck, ...]
 
     @classmethod
     def from_candidate(cls, capture: CandidateCapture) -> NormalizationCapture:
@@ -56,6 +69,16 @@ class NormalizationCapture:
             candidate_tree=capture.candidate_tree,
             patch_sha256=capture.patch_sha256,
             changed_paths=capture.changed_paths,
+            checks=tuple(
+                NormalizationCheck(
+                    id=check.id,
+                    reports=tuple(
+                        NormalizationReport(id=report.id, parser=report.parser.value)
+                        for report in check.reports
+                    ),
+                )
+                for check in capture.config.checks
+            ),
         )
 
 
@@ -77,7 +100,7 @@ def base_blob(capture: NormalizationInput, path: str, limit: int = 1048576) -> b
 
 
 def normalize(
-    capture: NormalizationInput,
+    capture: CandidateCapture | NormalizationCapture,
     run: Path,
     policy: AssurancePolicy,
     started: float,
@@ -124,21 +147,20 @@ def normalize(
                 except (ValueError, OSError):
                     source_validity[key] = False
     mappings = {m.selector.model_dump_json(): m for m in policy.mappings}
-    report_ids: dict[str, set[str]] = {}
-    for mapping in policy.mappings:
-        if mapping.selector.report_id is not None:
-            report_ids.setdefault(mapping.selector.check_id, set()).add(
-                mapping.selector.report_id
+    declared_checks = (
+        capture.checks
+        if isinstance(capture, NormalizationCapture)
+        else tuple(
+            NormalizationCheck(
+                id=check.id,
+                reports=tuple(
+                    NormalizationReport(id=report.id, parser=report.parser.value)
+                    for report in check.reports
+                ),
             )
-    for path in inventory:
-        parts = path.split("/")
-        if (
-            len(parts) == 6
-            and parts[0] == "controls"
-            and parts[2:4] == ["candidate", "reports"]
-            and parts[5].endswith(".xml")
-        ):
-            report_ids.setdefault(parts[1], set()).add(parts[5][:-4])
+            for check in capture.config.checks
+        )
+    )
 
     def add(
         selector: Selector,
@@ -192,10 +214,12 @@ def normalize(
             }
         )
 
-    for check in result["checks"]:
-        check_id = check["id"]
+    for check in declared_checks:
+        check_id = check.id
         record = executions[(check_id, "candidate")]
-        junit = sorted(report_ids.get(check_id, ()))
+        junit = sorted(
+            report.id for report in check.reports if report.parser == "junit-xml"
+        )
         if not junit:
             add(
                 Selector(check_id=check_id),

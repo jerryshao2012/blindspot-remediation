@@ -353,3 +353,81 @@ def test_spawned_normalization_ignores_unneeded_config_environment(tmp_path):
     assert result["assessment_status"] == "COMPLETE"
     assert result["evidence_sufficient"]
     assert result["artifacts"][0]["selector"]["report_id"] == "junit"
+
+
+def test_spawned_normalization_preserves_declared_junit_reports(tmp_path):
+    repo = setup_repo(tmp_path)
+    xml = '<testsuite name="suite"><testcase classname="C" name="case"/></testsuite>'
+    gate_path = repo / ".release-gate.yaml"
+    gate = yaml.safe_load(gate_path.read_text())
+    tests_check = dict(gate["checks"][0])
+    lint_check = dict(gate["checks"][0])
+    tests_check.update(
+        id="tests",
+        argv=[
+            sys.executable,
+            "-c",
+            (
+                "from pathlib import Path; "
+                f"Path('mapped.xml').write_text({xml!r}); "
+                f"Path('extra.xml').write_text({xml!r})"
+            ),
+        ],
+        reports=[
+            {"id": "mapped", "path": "mapped.xml", "parser": "junit-xml"},
+            {"id": "extra", "path": "extra.xml", "parser": "junit-xml"},
+            {
+                "id": "missing",
+                "path": "missing.xml",
+                "parser": "junit-xml",
+                "required": False,
+            },
+        ],
+    )
+    lint_check.update(
+        id="lint",
+        argv=[
+            sys.executable,
+            "-c",
+            f"from pathlib import Path; Path('lint.xml').write_text({xml!r})",
+        ],
+        reports=[{"id": "lint", "path": "lint.xml", "parser": "junit-xml"}],
+    )
+    gate["checks"] = [
+        tests_check,
+        lint_check,
+    ]
+    gate_path.write_text(yaml.safe_dump(gate))
+    policy_path = repo / ".release-gate-assurance.yaml"
+    policy = yaml.safe_load(policy_path.read_text())
+    policy["mappings"][0]["selector"].update(
+        check_id="tests",
+        report_id="mapped",
+        suite="suite",
+        classname="C",
+        name="case",
+    )
+    policy_path.write_text(yaml.safe_dump(policy))
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "declare multiple assurance reports")
+    (repo / "tracked.txt").write_text("spawn candidate\n")
+
+    _, result = assure(repo, tmp_path)
+
+    identities = {
+        (artifact["selector"]["check_id"], artifact["selector"].get("report_id"))
+        for artifact in result["artifacts"]
+    }
+    assert identities == {
+        ("tests", "mapped"),
+        ("tests", "extra"),
+        ("tests", "missing"),
+        ("lint", "lint"),
+    }
+    missing = next(
+        artifact
+        for artifact in result["artifacts"]
+        if artifact["selector"].get("report_id") == "missing"
+    )
+    assert missing["status"] == "UNAVAILABLE"
+    assert missing["observation"] == {"reason": "report missing"}
