@@ -6,7 +6,7 @@ base. The gate records its verdict before an external oracle grades whether the
 candidate is actually correct.
 
 Budget about 15 minutes for one interactive run. The automated three-verdict
-verification normally takes another 10–20 minutes because each gate run
+verification normally takes another 10–20 minutes because each assurance run
 installs dependencies in fresh evaluation workspaces.
 
 ## Choose a path
@@ -67,8 +67,8 @@ that the skill is registered, then exit.
 ## Automated verification
 
 This path does not use Copilot. It creates or validates the workbench, applies
-the known PASS, FAIL, and NEEDS_HUMAN candidates, invokes the direct Release
-Gate CLI, grades every result with the hidden oracle, and resets safely.
+the known PASS, FAIL, and NEEDS_HUMAN candidates, invokes `release-gate assure`,
+grades every gate result with the hidden oracle, and resets safely.
 
 ### Windows PowerShell
 
@@ -85,7 +85,7 @@ uv run --python 3.12 --no-project python demo.py verify
 The final line must be:
 
 ```text
-verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations
+verify: gate verdicts and assurance dispositions matched expectations
 ```
 
 Do not treat an earlier green line as completion. `verify` fails if setup, a
@@ -129,8 +129,8 @@ workbench/
 
 The candidate is pinned to upstream commit
 `7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4`. Setup commits the reviewed
-policy and tags that commit `release-gate-demo-base`. It refuses to overwrite
-an existing workbench.
+gate and assurance policies and tags that commit `release-gate-demo-base`. It
+refuses to overwrite an existing workbench.
 
 ### 3. Let Copilot implement X1
 
@@ -150,21 +150,25 @@ copilot
 ```
 
 Paste the task card and let Copilot edit and test the candidate. Review `/diff`.
-Do not accept changes to `test.py`, `.release-gate.yaml`, or evidence.
+Do not accept changes to `test.py`, `.release-gate.yaml`,
+`.release-gate-assurance.yaml`, or evidence.
 
-### 4. Validate and run Release Gate
+### 4. Validate and run Release Gate assurance
 
 In the same Copilot session, enter:
 
 ```text
 /release-gate validate
-/release-gate run --base release-gate-demo-base
+/release-gate assure --base release-gate-demo-base
 ```
 
-Copilot must invoke the gate once, preserve the exact verdict, read the
-produced `result.json`, and report its reason codes and evidence path. It must
-not retry, edit evidence, merge, or deploy. Copy the absolute path printed
-after `RESULT:` and exit Copilot.
+Copilot must invoke assurance once. That one invocation runs the deterministic
+gate first and performs the conceptual-diversity assessment only when the gate
+records `PASS`. It must preserve the exact `GATE_VERDICT`,
+`ASSURANCE_DISPOSITION`, and `ASSESSMENT_STATUS`, read the produced assurance
+`result.json`, and report its reason codes and evidence path. It must not retry,
+edit evidence, merge, or deploy. Copy the absolute path printed after `RESULT:`
+and exit Copilot.
 
 ### Direct CLI equivalent
 
@@ -172,30 +176,69 @@ From the demo directory:
 
 ```powershell
 release-gate validate --repo .\workbench\python-slugify
-release-gate run --repo .\workbench\python-slugify --base release-gate-demo-base
+release-gate assure --repo .\workbench\python-slugify --base release-gate-demo-base
 ```
 
 ```zsh
 release-gate validate --repo ./workbench/python-slugify
-release-gate run --repo ./workbench/python-slugify --base release-gate-demo-base
+release-gate assure --repo ./workbench/python-slugify --base release-gate-demo-base
 ```
 
-Exit codes are 0 for `PASS`, 1 for `FAIL`, and 2 for `NEEDS_HUMAN`. Exit 3 or 4
-is an operational error, not another verdict.
+The committed [assurance policy](assets/.release-gate-assurance.yaml) is loaded
+alongside `.release-gate.yaml`. In its current `advisory` mode, assurance
+findings do not alter a gate `PASS`, so the command exits 0 even when the
+assurance disposition needs human review. Exit 1 is `FAIL`, exit 2 is
+`NEEDS_HUMAN`, and exit 3 or 4 is an operational error.
 
-### 5. Inspect and grade the recorded run
+### 5. Inspect assurance, then grade the recorded gate run
 
 Return to `release-gate/demo/python-slugify` and quote paths containing spaces:
 
 ```powershell
-uv run --python 3.12 --no-project python demo.py inspect --result "C:\absolute\path\to\result.json"
-uv run --python 3.12 --no-project python demo.py grade --result "C:\absolute\path\to\result.json"
+uv run --python 3.12 --no-project python demo.py inspect-assurance --result "C:\absolute\path\to\assurance\result.json"
+uv run --python 3.12 --no-project python demo.py inspect --result "C:\absolute\path\to\gate\result.json"
+uv run --python 3.12 --no-project python demo.py grade --result "C:\absolute\path\to\gate\result.json"
 ```
 
 ```zsh
-uv run --python 3.12 --no-project python demo.py inspect --result "/absolute/path/to/result.json"
-uv run --python 3.12 --no-project python demo.py grade --result "/absolute/path/to/result.json"
+uv run --python 3.12 --no-project python demo.py inspect-assurance --result "/absolute/path/to/assurance/result.json"
+uv run --python 3.12 --no-project python demo.py inspect --result "/absolute/path/to/gate/result.json"
+uv run --python 3.12 --no-project python demo.py grade --result "/absolute/path/to/gate/result.json"
 ```
+
+`RESULT:` points to the assurance result. Run `inspect-assurance` on it and use
+its `linked gate result` path for `inspect` and the benchmark-only `grade`
+command. The three deterministic scenarios produce:
+
+| Scenario | `GATE_VERDICT` | `ASSURANCE_DISPOSITION` | `ASSESSMENT_STATUS` |
+|---|---|---|---|
+| `pass` | `PASS` | `PASS` | `COMPLETE` |
+| `fail` | `FAIL` | `FAIL` | `NOT_EVALUATED` |
+| `needs-human` | `NEEDS_HUMAN` | `NEEDS_HUMAN` | `NOT_EVALUATED` |
+
+### What the reviewed assurance map establishes
+
+The reviewed `.release-gate-assurance.yaml` names five behavior regions:
+`transliteration`, `unicode`, `boundary`, `customization`, and `cli_contract`.
+Each mapping selects an exact JUnit identity (check, report, suite, class, and
+test name) and trusts this exact source hash:
+`test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1`.
+All five mappings share the `upstream-test.py` independence group, so they are
+reviewed examples from one independent source rather than five independent
+sources.
+
+The policy permits a maximum mapping uncertainty of `0.95`. That deliberately
+allows the unmapped majority of the 82-test suite while requiring one reviewed
+example in every named region. Mapped evidence counts only when its exact
+identity and source hash match and there is candidate-side passing evidence. The
+assurance result reports the resulting mapping uncertainty, unmet regions, and
+whether evidence is sufficient.
+
+The walkthrough keeps this map in `advisory` mode: findings remain visible but
+do not alter a gate `PASS`. To enforce the assurance disposition, review and
+commit a base-policy change from `advisory` to `enforce`, create a new trusted
+base, and update CI to consume the assure exit code. That reviewed base-policy
+change is required; changing candidate-side policy is treated as tampering.
 
 The hidden oracle remains outside the candidate repository and runs only after
 the verdict exists. It cannot change or retry that verdict.
@@ -233,10 +276,10 @@ uv run --python 3.12 --no-project python demo.py doctor
 uv run --python 3.12 --no-project python demo.py setup
 ```
 
-Setup commits the reviewed policy and tags the trusted base as
+Setup commits both reviewed policies and tags the trusted base as
 `release-gate-demo-base`. In a real repository, this corresponds to reviewing
-and committing `.release-gate.yaml` plus every script it invokes before asking
-an assistant to make candidate changes.
+and committing `.release-gate.yaml`, `.release-gate-assurance.yaml`, and every
+script they invoke before asking an assistant to make candidate changes.
 
 ### 2. Review the policy as the assurance map
 
@@ -276,23 +319,24 @@ This creates the same kind of candidate an assistant is expected to produce:
 `setup.py`, `slugify/slugify.py`, `README.md`, and `tox.ini` are updated while
 `test.py` and `.release-gate.yaml` remain unchanged.
 
-### 4. Validate and run only Release Gate
+### 4. Validate and run Release Gate assurance
 
 Run the policy validator and verdict engine against the trusted base:
 
 ```powershell
 release-gate validate --repo .\workbench\python-slugify
-release-gate run --repo .\workbench\python-slugify --base release-gate-demo-base
+release-gate assure --repo .\workbench\python-slugify --base release-gate-demo-base
 ```
 
 ```zsh
 release-gate validate --repo ./workbench/python-slugify
-release-gate run --repo ./workbench/python-slugify --base release-gate-demo-base
+release-gate assure --repo ./workbench/python-slugify --base release-gate-demo-base
 ```
 
-Copy the absolute path printed after `RESULT:`. Exit codes 0, 1, and 2 are
-stable verdicts: `PASS`, `FAIL`, and `NEEDS_HUMAN`. Exit 3 or 4 is an
-operational error, not a release decision.
+Copy the assurance `RESULT:` path, run `demo.py inspect-assurance`, and follow
+its linked gate result when inspecting gate evidence. One `assure` invocation
+runs the deterministic gate first and assesses conceptual diversity only for a
+gate `PASS`.
 
 ### 5. Inspect the evidence, but do not grade with the oracle
 
@@ -328,13 +372,13 @@ one control, run the gate, and inspect `result.json`:
 ```powershell
 uv run --python 3.12 --no-project python demo.py reset
 uv run --python 3.12 --no-project python demo.py control fail
-release-gate run --repo .\workbench\python-slugify --base release-gate-demo-base
+release-gate assure --repo .\workbench\python-slugify --base release-gate-demo-base
 ```
 
 ```zsh
 uv run --python 3.12 --no-project python demo.py reset
 uv run --python 3.12 --no-project python demo.py control fail
-release-gate run --repo ./workbench/python-slugify --base release-gate-demo-base
+release-gate assure --repo ./workbench/python-slugify --base release-gate-demo-base
 ```
 
 Repeat with `needs-human` to confirm policy tampering escalates. These controls
@@ -521,7 +565,7 @@ ask:
 
 ```text
 Use the release-gate skill to validate this repository.
-Use the release-gate skill to run against base release-gate-demo-base.
+Use the release-gate skill to assure against base release-gate-demo-base.
 ```
 
 Copy the `RESULT:` path and continue with inspection and grading.

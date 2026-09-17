@@ -735,6 +735,47 @@ def test_committed_demo_assets_and_windows_guidance_are_self_contained() -> None
     assert "workbench/" in (DEMO / ".gitignore").read_text(encoding="utf-8")
 
 
+def test_demo_walkthrough_documents_conceptual_diversity_assurance() -> None:
+    readme = (DEMO / "README.md").read_text(encoding="utf-8")
+    normalized = " ".join(readme.split())
+
+    for phrase in (
+        ".release-gate-assurance.yaml",
+        "release-gate assure",
+        "GATE_VERDICT",
+        "ASSURANCE_DISPOSITION",
+        "ASSESSMENT_STATUS",
+        "inspect-assurance",
+        "mapping uncertainty",
+        "independence group",
+        "advisory",
+        "enforce",
+        "transliteration",
+        "unicode",
+        "boundary",
+        "customization",
+        "cli_contract",
+        "test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1",
+        "upstream-test.py",
+        "0.95",
+        "unmapped majority",
+        "candidate-side passing",
+        "verify: gate verdicts and assurance dispositions matched expectations",
+    ):
+        assert phrase.casefold() in normalized.casefold()
+
+    assert (
+        "release-gate assure --repo .\\workbench\\python-slugify "
+        "--base release-gate-demo-base"
+    ) in normalized
+    assert (
+        "release-gate assure --repo ./workbench/python-slugify "
+        "--base release-gate-demo-base"
+    ) in normalized
+    assert "assure exit code" in normalized.casefold()
+    assert "reviewed base-policy change" in normalized.casefold()
+
+
 def test_trusted_base_validation_checks_origin_parent_and_policy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
