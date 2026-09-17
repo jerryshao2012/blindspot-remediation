@@ -185,10 +185,12 @@ release-gate assure --repo ./workbench/python-slugify --base release-gate-demo-b
 ```
 
 The committed [assurance policy](assets/.release-gate-assurance.yaml) is loaded
-alongside `.release-gate.yaml`. In its current `advisory` mode, assurance
-findings do not alter a gate `PASS`, so the command exits 0 even when the
-assurance disposition needs human review. Exit 1 is `FAIL`, exit 2 is
-`NEEDS_HUMAN`, and exit 3 or 4 is an operational error.
+alongside `.release-gate.yaml`. In its current `advisory` mode, insufficient or
+unavailable assessment is recorded in `ASSESSMENT_STATUS`, reason codes, and
+`evidence_sufficient`; the disposition remains `PASS` and the command exits 0.
+Any `NEEDS_HUMAN` disposition exits 2, including candidate-side assurance
+policy tampering. A `FAIL` disposition exits 1, while exit 3 or 4 is an
+operational error.
 
 ### 5. Inspect assurance, then grade the recorded gate run
 
@@ -234,11 +236,14 @@ identity and source hash match and there is candidate-side passing evidence. The
 assurance result reports the resulting mapping uncertainty, unmet regions, and
 whether evidence is sufficient.
 
-The walkthrough keeps this map in `advisory` mode: findings remain visible but
-do not alter a gate `PASS`. To enforce the assurance disposition, review and
-commit a base-policy change from `advisory` to `enforce`, create a new trusted
-base, and update CI to consume the assure exit code. That reviewed base-policy
-change is required; changing candidate-side policy is treated as tampering.
+The walkthrough keeps this map in `advisory` mode: insufficient or unavailable
+assessment remains visible while the disposition remains `PASS`. The
+deterministic gate verdict is recorded independently in either mode. To enforce
+the assurance disposition, review and commit a base-policy change from
+`advisory` to `enforce`, create a new trusted base, and update CI to consume the
+assure exit code. Under `enforce`, a gate `PASS` paired with assurance
+`NEEDS_HUMAN` is not eligible for release. That reviewed base-policy change is
+required; changing candidate-side policy is treated as tampering.
 
 The hidden oracle remains outside the candidate repository and runs only after
 the verdict exists. It cannot change or retry that verdict.
@@ -356,13 +361,19 @@ gate result is `PASS` with only the four reviewed task files changed. Do not run
 `demo.py grade`; that command asks the hidden oracle whether the gate decision
 matched benchmark truth, which a normal repository does not have.
 
-Release handling without an oracle is therefore:
+Release handling without an oracle follows the final assurance disposition.
+The gate verdict remains deterministic and is preserved separately:
 
-| Gate verdict | Repository action |
-|---|---|
-| `PASS` | Eligible for human review under the recorded policy. Review the diff and evidence before merge. |
-| `FAIL` | Block release; inspect failed checks and scope findings. |
-| `NEEDS_HUMAN` | Escalate because required evidence is unavailable, policy changed, or review-required files changed. |
+| `ASSURANCE_DISPOSITION` | `ASSESSMENT_STATUS` in advisory mode | Repository action |
+|---|---|---|
+| `PASS` | `COMPLETE` with sufficient evidence | Eligible for human review under the recorded policy; inspect the diff and evidence before merge. |
+| `PASS` | `COMPLETE` with insufficient evidence, or `UNAVAILABLE` | Advisory finding: inspect reason codes and `evidence_sufficient`; exit 0 does not make the finding disappear. |
+| `FAIL` | `NOT_EVALUATED` | Block release; inspect failed gate checks and scope findings. |
+| `NEEDS_HUMAN` | `NOT_EVALUATED` | Escalate, including when candidate-side policy tampering prevents assessment. |
+
+After the reviewed mode change to `enforce`, a gate `PASS` with assurance
+`NEEDS_HUMAN` exits 2 and is not eligible for release. CI must consume the
+assure exit code rather than the gate verdict alone.
 
 ### 6. Optional negative controls without oracle truth
 

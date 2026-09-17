@@ -738,39 +738,58 @@ def test_committed_demo_assets_and_windows_guidance_are_self_contained() -> None
 def test_demo_walkthrough_documents_conceptual_diversity_assurance() -> None:
     readme = (DEMO / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(readme.split())
+    policy = load_policy(ASSURANCE_POLICY.read_bytes())
 
     for phrase in (
         ".release-gate-assurance.yaml",
-        "release-gate assure",
         "GATE_VERDICT",
         "ASSURANCE_DISPOSITION",
         "ASSESSMENT_STATUS",
-        "inspect-assurance",
         "mapping uncertainty",
         "independence group",
         "advisory",
         "enforce",
-        "transliteration",
-        "unicode",
-        "boundary",
-        "customization",
-        "cli_contract",
-        "test.py: 5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1",
-        "upstream-test.py",
-        "0.95",
         "unmapped majority",
         "candidate-side passing",
         "verify: gate verdicts and assurance dispositions matched expectations",
+        "insufficient or unavailable",
+        "disposition remains `PASS`",
+        "any `NEEDS_HUMAN` disposition exits 2",
+        "deterministic gate verdict",
+        "not eligible",
     ):
         assert phrase.casefold() in normalized.casefold()
 
-    assert (
+    [dimension] = policy.concept_schema.dimensions
+    for region in dimension.values:
+        assert f"`{region}`" in readme
+    for mapping in policy.mappings:
+        for path, digest in mapping.sources.items():
+            assert f"`{path}: {digest}`" in readme
+        assert f"`{mapping.independence_group}` independence group" in readme
+    assert f"`{policy.maximum_mapping_uncertainty_rate}`" in readme
+
+    windows_assure = (
         "release-gate assure --repo .\\workbench\\python-slugify "
         "--base release-gate-demo-base"
-    ) in normalized
-    assert (
+    )
+    macos_assure = (
         "release-gate assure --repo ./workbench/python-slugify "
         "--base release-gate-demo-base"
+    )
+    assert windows_assure in normalized
+    assert macos_assure in normalized
+    assert (
+        'demo.py inspect-assurance --result "C:\\absolute\\path\\to\\assurance\\result.json"'
+        in normalized
+    )
+    assert (
+        'demo.py inspect-assurance --result "/absolute/path/to/assurance/result.json"'
+        in normalized
+    )
+    assert (
+        "Run `inspect-assurance` on it and use its `linked gate result` path for "
+        "`inspect`"
     ) in normalized
     assert "assure exit code" in normalized.casefold()
     assert "reviewed base-policy change" in normalized.casefold()
