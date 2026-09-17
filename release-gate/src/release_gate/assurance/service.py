@@ -33,7 +33,13 @@ from release_gate.policy import Verdict
 from release_gate.reports import _read_regular_file
 
 from .adapter import EvidenceArtifact, EvidenceBundle, EvidenceDiversityMapperAdapter
-from .evidence import AssessmentUnavailable, base_blob, digest, normalize
+from .evidence import (
+    AssessmentUnavailable,
+    NormalizationCapture,
+    base_blob,
+    digest,
+    normalize,
+)
 from .policy import AssurancePolicy, Model, load_policy
 
 POLICY_PATH = ".release-gate-assurance.yaml"
@@ -334,7 +340,7 @@ def _worker(
     policy: AssurancePolicy,
     artifacts: list[dict[str, Any]],
     candidate: str,
-    capture: CandidateCapture | None,
+    capture: NormalizationCapture | None,
     run: Path | None,
 ) -> None:
     try:
@@ -372,10 +378,14 @@ def assess_bounded(
         raise AssessmentUnavailable("assessment deadline exceeded")
     if (capture is None) != (run is None):
         raise AssessmentUnavailable("incomplete normalization input")
+    normalization_capture = (
+        NormalizationCapture.from_candidate(capture) if capture is not None else None
+    )
     context = multiprocessing.get_context("spawn")
     reader, writer = context.Pipe(duplex=False)
     process = context.Process(
-        target=_worker, args=(writer, policy, artifacts, candidate, capture, run)
+        target=_worker,
+        args=(writer, policy, artifacts, candidate, normalization_capture, run),
     )
     try:
         process.start()

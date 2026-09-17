@@ -330,3 +330,26 @@ def test_normalization_runs_inside_bounded_worker(tmp_path, monkeypatch):
     code, result = assure(repo, tmp_path)
     assert code == 0
     assert result["evidence_sufficient"]
+
+
+def test_spawned_normalization_ignores_unneeded_config_environment(tmp_path):
+    xml = (
+        '<testsuite name="suite" tests="1">'
+        '<testcase classname="C" name="boundary"/>'
+        "</testsuite>"
+    )
+    repo = setup_repo(tmp_path, xml=xml)
+    path = repo / ".release-gate.yaml"
+    policy = yaml.safe_load(path.read_text())
+    policy["checks"][0]["environment"] = {"ASSURANCE_TEST": "enabled"}
+    path.write_text(yaml.safe_dump(policy))
+    git(repo, "add", str(path))
+    git(repo, "commit", "-qm", "configure check environment")
+    (repo / "tracked.txt").write_text("spawn candidate\n")
+
+    code, result = assure(repo, tmp_path)
+
+    assert code == 0
+    assert result["assessment_status"] == "COMPLETE"
+    assert result["evidence_sufficient"]
+    assert result["artifacts"][0]["selector"]["report_id"] == "junit"

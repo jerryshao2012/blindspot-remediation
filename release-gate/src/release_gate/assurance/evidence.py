@@ -6,14 +6,14 @@ import hashlib
 import json
 import time
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from defusedxml import ElementTree
 
 from release_gate.evidence import EvidenceError, verify_run
 from release_gate.git import CandidateCapture, _source_git
-from release_gate.models import ReportParser
 from release_gate.reports import _read_regular_file
 
 from .policy import AssurancePolicy, Selector
@@ -23,11 +23,47 @@ class AssessmentUnavailable(ValueError):
     """No complete assessment can be made within the evidence contract."""
 
 
+class NormalizationInput(Protocol):
+    @property
+    def repository(self) -> Path: ...
+
+    @property
+    def base_commit(self) -> str: ...
+
+    @property
+    def candidate_tree(self) -> str: ...
+
+    @property
+    def patch_sha256(self) -> str: ...
+
+    @property
+    def changed_paths(self) -> tuple[str, ...]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationCapture:
+    repository: Path
+    base_commit: str
+    candidate_tree: str
+    patch_sha256: str
+    changed_paths: tuple[str, ...]
+
+    @classmethod
+    def from_candidate(cls, capture: CandidateCapture) -> NormalizationCapture:
+        return cls(
+            repository=capture.repository,
+            base_commit=capture.base_commit,
+            candidate_tree=capture.candidate_tree,
+            patch_sha256=capture.patch_sha256,
+            changed_paths=capture.changed_paths,
+        )
+
+
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def base_blob(capture: CandidateCapture, path: str, limit: int = 1048576) -> bytes:
+def base_blob(capture: NormalizationInput, path: str, limit: int = 1048576) -> bytes:
     entries = _source_git(
         capture.repository, "ls-tree", "-z", capture.base_commit, "--", path
     )
@@ -41,7 +77,7 @@ def base_blob(capture: CandidateCapture, path: str, limit: int = 1048576) -> byt
 
 
 def normalize(
-    capture: CandidateCapture,
+    capture: NormalizationInput,
     run: Path,
     policy: AssurancePolicy,
     started: float,
@@ -88,6 +124,21 @@ def normalize(
                 except (ValueError, OSError):
                     source_validity[key] = False
     mappings = {m.selector.model_dump_json(): m for m in policy.mappings}
+    report_ids: dict[str, set[str]] = {}
+    for mapping in policy.mappings:
+        if mapping.selector.report_id is not None:
+            report_ids.setdefault(mapping.selector.check_id, set()).add(
+                mapping.selector.report_id
+            )
+    for path in inventory:
+        parts = path.split("/")
+        if (
+            len(parts) == 6
+            and parts[0] == "controls"
+            and parts[2:4] == ["candidate", "reports"]
+            and parts[5].endswith(".xml")
+        ):
+            report_ids.setdefault(parts[1], set()).add(parts[5][:-4])
 
     def add(
         selector: Selector,
@@ -141,28 +192,29 @@ def normalize(
             }
         )
 
-    for check in capture.config.checks:
-        record = executions[(check.id, "candidate")]
-        junit = [r for r in check.reports if r.parser is ReportParser.JUNIT_XML]
+    for check in result["checks"]:
+        check_id = check["id"]
+        record = executions[(check_id, "candidate")]
+        junit = sorted(report_ids.get(check_id, ()))
         if not junit:
             add(
-                Selector(check_id=check.id),
-                checks[check.id]["status"],
+                Selector(check_id=check_id),
+                checks[check_id]["status"],
                 {
-                    "check_id": check.id,
+                    "check_id": check_id,
                     "classification": record["classification"],
                     "metrics": record["metrics"],
                 },
                 record,
             )
             continue
-        for report in junit:
-            path = f"controls/{check.id}/candidate/reports/{report.id}.xml"
+        for report_id in junit:
+            path = f"controls/{check_id}/candidate/reports/{report_id}.xml"
             if path not in inventory:
                 add(
                     Selector(
-                        check_id=check.id,
-                        report_id=report.id,
+                        check_id=check_id,
+                        report_id=report_id,
                         suite="",
                         classname="",
                         name="",
@@ -216,8 +268,8 @@ def normalize(
                     elif element.find("skipped") is not None:
                         status = "SKIPPED"
                     selector = Selector(
-                        check_id=check.id,
-                        report_id=report.id,
+                        check_id=check_id,
+                        report_id=report_id,
                         suite=suite,
                         classname=element.get("classname", ""),
                         name=element.get("name", ""),
@@ -241,8 +293,8 @@ def normalize(
             if not cases:
                 add(
                     Selector(
-                        check_id=check.id,
-                        report_id=report.id,
+                        check_id=check_id,
+                        report_id=report_id,
                         suite="",
                         classname="",
                         name="",
