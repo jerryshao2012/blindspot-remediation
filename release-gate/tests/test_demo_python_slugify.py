@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import math
@@ -19,9 +20,6 @@ DEMO = ROOT / "demo" / "python-slugify"
 DRIVER = DEMO / "demo.py"
 POLICY = DEMO / "assets" / ".release-gate.yaml"
 ASSURANCE_POLICY = DEMO / "assets" / ".release-gate-assurance.yaml"
-TRUSTED_TEST_BLOB_SHA256 = (
-    "f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda"
-)
 
 
 def load_driver() -> ModuleType:
@@ -624,13 +622,9 @@ def test_demo_assurance_policy_is_reviewed_and_valid() -> None:
     assert policy.limits.max_total_report_bytes <= 16_777_216
     assert policy.limits.max_elapsed_seconds <= 30.0
 
-    source = {"test.py": TRUSTED_TEST_BLOB_SHA256}
     assert len(policy.mappings) == 5
-    assert all(mapping.sources == source for mapping in policy.mappings)
-    # Assurance identifies the trusted Git blob, independent of checkout line endings.
-    assert TRUSTED_TEST_BLOB_SHA256 != (
-        "5262916dbabb42b0d63b7c3eaa200aa435e8bb6d888287a048ed649eb29d91b1"
-    )
+    assert all(set(mapping.sources) == {"test.py"} for mapping in policy.mappings)
+    assert len({mapping.sources["test.py"] for mapping in policy.mappings}) == 1
     assert all(
         mapping.independence_group == "upstream-test.py" for mapping in policy.mappings
     )
@@ -686,6 +680,92 @@ def test_demo_assurance_policy_is_reviewed_and_valid() -> None:
             {"behavior_region": "cli_contract"},
         ),
     ]
+
+
+def test_reviewed_source_validation_uses_trusted_git_blob_not_checkout_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    repository = tmp_path / "repository"
+    repository.mkdir()
+
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Demo Test"], cwd=repository, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "demo-test@example.invalid"],
+        cwd=repository,
+        check=True,
+    )
+    source = repository / "test.py"
+    source.write_bytes(b"first line\nsecond line\n")
+    subprocess.run(["git", "add", "test.py"], cwd=repository, check=True)
+    subprocess.run(["git", "commit", "-qm", "upstream"], cwd=repository, check=True)
+
+    policy = ASSURANCE_POLICY.read_bytes().replace(
+        b"f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda",
+        hashlib.sha256(b"first line\nsecond line\n").hexdigest().encode(),
+    )
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    (assets / ".release-gate-assurance.yaml").write_bytes(policy)
+    source.write_bytes(b"first line\r\nsecond line\r\n")
+
+    monkeypatch.setattr(driver, "REPOSITORY", repository)
+    monkeypatch.setattr(driver, "ASSETS", assets)
+    monkeypatch.setattr(
+        driver,
+        "_load_assurance_policy_sources",
+        lambda path: [
+            mapping.sources for mapping in load_policy(path.read_bytes()).mappings
+        ],
+    )
+
+    driver._verify_reviewed_source_blobs()
+
+
+def test_reviewed_source_validation_rejects_stale_policy_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    (repository / "test.py").write_bytes(b"trusted contents\n")
+    subprocess.run(["git", "add", "test.py"], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Demo Test",
+            "-c",
+            "user.email=demo-test@example.invalid",
+            "commit",
+            "-qm",
+            "upstream",
+        ],
+        cwd=repository,
+        check=True,
+    )
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    (assets / ".release-gate-assurance.yaml").write_bytes(
+        ASSURANCE_POLICY.read_bytes()
+    )
+
+    monkeypatch.setattr(driver, "REPOSITORY", repository)
+    monkeypatch.setattr(driver, "ASSETS", assets)
+    monkeypatch.setattr(
+        driver,
+        "_load_assurance_policy_sources",
+        lambda path: [
+            mapping.sources for mapping in load_policy(path.read_bytes()).mappings
+        ],
+    )
+
+    with pytest.raises(driver.DemoError, match=r"test.py.*trusted Git blob contents"):
+        driver._verify_reviewed_source_blobs()
 
 
 def test_demo_dependency_preparation_is_build_isolation_safe() -> None:
@@ -914,6 +994,12 @@ def test_setup_installs_both_trusted_policies_before_tagging(
     monkeypatch.setattr(driver, "_require_gate_version", lambda: None)
     monkeypatch.setattr(driver, "_run", fake_run)
     monkeypatch.setattr(driver, "_git", fake_git)
+    monkeypatch.setattr(
+        driver,
+        "_verify_reviewed_source_blobs",
+        lambda: git_calls.append(("verify-reviewed-source-blobs",)),
+        raising=False,
+    )
     monkeypatch.setattr(driver, "_verify_repository", lambda: None)
     monkeypatch.setattr(driver, "_create_task_environment", lambda path: None)
     monkeypatch.setattr(driver, "_verify_upstream_tests", lambda: None)
@@ -930,9 +1016,15 @@ def test_setup_installs_both_trusted_policies_before_tagging(
         ".gitignore",
     )
     assert staged in git_calls
+    validation = ("verify-reviewed-source-blobs",)
     commit = ("commit", "--quiet", "-m", "chore: add release gate demo policy")
     tag = ("tag", driver.BASE_REF)
-    assert git_calls.index(staged) < git_calls.index(commit) < git_calls.index(tag)
+    assert (
+        git_calls.index(validation)
+        < git_calls.index(staged)
+        < git_calls.index(commit)
+        < git_calls.index(tag)
+    )
     assert [command[-5:] for command in run_calls if "init" in command] == [
         ("init", "--repo", str(repository), "--from-config", str(POLICY))
     ]

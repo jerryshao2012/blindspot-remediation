@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -346,6 +347,7 @@ def setup() -> None:
             ASSETS / ".release-gate-assurance.yaml",
             REPOSITORY / ".release-gate-assurance.yaml",
         )
+        _verify_reviewed_source_blobs()
         _git(
             "add",
             ".release-gate.yaml",
@@ -622,6 +624,57 @@ def _git_blob(specification: str) -> bytes:
         raise DemoError(
             f"command failed: git show {specification} ({detail})"
         ) from error
+
+
+def _release_gate_python() -> Path:
+    executable = shutil.which("release-gate")
+    if executable is None:
+        raise DemoError("required executable is unavailable: release-gate")
+    sibling = Path(executable).resolve().with_name(
+        "python.exe" if sys.platform == "win32" else "python"
+    )
+    if not sibling.is_file():
+        raise DemoError(
+            "unable to load assurance policy: release-gate Python is unavailable"
+        )
+    return sibling
+
+
+def _load_assurance_policy_sources(path: Path) -> list[dict[str, str]]:
+    script = (
+        "import json, sys; from pathlib import Path; "
+        "from release_gate.assurance.policy import load_policy; "
+        "policy = load_policy(Path(sys.argv[1]).read_bytes()); "
+        "print(json.dumps([mapping.sources for mapping in policy.mappings]))"
+    )
+    result = _run((_release_gate_python(), "-c", script, path), capture=True)
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise DemoError("unable to load assurance policy source mappings") from error
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise DemoError("assurance policy source mappings are invalid")
+    return value
+
+
+def _verify_reviewed_source_blobs() -> None:
+    trusted_digest = hashlib.sha256(_git_blob("HEAD:test.py")).hexdigest()
+    sources = _load_assurance_policy_sources(
+        ASSETS / ".release-gate-assurance.yaml"
+    )
+    if not sources:
+        raise DemoError("assurance policy has no reviewed source mappings")
+    for index, mapping_sources in enumerate(sources, start=1):
+        reviewed_digest = mapping_sources.get("test.py")
+        if not isinstance(reviewed_digest, str):
+            raise DemoError(
+                f"assurance mapping {index} is missing reviewed source test.py"
+            )
+        if reviewed_digest != trusted_digest:
+            raise DemoError(
+                "reviewed source test.py SHA-256 does not match the trusted Git "
+                f"blob contents at HEAD (mapping {index})"
+            )
 
 
 def _create_task_environment(venv: Path) -> None:
