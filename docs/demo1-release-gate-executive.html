@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Demo 1 - Tool Spine: Release Gate Assurance Executive Walkthrough</title>
+<title>Demo 1 - Tool Spine: Assurance Intelligence Executive Walkthrough</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230075be'/%3E%3Cpath d='M8 8h16v5H13v6h11v5H8z' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -719,7 +719,7 @@
 </head>
 <body>
 <div class="progress" id="progress"></div>
-<div class="topbar"><span>Advanced Engineering Demo</span><span>Tool Spine / Release Gate Assurance</span></div>
+<div class="topbar"><span>Advanced Engineering Demo</span><span>Tool Spine / Assurance Intelligence</span></div>
 <div class="counter" id="counter">01 / 08</div>
 <div class="hints">Left/Right navigate - F fullscreen - N notes popup</div>
 <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
@@ -728,8 +728,8 @@
   <section class="slide" id="slide-1" data-title="Executive Summary">
     <div class="slide-content">
       <div class="kicker reveal">Demo overview - Evidence, quality and trust</div>
-      <h1 class="reveal">Release Gate Assurance in the Tool Spine.</h1>
-      <p class="lead reveal">Release Gate Assurance connects verified engineering evidence to a policy-owned decision. The Conceptual Diversity Evaluator measures conceptual coverage, shared lineage and gaps before the final assurance disposition; the release owner reviews the outcome.</p>
+      <h1 class="reveal">Assurance Intelligence in the Tool Spine.</h1>
+      <p class="lead reveal">Assurance Intelligence connects verified engineering evidence to a policy-owned decision. The Conceptual Diversity Evaluator measures conceptual coverage, shared lineage and gaps before the final assurance disposition; the release owner reviews the outcome.</p>
       <div class="summary-grid reveal">
         <div class="panel large">
           <div>
@@ -753,7 +753,7 @@
       </div>
       <div class="src reveal">Enterprise AI capability alignment: AI Agents and Agentic AI · AI Governance · AI Observability · Capability mapping: appendix</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Opening pitch.</strong> Release Gate Assurance connects engineering evidence to a policy-owned decision. Teams supply tests and tools. The Conceptual Diversity Evaluator supplies coverage, lineage-aware support, uncertainty and gap findings. It is an assurance evaluator, not a release authority or another top-level gate alongside Security or Governance.</p>
+        <p><strong>Opening pitch.</strong> Assurance Intelligence connects engineering evidence to a policy-owned decision. Teams supply tests and tools. The Conceptual Diversity Evaluator supplies coverage, lineage-aware support, uncertainty and gap findings. It is an assurance evaluator, not a release authority or another top-level gate alongside Security or Governance.</p>
         <p><strong>Pre-gate means before the final decision.</strong> In the current <code>release-gate assure</code> implementation, the deterministic gate runs once and its evidence is verified. Only a PASS with unchanged assurance policy proceeds to conceptual assessment. The reviewed assurance policy then determines the final disposition. FAIL and NEEDS_HUMAN are preserved; the mapper never overrides them.</p>
         <p><strong>Policy owns the decision.</strong> Gate verdict and assurance disposition are separate fields. Advisory findings do not downgrade PASS; enforce mode changes PASS to NEEDS_HUMAN when evidence is insufficient or assessment unavailable. An assurance-policy edit also escalates PASS. The actual vocabulary is PASS / FAIL / NEEDS_HUMAN, not PASS / WARN / BLOCK.</p>
         <p><strong>Current capability and future direction.</strong> Version 0.7.0 uses explicit reviewed mappings, source hashes and independence groups. It does not infer concepts from names or automatically acquire new evidence. An adaptive planner could later use mapper gaps to select capabilities, gather evidence and reassess. That loop and broader AI/ML selection remain proposed.</p>

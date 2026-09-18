@@ -2,7 +2,7 @@
 
 Seven minutes for the demo itself, accompanying slide 3 of [the executive deck](demo1-release-gate-executive.html). These notes cover only the demo, not the full presentation. Start the clock when switching to Copilot.
 
-**Demo scope:** The slides describe the newer Release Gate Assurance design; this walkthrough still uses the existing September 1–2 deterministic gate recordings. No updated assurance run logs are available for this demo. Follow the sequence below rather than slide 3’s newer `assure` sequence: show the gate policy, the recorded verdicts and the original evidence package. Do not present conceptual coverage, assurance dispositions or a second receipt as recorded results.
+**Demo scope:** The slides describe the newer Assurance Intelligence design; this walkthrough still uses the existing September 1–2 deterministic gate recordings. No updated assurance run logs are available for this demo. Follow the sequence below rather than slide 3’s newer `assure` sequence: show the gate policy, the recorded verdicts and the original evidence package. Do not present conceptual coverage, assurance dispositions or a second receipt as recorded results.
 
 ## Prepare the screens
 
@@ -16,7 +16,7 @@ The assurance policy and conceptual mappings may be discussed as newer design co
 
 **Open:** `release-gate/skills/release-gate/SKILL.md` in GitHub Copilot.
 
-“The slides describe Release Gate Assurance: evaluators produce evidence, policy determines the outcome, and the release owner authorizes release.
+“The slides describe Assurance Intelligence: evaluators produce evidence, policy determines the outcome, and the release owner authorizes release.
 
 This recorded python-slugify demo shows the execution foundation: explicit release rules, configured checks and traceable evidence. It predates the Conceptual Diversity Evaluator integration.”
 
