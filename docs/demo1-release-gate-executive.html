@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Demo 1 - Tool Spine: Release Gate Executive Walkthrough</title>
+<title>Demo 1 - Tool Spine: Release Gate Assurance Executive Walkthrough</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230075be'/%3E%3Cpath d='M8 8h16v5H13v6h11v5H8z' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -705,7 +705,9 @@
   }
 
   #slide-1 h1 { max-width: 22ch; font-size: clamp(1.5rem, 4.4vw, 3.5rem); }
-  #slide-1 .slide-content { padding-block: clamp(.5rem, 1vh, 1rem); }
+  /* Avoid double vertical padding so all slides fit presentation viewports. */
+  .slide-content { padding-block: clamp(.5rem, 1vh, 1rem); }
+  .slide h2 { max-width: 30ch; }
   /* Enterprise capability appendix: preserve deck styling and bound text density. */
   .capability-slide h2 { max-width: 30ch; }
   .capability-slide .lead { max-width: 90ch; }
@@ -717,8 +719,8 @@
 </head>
 <body>
 <div class="progress" id="progress"></div>
-<div class="topbar"><span>Advanced Engineering Demo</span><span>Tool Spine / Release Gate</span></div>
-<div class="counter" id="counter">01 / 12</div>
+<div class="topbar"><span>Advanced Engineering Demo</span><span>Tool Spine / Release Gate Assurance</span></div>
+<div class="counter" id="counter">01 / 08</div>
 <div class="hints">Left/Right navigate - F fullscreen - N notes popup</div>
 <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
 
@@ -726,36 +728,36 @@
   <section class="slide" id="slide-1" data-title="Executive Summary">
     <div class="slide-content">
       <div class="kicker reveal">Demo overview - Evidence, quality and trust</div>
-      <h1 class="reveal">Assurance intelligence in the Tool Spine.</h1>
-      <p class="lead reveal">Release Gate Service sits between AI coding and software release. Its adaptive assurance model uses AI, ML, and engineering signals to ask what remains unknown, select the right capabilities, and build evidence for a release decision.</p>
+      <h1 class="reveal">Release Gate Assurance in the Tool Spine.</h1>
+      <p class="lead reveal">Release Gate Assurance connects verified engineering evidence to a policy-owned decision. The Conceptual Diversity Evaluator measures conceptual coverage, shared lineage and gaps before the final assurance disposition; the release owner reviews the outcome.</p>
       <div class="summary-grid reveal">
         <div class="panel large">
           <div>
-            <h3>Teams bring capabilities. The gate coordinates.</h3>
-            <p>Tests, agents, scanners, mutation testing, and evidence-diversity models contribute specialized evidence. The gate’s role is to decide what to ask next and coordinate how that evidence is gathered and assessed.</p>
+            <h3>Evaluators produce evidence. Policy decides.</h3>
+            <p>The Conceptual Diversity Evaluator is a pre-gate assurance/evidence-producing evaluator, not a standalone release gate. Its findings inform reviewed policy; adaptive evidence acquisition remains a proposed extension.</p>
           </div>
           <div class="metric-row">
-            <div class="metric"><strong>6</strong><span>adaptive steps</span></div>
-            <div class="metric"><strong>3</strong><span>verdicts</span></div>
+            <div class="metric"><strong>6</strong><span>assurance steps</span></div>
+            <div class="metric"><strong>3</strong><span>dispositions</span></div>
             <div class="metric"><strong>1</strong><span>release owner</span></div>
           </div>
         </div>
-        <div class="flow" aria-label="Adaptive assurance model: repeat evidence gathering while questions remain">
-          <div class="flow-step"><b>01</b><span>Understand the change and its risks.</span></div>
-          <div class="flow-step"><b>02</b><span>Identify unanswered questions.</span></div>
-          <div class="flow-step"><b>03</b><span>Select tests, tools, and models.</span></div>
-          <div class="flow-step"><b>04</b><span>Gather and connect evidence.</span></div>
-          <div class="flow-step"><b>05</b><span>Assess coverage and diversity.</span></div>
-          <div class="flow-step"><b>06</b><span>Seek more evidence, decide, or escalate.</span></div>
+        <div class="flow" aria-label="Current assurance flow: deterministic checks, evidence evaluation, then policy-owned final disposition">
+          <div class="flow-step"><b>01</b><span>Load policies from the trusted base.</span></div>
+          <div class="flow-step"><b>02</b><span>Run deterministic checks once.</span></div>
+          <div class="flow-step"><b>03</b><span>Verify candidate-linked evidence.</span></div>
+          <div class="flow-step"><b>04</b><span>On PASS: assess conceptual coverage.</span></div>
+          <div class="flow-step"><b>05</b><span>Apply advisory or enforce policy.</span></div>
+          <div class="flow-step"><b>06</b><span>Record disposition for release review.</span></div>
         </div>
       </div>
       <div class="src reveal">Enterprise AI capability alignment: AI Agents and Agentic AI · AI Governance · AI Observability · Capability mapping: appendix</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Opening pitch (about one minute).</strong> “Release Gate Service is the assurance intelligence between AI coding and software release. It asks: what do we still need to know about this change? Its adaptive model uses AI, ML, and engineering signals to select mechanisms that can answer those questions and accumulate evidence until the change can be meaningfully assessed or escalated. Engineering teams bring their specialized capabilities: tests, agents, scanners, mutation testing, and evidence-diversity models. The gate coordinates how those capabilities are used, assesses what remains unanswered, and pursues additional evidence where needed. Within the Tool Spine, that is our added value: a coordinated assurance process around each change. Today, Jerry will show its foundation through configured checks, policy enforcement, and traceable evidence.”</p>
-        <p><strong>Mapping concept, if asked.</strong> Map the change to potential risks, the risks to evidence needs, and the available evidence to coverage and independence. For the dependency migration, passing behavior tests would leave installation unverified if installation checks never ran. The adaptive model would recognize the gap, select a suitable capability, collect the result, and reassess sufficiency. If a material question remains unresolved, escalate it for human review. Ten tests sharing the same assumptions can provide less useful evidence than complementary checks.</p>
-        <p><strong>Data science contribution, if asked.</strong> Describe evidence by risk coverage, method, and provenance; use diversity models to assess overlap and dependence. Evaluate sufficiency assessments against historical changes or seeded faults, measuring missed defects and unnecessary escalations to calibrate review thresholds. AI and ML help identify gaps and prioritize additional evidence; engineering signals ground the assessment. A score is not a probability of correctness unless validated and calibrated.</p>
-        <p><strong>Presenter scope.</strong> The adaptive loop describes the service model in K’s pitch. The saved September 2 run demonstrates configured checks and policy enforcement, not adaptive capability selection or evidence-diversity assessment. Deterministic execution supports reproducibility; keep the headline on assurance intelligence. Evidence mapping here is distinct from the L1/L2/L3 capability-model mapping. In enterprise capability terms, the adaptive service model aligns to AI-empowered Application Development → AI Agents and Agentic AI → Reasoning and Planning, Routing and Orchestration, and Tools Management and Tool Calling (pp. 15–16). This is a conceptual alignment; the saved run proves configured execution only.</p>
-        <p><strong>Tie to the themes.</strong> Evidence, quality and trust: assess whether the evidence answers the relevant questions. Operate with control: keep the process within policy and escalate unresolved risk. Measure and self-improve: use recorded outcomes to evaluate assurance quality. Use the Enterprise capability appendix after the source map for the full seven-domain context and selected L2/L3 paths.</p>
+        <p><strong>Opening pitch.</strong> Release Gate Assurance connects engineering evidence to a policy-owned decision. Teams supply tests and tools. The Conceptual Diversity Evaluator supplies coverage, lineage-aware support, uncertainty and gap findings. It is an assurance evaluator, not a release authority or another top-level gate alongside Security or Governance.</p>
+        <p><strong>Pre-gate means before the final decision.</strong> In the current <code>release-gate assure</code> implementation, the deterministic gate runs once and its evidence is verified. Only a PASS with unchanged assurance policy proceeds to conceptual assessment. The reviewed assurance policy then determines the final disposition. FAIL and NEEDS_HUMAN are preserved; the mapper never overrides them.</p>
+        <p><strong>Policy owns the decision.</strong> Gate verdict and assurance disposition are separate fields. Advisory findings do not downgrade PASS; enforce mode changes PASS to NEEDS_HUMAN when evidence is insufficient or assessment unavailable. An assurance-policy edit also escalates PASS. The actual vocabulary is PASS / FAIL / NEEDS_HUMAN, not PASS / WARN / BLOCK.</p>
+        <p><strong>Current capability and future direction.</strong> Version 0.7.0 uses explicit reviewed mappings, source hashes and independence groups. It does not infer concepts from names or automatically acquire new evidence. An adaptive planner could later use mapper gaps to select capabilities, gather evidence and reassess. That loop and broader AI/ML selection remain proposed.</p>
+        <p><strong>Evidence boundary.</strong> The September 1–2 receipts predate assurance. The current python-slugify demo has an advisory assurance policy. Neither conceptual coverage nor a passing disposition proves exhaustive correctness, calibrated safety probability, autonomous release authority or production scale.</p>
       </aside>
     </div>
   </section>
@@ -774,17 +776,17 @@
       <div class="summary-grid reveal">
         <div class="card accent">
           <h3>Map the change to evidence needs</h3>
-          <p>Graphify supplies change-effect context. The model’s Supporting Capabilities connect this work to Application Test Management and Application Source Code &amp; Version Control Management.</p>
+          <p>Graphify supplies change context. Reviewed conceptual mappings cover five behavior regions; shared-source tests retain one lineage. Packaging and documentation still need their own checks.</p>
         </div>
         <div class="card warn">
           <h3>What this run demonstrates</h3>
-          <p>The saved September 2 run replays a known-good control patch to demonstrate configured checks and policy enforcement.</p>
+          <p>September 2 proves configured checks only. The current demo adds advisory coverage assessment; it does not prove adaptive selection or exhaustive coverage.</p>
         </div>
       </div>
       <div class="src reveal">x1-behind-the-scenes.html, slides 5, 7, 10, and 13</div>
       <aside class="speaker-notes" data-duration="01:00">
         <p><strong>Why this example is useful.</strong> Explain slugification with a simple example: “Release Gate Demo” becomes “release-gate-demo” for a URL. This routine migration is a useful example of automated SDLC work because its effects cross packaging, runtime, test configuration, and documentation.</p>
-        <p><strong>Make the adaptive question concrete.</strong> “For this migration, we would ask whether installation succeeds, runtime behavior remains acceptable, test environments exercise the intended dependency, and documentation matches the package. The mapping connects each question to useful evidence. As new results arrive, the adaptive model asks what is still missing and which capability can answer it next.” Use this as an illustration of the service model; the saved run executes its configured checks.</p>
+        <p><strong>Make the adaptive question concrete.</strong> “For this migration, we would ask whether installation succeeds, runtime behavior remains acceptable, test environments exercise the intended dependency, and documentation matches the package. The mapping connects each question to useful evidence. The current mapper assesses reviewed regions and exposes gaps. A future adaptive planner could choose the next evidence source.” Use this as an illustration of the service model; the saved run executes its configured checks.</p>
         <p><strong>Graphify wording:</strong> Present Graphify as foundational codebase understanding and change-effect context. Do not say the recorded September 2 gate used Graphify as a formal check unless that is added separately.</p>
       </aside>
     </div>
@@ -793,16 +795,16 @@
   <section class="slide" id="slide-3" data-title="Live Demo Run Of Show">
     <div class="slide-content">
       <div class="kicker reveal">Live demo - 7 minutes</div>
-      <h2 class="reveal">See the assurance foundation in action.</h2>
+      <h2 class="reveal">Trace checks, assurance findings and disposition.</h2>
       <div class="demo-grid reveal">
         <div class="stage-list">
           <div class="stage"><b>0:00</b><span>Open the Release Gate skill in Copilot: <span class="mono">release-gate/skills/release-gate/SKILL.md</span>.</span></div>
-          <div class="stage"><b>1:15</b><span>Show the repository contract in <span class="mono">.release-gate.yaml</span>.</span></div>
-          <div class="stage"><b>2:30</b><span>Invoke the gate; show the September 1 <span class="pass">PASS</span>, <span class="fail">FAIL</span>, and <span class="human">NEEDS_HUMAN</span> controls.</span></div>
-          <div class="stage"><b>4:30</b><span>Show the saved September 2 verdict and check statuses; use the log only to explain a result.</span></div>
-          <div class="stage"><b>6:00</b><span>Inspect that run's <span class="mono">result.json</span> and <span class="mono">manifest.json</span>.</span></div>
+          <div class="stage"><b>1:15</b><span>Show both trusted-base policies: checks and assurance mappings.</span></div>
+          <div class="stage"><b>2:30</b><span>Run <span class="mono">assure --base release-gate-demo-base</span>; read both outcomes.</span></div>
+          <div class="stage"><b>4:30</b><span>Inspect coverage, uncertainty and unmet regions; identify advisory mode.</span></div>
+          <div class="stage"><b>6:00</b><span>Follow <span class="mono">gate_result_path</span>; compare with historical controls.</span></div>
         </div>
-        <div class="term" aria-label="Demo receipt excerpt">
+        <div class="term" aria-label="Historical deterministic receipt, before assurance integration">
 <pre><span class="dim">run:</span> 20260902T153230Z-0b1d3f349b56
 <span class="dim">candidate:</span> README.md, setup.py, slugify/slugify.py, tox.ini
 
@@ -819,18 +821,18 @@ reason_codes        none
       <div class="badge-row reveal">
         <span class="badge">Tool Spine skill</span>
         <span class="badge">AI Guardrail alignment</span>
-        <span class="badge">Gate verdict</span>
-        <span class="badge">Saved run log</span>
+        <span class="badge">Gate + assurance outcomes</span>
+        <span class="badge">Conceptual coverage findings</span>
         <span class="badge">AI Governance evidence</span>
       </div>
-      <div class="src reveal">September 1 automated-verification and September 2 online-pass: .log = execution; .md = interpretation</div>
+      <div class="src reveal">Current: release-gate/demo/python-slugify/README.md · Receipt shown: September 2, deterministic checks only</div>
       <aside class="speaker-notes" data-duration="07:00">
-        <p><strong>Preparation.</strong> The seven-minute clock starts when you switch from slides to Copilot. All paths below are repository-relative; demo files are under <code>release-gate/demo/python-slugify/</code>. Pre-open the files and the September 2 evidence package on the demo machine. Full standalone script: <code>docs/demo1-release-gate-speaker-notes.md</code>. Saved logs are actual recorded execution; Markdown reports explain how to read them. Identify a new live run separately from saved runs.</p>
-        <p><strong>0:00-1:15 — Skill. Open:</strong> <code>release-gate/skills/release-gate/SKILL.md</code> in Copilot. Say: “Release Gate is a reusable Tool Spine skill. It works alongside other skills and tells the agent how to invoke the gate: check compatibility, use an explicit baseline, and report the exact verdict. The agent coordinates execution; the gate decides under the configured policy.” Graphify supplies optional dependency context, not a formal check in the recorded run.</p>
-        <p><strong>1:15-2:30 — Contract. Open:</strong> <code>release-gate/demo/python-slugify/workbench/python-slugify/.release-gate.yaml</code>. Show allowed migration paths, forbidden <code>test.py</code>, and review-required policy changes. Say: “Policy sets the boundaries within which assurance operates. The candidate must not change its own acceptance rules.” Keep this brief: the policy is a supporting control, while the added-value pitch is selecting and coordinating evidence around each change. The file under <code>assets/</code> is the source template; show the active workbench policy.</p>
-        <p><strong>2:30-4:30 — Three verdicts. Open:</strong> Copilot in the prepared workbench and invoke the skill with explicit <code>run --base release-gate-demo-base</code>. Then open <code>release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-01-automated-verification.log</code>. Find each <code>VERDICT:</code>: PASS for approved changes; FAIL for protected <code>test.py</code> even though configured checks pass; NEEDS_HUMAN for a policy edit, with checks SKIPPED. Say these are three saved, independent scripted controls. Briefly open the matching <code>.md</code> report at “Control Summary” to explain the output. Its oracle assessment is separate from the gate verdict.</p>
-        <p><strong>4:30-6:00 — Online execution. Open:</strong> <code>release-gate/demo/python-slugify/logs/RUN-LOG-2026-09-02-online-pass.log</code>. Lead with <code>VERDICT: PASS</code> and the exact check statuses, then use <code>RESULT:</code> to reach the evidence. Use the matching <code>.md</code> report for a brief explanation; avoid reading the log line by line. Explain that green tests alone do not settle release readiness: the protected-file control fails despite green checks. Evidence diversity and sufficiency are the broader assurance question, but this saved run does not demonstrate adaptive test selection or a diversity assessment. Say: “This separate September 2 run replayed a known-good control patch. The log records execution; the report explains it. No hidden oracle grading was performed in this online run. In plain language, PASS means the configured requirements were met; behavior beyond those checks remains unverified.”</p>
-        <p><strong>6:00-7:00 — Evidence. Open:</strong> the September 2 log's exact <code>RESULT:</code> file, ending in <code>.release-gate/runs/20260902T153230Z-0b1d3f349b56/result.json</code>, then <code>manifest.json</code> in that same directory. Read verdict, reasons, changed paths, and check statuses; use the manifest and hashes to connect the evidence to the evaluated candidate. Say: “This is a traceable, tamper-evident record. PASS covers the configured policy and does not authorize merge or deployment.” Do not substitute another run's evidence without identifying it as a separate run.</p>
+        <p><strong>Preparation.</strong> Use the current <code>release-gate/demo/python-slugify/README.md</code> for setup and commands. Pre-open both workbench policies and the latest assurance result. The older standalone speaker script and September logs document the historical deterministic walkthrough, not this assurance flow. Do not label the displayed September 2 receipt as a new assurance run.</p>
+        <p><strong>0:00 — Skill.</strong> Open <code>release-gate/skills/release-gate/SKILL.md</code>. The agent invokes the service; reviewed policy owns the disposition. Graphify is optional context, not a formal check in the saved run.</p>
+        <p><strong>1:15 — Trusted contract.</strong> Show <code>.release-gate.yaml</code> and <code>.release-gate-assurance.yaml</code> committed in <code>release-gate-demo-base</code>. The assurance policy defines behavior_region: transliteration, unicode, boundary, customization and cli_contract. Each has one exact JUnit mapping and requires one independent support. All five share <code>upstream-test.py</code> lineage; five regions do not mean five independent sources.</p>
+        <p><strong>2:30 — Execute.</strong> In the prepared repository run <code>release-gate assure --base release-gate-demo-base</code>. Read <code>GATE_VERDICT</code> and <code>ASSURANCE_DISPOSITION</code> separately. A fresh run supplies its own evidence; retain the September 1 PASS / FAIL / NEEDS_HUMAN controls and September 2 PASS as historical comparisons only.</p>
+        <p><strong>4:30 — Assess.</strong> Follow the CLI's <code>RESULT:</code> to <code>_assurance/&lt;run-id&gt;/result.json</code>. Inspect mode, assessment_status, evidence_sufficient, coverage, unmet_requirements and reason_codes. The demo is advisory and permits mapping uncertainty up to 0.95 to expose its large unmapped remainder. Unmapped cases are not coverage. Non-PASS deterministic controls are NOT_EVALUATED, not successful conceptual assessments.</p>
+        <p><strong>6:00 — Trace.</strong> Inspect the assurance manifest and captured policy; follow <code>gate_result_path</code> to the deterministic receipt. The assurance result binds the gate result and manifest by hash. Hidden-oracle grading stays benchmark-only, after the decision, and never contributes conceptual support. CI enforcement requires a reviewed base-policy change to enforce mode and consumption of the assure exit code.</p>
       </aside>
     </div>
   </section>
@@ -838,20 +840,20 @@ reason_codes        none
   <section class="slide" id="slide-4" data-title="Leadership Takeaway">
     <div class="slide-content">
       <div class="kicker reveal">Close - 1 minute</div>
-      <h2 class="reveal">Turn specialized tools into coordinated assurance.</h2>
-      <p class="lead reveal">The added value is deciding what evidence a change needs, orchestrating capabilities to obtain it, and reassessing what remains unresolved. Release policy provides the boundaries for that adaptive process.</p>
+      <h2 class="reveal">Keep evidence assessment and decision authority clear.</h2>
+      <p class="lead reveal">The Conceptual Diversity Evaluator reports conceptual support and blind spots. Reviewed policy determines the assurance disposition. The mapper neither releases software nor creates a separate top-level gate.</p>
       <div class="takeaway-grid reveal">
         <div class="card good">
           <h3>PASS</h3>
-          <p>The reviewed policy accepted the candidate under recorded checks. Engineers still inspect before merge.</p>
+          <p>Configured checks passed. Advisory gaps may remain; enforce mode also requires sufficient assurance evidence. Human release review remains.</p>
         </div>
         <div class="card bad">
           <h3>FAIL</h3>
-          <p>Evidence says the candidate is wrong, out of scope, or violating blocking policy.</p>
+          <p>A blocking deterministic requirement failed. Assurance preserves FAIL; conceptual diversity cannot turn it into PASS.</p>
         </div>
         <div class="card warn">
           <h3>NEEDS_HUMAN</h3>
-          <p>Policy requires review or evidence is insufficient. In this demo, a policy edit triggers escalation.</p>
+          <p>Review is required: policy edits, or insufficient / unavailable assurance in enforce mode. Advisory gaps alone do not escalate.</p>
         </div>
       </div>
       <div class="summary-grid reveal">
@@ -861,14 +863,14 @@ reason_codes        none
         </div>
         <div class="card">
           <h3>Connect to the scorecard</h3>
-          <p>Use verdicts, check results, and evidence gaps in the Engineering Scorecard. Capability alignment: AI Observability → AI Evaluation → Evaluation Reporting; integration remains conceptual.</p>
+          <p>Use gate verdict, assurance disposition, coverage gaps and uncertainty in the Engineering Scorecard. Capability alignment: AI Observability → AI Evaluation → Evaluation Reporting; integration remains conceptual.</p>
         </div>
       </div>
       <div class="src reveal">release-gate-demo.html, slides 8 and 10; x1-behind-the-scenes.html, slide 13</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Close on added value.</strong> “The value we bring is assurance intelligence: asking what we still need to know, choosing mechanisms to answer it, and bringing the evidence together until the change can be assessed or escalated. Your team brings its tests, agents, scanners, and specialized models; Release Gate’s adaptive model coordinates those capabilities around the change. Today’s walkthrough demonstrated the execution and evidence foundation for that model.” PASS means the configured requirements were met; the human release owner still owns the release decision.</p>
-        <p><strong>Bridge to the next demo.</strong> Tie back to evidence, quality and trust; operate with control; measure and self-improve. The Engineering Scorecard can put release-readiness measures in context. Present this as a conceptual handoff unless an implemented integration is shown.</p>
-        <p><strong>Velocity — verbal only.</strong> Acknowledge the aspiration to support tens of thousands or hundreds of thousands of releases as autonomous engineering expands. Runtime overhead, concurrent evaluation, and human-review capacity need stress testing at that velocity. This demo does not establish production scale or throughput.</p>
+        <p><strong>Close.</strong> The Conceptual Diversity Evaluator is a pre-decision evidence evaluator. It reports coverage, redundancy through shared lineage, uncertainty and gaps. Trusted policy owns the deterministic verdict and final assurance disposition; the human release owner authorizes release.</p>
+        <p><strong>Advisory versus enforce.</strong> Advisory mode records gaps without downgrading PASS. In enforce mode, insufficient or unavailable assessment turns PASS into NEEDS_HUMAN. An assurance-policy change escalates PASS in either mode. Existing FAIL and NEEDS_HUMAN outcomes remain unchanged. Never use the mapper score as a release verdict.</p>
+        <p><strong>Next step.</strong> Review mappings, required regions, independence assumptions and uncertainty limits before enabling enforcement. Scorecard integration, adaptive acquisition and production throughput remain future validation work.</p>
       </aside>
     </div>
   </section>
@@ -876,34 +878,34 @@ reason_codes        none
   <section class="slide" id="slide-5" data-title="Appendix - Receipts">
     <div class="slide-content">
       <div class="kicker reveal">Appendix</div>
-      <h2 class="reveal">The PASS verdict is backed by inspectable artifacts.</h2>
+      <h2 class="reveal">Two linked receipts make the decision reviewable.</h2>
       <div class="appendix-grid reveal">
         <div class="term">
-<pre>.release-gate/runs/
-  20260902T153230Z-0b1d3f349b56/
-    result.json
-    trace.json
-    manifest.json
-    candidate.patch
-    effective-config.json</pre>
+<pre><span class="dim">Current assure output:</span>
+&lt;output&gt;/_assurance/&lt;run-id&gt;/
+  result.json · policy.yaml · manifest.json
+
+<span class="dim">Follow result.gate_result_path:</span>
+  result.json · trace.json · manifest.json
+  candidate.patch · effective-config.json</pre>
         </div>
         <div class="card accent">
           <h3>Evidence for governance review</h3>
           <ul>
-            <li><span class="mono">result.json</span>: verdict, checks, scope, hashes.</li>
-            <li><span class="mono">trace.json</span>: commands, timing, exit codes.</li>
-            <li><span class="mono">manifest.json</span>: SHA-256 inventory of run artifacts.</li>
-            <li><span class="mono">candidate.patch</span>: the exact change under review.</li>
+            <li>Assurance result: mode, disposition, coverage, gaps and uncertainty.</li>
+            <li>Captured assurance policy: reviewed mappings and thresholds.</li>
+            <li>Linked gate result: verdict, checks, scope and candidate hashes.</li>
+            <li>Manifests and trace: integrity inventory and execution history.</li>
           </ul>
         </div>
       </div>
       <div class="card warn reveal" style="margin-top:.8rem;">
         <h3>Important qualification</h3>
-        <p>PASS means this candidate met the configured policy and checks. Behavior outside those checks remains unverified. Artifact hashes help detect changes to the recorded evidence; they do not make it immutable.</p>
+        <p>Coverage is relative to reviewed mappings, not proof of completeness. Read mode and evidence_sufficient alongside PASS. Hashes detect evidence changes; they do not make receipts immutable.</p>
       </div>
-      <div class="src reveal">x1-behind-the-scenes.html, slide 12</div>
+      <div class="src reveal">release-gate/src/release_gate/assurance/service.py · assurance-result-v1.schema.json</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Use only if asked.</strong> This slide is for auditability questions. It shows what is on disk and what each file contributes. Capability alignment: AI Governance → AI Compliance Management → Compliance Auditing. The receipts are inputs to review, not proof of regulatory compliance. AI Observability → AI Monitoring → OpenTelemetry and Prompt Tracing are future integration points; trace.json is a local command trace and does not establish either capability.</p>
+        <p><strong>Use only if asked.</strong> This slide is for auditability questions. It shows the current two-package contract. The assurance result links the deterministic receipt by absolute gate_result_path and hashes; no assurance receipt is claimed for the historical September 2 run. Capability alignment: AI Governance → AI Compliance Management → Compliance Auditing. The receipts are inputs to review, not proof of regulatory compliance. AI Observability → AI Monitoring → OpenTelemetry and Prompt Tracing are future integration points; trace.json is a local command trace and does not establish either capability.</p>
       </aside>
     </div>
   </section>
@@ -911,29 +913,29 @@ reason_codes        none
   <section class="slide" id="slide-6" data-title="Appendix - Controls">
     <div class="slide-content">
       <div class="kicker reveal">Appendix</div>
-      <h2 class="reveal">The offline controls exercise all three outcomes.</h2>
+      <h2 class="reveal">Preserve gate controls; assess only eligible PASS.</h2>
       <div class="takeaway-grid reveal">
         <div class="card good">
           <h3>Control PASS</h3>
-          <p>Known-good patch changes only the approved X1 files and clears all checks.</p>
+          <p>Current advisory demo: gate PASS, assessment COMPLETE, disposition PASS; required mapped regions must be satisfied.</p>
         </div>
         <div class="card bad">
           <h3>Control FAIL</h3>
-          <p>Forbidden test-file edit triggers <span class="mono">PATH_FORBIDDEN</span> and blocks the candidate.</p>
+          <p>Forbidden test-file edit: gate FAIL, assessment NOT_EVALUATED, disposition FAIL.</p>
         </div>
         <div class="card warn">
           <h3>Control NEEDS_HUMAN</h3>
-          <p>Policy-file edits trigger <span class="mono">POLICY_FILE_CHANGED</span>; the gate escalates.</p>
+          <p>Gate-policy edit: NEEDS_HUMAN, assessment NOT_EVALUATED; disposition stays NEEDS_HUMAN.</p>
         </div>
       </div>
       <div class="term reveal" style="margin-top:.8rem;">
-<pre>demo.py control pass         <span class="ok">PASS</span>
-demo.py control fail         <span class="er">FAIL</span>
-demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
+<pre><span class="dim">Policy example: gate PASS + insufficient assurance</span>
+advisory mode  → <span class="ok">PASS</span> + recorded findings
+enforce mode   → <span class="wn">NEEDS_HUMAN</span></pre>
       </div>
-      <div class="src reveal">RUN-LOG-2026-09-01-automated-verification.md; x1-behind-the-scenes.html, slides 14-15</div>
+      <div class="src reveal">Current expectations: September 16 assurance demo design · Historical controls: September 1 verification log</div>
       <aside class="speaker-notes" data-duration="01:00">
-        <p><strong>Use only if asked.</strong> The controls demonstrate that the verdict categories are not cosmetic. They are exercised separately and mapped to specific release consequences.</p>
+        <p><strong>Use only if asked.</strong> Current demo verification expects COMPLETE assessment only for PASS. The historical September 1 controls demonstrate deterministic verdicts only. The policy example is explanatory, not a recorded run. An unavailable assessment also escalates PASS under enforce mode; an assurance-policy edit escalates PASS in either mode.</p>
       </aside>
     </div>
   </section>
@@ -944,19 +946,19 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
       <h2 class="reveal">Source map for questions after the executive path.</h2>
       <div class="appendix-grid reveal">
         <div class="card accent">
-          <h3>Primary decks</h3>
+          <h3>Current design sources</h3>
           <ul>
-            <li><span class="mono">release-gate/demo/release-gate-demo.html</span>: executive release gate architecture.</li>
-            <li><span class="mono">docs/x1-behind-the-scenes.html</span>: Demo 1 online walkthrough and controls.</li>
+            <li><span class="mono">release-gate/README.md</span> and demo README: assurance flow and commands.</li>
+            <li><a href="../E1-E2-conceptual-diversity-mapper/README.md">Conceptual Diversity Evaluator reference</a>: evaluator contracts and limits.</li>
           </ul>
         </div>
         <div class="card">
           <h3>Recommended prepared tabs</h3>
           <ul>
-            <li>Live environment run.</li>
-            <li>Candidate diff with four touched files.</li>
-            <li>September 2 result receipt folder.</li>
-            <li>Saved run log for timing gaps.</li>
+            <li>Both trusted-base policies.</li>
+            <li>Candidate diff and reviewed source mappings.</li>
+            <li>Current assurance receipt and linked gate result.</li>
+            <li>Historical logs, explicitly labelled by date.</li>
           </ul>
         </div>
       </div>
@@ -970,68 +972,41 @@ demo.py control needs-human  <span class="wn">NEEDS_HUMAN</span></pre>
     </div>
   </section>
 
-  <section class="slide capability-slide" id="slide-8" data-title="Appendix - Seven Enterprise Domains">
+  <section class="slide capability-slide" id="slide-8" data-title="Appendix - Capability Mapping Summary">
     <div class="slide-content">
-      <div class="kicker reveal">Enterprise capability mapping · Appendix</div>
-      <h2 class="reveal">One assurance story across seven domains.</h2>
-      <p class="lead reveal">L1 = enterprise domain. L2 = capability area. L3 = specific capability. Alignment describes the role of Release Gate; it does not claim full capability delivery.</p>
-      <div class="appendix-grid reveal"><div class="card accent"><h3>L1 · Build and operate AI</h3><ul>
-<li><strong>AI-empowered Application Development</strong>: coordinate agents, models and tools.</li>
-<li><strong>AI Infrastructure</strong>: provide controlled experimentation environments.</li>
-<li><strong>Model Development</strong>: govern the models used by adaptive assurance.</li>
-</ul></div>
-<div class="card accent"><h3>L1 · Govern and assure AI</h3><ul>
-<li><strong>AI Governance</strong>: connect evidence to oversight.</li>
-<li><strong>AI Observability</strong>: evaluate quality and monitor behavior.</li>
-<li><strong>AI Security Management</strong>: constrain actions and agent access.</li>
-</ul></div>
-<div class="card" style="grid-column:1 / -1"><h3>L1 · Supporting Capabilities (Served by Enterprise Technology Capabilities)</h3><p>Existing enterprise capabilities serve AI delivery: application engineering, data, information, identity, infrastructure, service management, assets, security and risk.</p></div></div>
-      <div class="src reveal">Enterprise AI Capability Model (reference) V0.4.1 · Internal · pp. 7–9 (L1); p. 15 (hierarchy)</div>
-      <aside class="speaker-notes" data-duration="01:00"><p><strong>Positioning.</strong> The Tool Spine is the delivery context, not an eighth enterprise domain. The adaptive assurance loop is a service model mapped across capabilities. The recorded demo remains a software dependency migration with configured policy checks.</p><p><strong>Source reconciliation.</strong> Use the page 15 diagram for hierarchy and pp. 16–27 for definitions. The document has internal inconsistencies: revision history reports 29 L2/172 L3 while pp. 6, 9 and 14 report 28 L2/173 L3; the L2 table retains AI Model Security Management despite the p. 4 removal and its absence in the p. 15 diagram. AI Guardrail is 5.2 in the diagram and L3 table but 5.3 in the L2 table; agent identity is 5.3 in the diagram but 5.4 in the tables. Use names and page references rather than presenting disputed identifiers or totals as canonical. Application Portfolio and Management is the p. 15 label; p. 13 says Applications and Management.</p></aside>
-    </div>
-  </section>
-
-  <section class="slide capability-slide" id="slide-9" data-title="Appendix - Governance and Observability">
-    <div class="slide-content">
-      <div class="kicker reveal">Enterprise capability mapping · Appendix</div>
-      <h2 class="reveal">Make assurance evidence useful to oversight.</h2>
-      <p class="lead reveal">The saved run provides policy outcomes and local evidence. Broader AI governance and model evaluation require additional controls and integrations.</p>
-      <div class="appendix-grid reveal"><div class="card accent"><h3>L1 · AI Governance</h3><p class="mapping-level">L2 · AI Compliance Management</p><p>L3 · Compliance Auditing; Compliance Frameworks and Standards</p><p>Map the policy contract, verdict, reasons and receipts to reviewable control evidence.</p></div><div class="card accent"><h3>L1 · AI Governance</h3><p class="mapping-level">L2 · Model Governance</p><p>L3 · Model Card Management; Model Onboarding Governance Tools</p><p>Proposed: document and approve models used for adaptive selection and evidence sufficiency.</p></div><div class="card accent"><h3>L1 · AI Observability</h3><p class="mapping-level">L2 · AI Evaluation</p><p>L3 · Evaluation Framework; Evaluation Metrics Catalogue; Evaluation Reporting</p><p>Proposed: evaluate assurance models against historical changes and seeded faults.</p></div><div class="card accent"><h3>L1 · AI Observability</h3><p class="mapping-level">L2 · AI Monitoring</p><p>L3 · AI Agent Runtime Metrics; OpenTelemetry; Prompt Tracing</p><p>Proposed: connect runtime telemetry to quality and operational review. Local logs are the starting evidence.</p></div></div>
-      <div class="src reveal">Enterprise AI Capability Model (reference) V0.4.1 · Internal · pp. 15, 19–23</div>
-      <aside class="speaker-notes" data-duration="01:00"><p><strong>Observed foundation.</strong> result.json, effective-config.json and manifest.json make the evaluated candidate and configured policy inspectable. This supports the intent of Compliance Auditing without proving enterprise compliance automation, regulatory coverage or model approval.</p><p><strong>Evaluation boundary.</strong> Software tests in the saved run do not establish AI Evaluation of a model. The proposed assurance model needs an Evaluation Framework and Evaluation Metrics Catalogue, with missed defects and unnecessary escalations measured and reported. Adaptive metric selection and evidence-diversity assessment remain prospective.</p><p><strong>Monitoring boundary.</strong> trace.json records commands, timing and exit codes. It is not an OpenTelemetry implementation or Prompt Tracing integration. AI Monitoring is operational monitoring, distinct from pre-release AI Evaluation. The scorecard handoff remains conceptual.</p></aside>
-    </div>
-  </section>
-
-  <section class="slide capability-slide" id="slide-10" data-title="Appendix - Security and Agent Access">
-    <div class="slide-content">
-      <div class="kicker reveal">Enterprise capability mapping · Appendix</div>
-      <h2 class="reveal">Constrain actions. Identify the actor.</h2>
-      <p class="lead reveal">AI Guardrail and AI Agent Identity and Access Services both belong to L1 AI Security Management.</p>
-      <div class="appendix-grid reveal"><div class="card accent"><h3>L1 · AI Security Management</h3><p class="mapping-level">L2 · AI Guardrail</p><p>L3 · Action controls; Tooling and Execution Controls</p><p>Demo alignment: protected-file rules block a candidate; policy edits require human review.</p></div><div class="card accent"><h3>L1 · AI Security Management</h3><p class="mapping-level">L2 · AI Agent Identity and Access Services</p><p>L3 · Agent Access Enablement; Agent Access Enforcement</p><p>Proposed: provide scoped access and verify agent permissions on every tool action.</p></div><div class="card accent"><h3>L1 · AI Security Management</h3><p class="mapping-level">L2 · AI Agent Identity and Access Services</p><p>L3 · Agent Access Governance; Agent Identity Administration</p><p>Proposed: assign accountable identities, review entitlements and retire agent access.</p></div><div class="card warn"><h3>L1 · AI Security Management</h3><p class="mapping-level">L2 · AI Guardrail</p><p>L3 · AI Model Access Management; PII Detection; Inference Data Safety and Security</p><p>Additional enterprise controls; these protections are not established by the saved run.</p></div></div>
-      <div class="src reveal">Enterprise AI Capability Model (reference) V0.4.1 · Internal · pp. 4–5, 15, 23–24</div>
-      <aside class="speaker-notes" data-duration="01:00"><p><strong>Control precision.</strong> Repository policy checks align to the intent of Action controls and Tooling and Execution Controls. They are a candidate acceptance boundary, not proof that every agent tool invocation is intercepted or authorized at runtime. Do not describe a file allow-list as agent identity enforcement.</p><p><strong>Guardrail scope.</strong> The diagram also includes AI Model Threat Detection, AI Response Controls, Bias Detection, Explainability and Transparency, and HAP Detection. They remain under AI Guardrail; do not reclassify them under AI Monitoring. Their inclusion in the enterprise model does not mean this demo implements them.</p><p><strong>Data and identity dependencies.</strong> AI Data Security Management includes Data Activity Monitoring, Data Posture Monitoring, and Data Privacy and Confidentiality. It governs sensitive prompts, context and evidence in an enterprise implementation. Supporting Capabilities → Identity and Access Services supplies customer, employee and service identity capabilities; the AI-specific agent identity lifecycle remains under AI Security Management.</p></aside>
-    </div>
-  </section>
-
-  <section class="slide capability-slide" id="slide-11" data-title="Appendix - Orchestration Gateway and MLOps">
-    <div class="slide-content">
-      <div class="kicker reveal">Enterprise capability mapping · Appendix</div>
-      <h2 class="reveal">Coordinate capabilities through governed interfaces.</h2>
-      <p class="lead reveal">The adaptive service model aligns to orchestration. Gateway, interoperability and MLOps are enterprise integration points.</p>
-      <div class="appendix-grid reveal"><div class="card accent"><h3>L1 · AI-empowered Application Development</h3><p class="mapping-level">L2 · AI Agents and Agentic AI</p><p>L3 · Reasoning and Planning; Routing and Orchestration; Tools Management and Tool Calling</p><p>Select evidence mechanisms and reassess gaps. Adaptive selection remains proposed.</p></div><div class="card accent"><h3>L1 · AI-empowered Application Development</h3><p class="mapping-level">L2 · AI Gateway</p><p>L3 · Model Routing; Security Policy Enforcement; Cost and Token Metering</p><p>Proposed: govern model access, routing and usage through a shared gateway.</p></div><div class="card accent"><h3>L1 · AI-empowered Application Development</h3><p class="mapping-level">L2 · AI Interoperability</p><p>L3 · Interoperability Protocols; Interoperability Registry; Authorization Policy Controls</p><p>Proposed: standardize tool contracts, discovery and permissions across providers.</p></div><div class="card accent"><h3>L1 · Model Development</h3><p class="mapping-level">L2 · Model Operations (MLOps)</p><p>L3 · ML Workflows; Model CI/CD Pipeline tools; Operational Model Version Control</p><p>Proposed: version, validate and promote assurance models with reproducible evidence.</p></div></div>
-      <div class="src reveal">Enterprise AI Capability Model (reference) V0.4.1 · Internal · pp. 10, 13, 15–18, 26–27</div>
-      <aside class="speaker-notes" data-duration="01:00"><p><strong>Keep boundaries clear.</strong> Tool Spine is not a synonym for AI Gateway. A local skill invocation does not establish a gateway, an interoperability protocol implementation, an interoperability registry, or enterprise Authorization Policy Controls. Model Routing belongs to AI Gateway; Routing and Orchestration belongs to AI Agents and Agentic AI.</p><p><strong>Interoperability detail.</strong> Integration Context Management and Integration Session Management preserve scopes and state; Integration Server and Interoperability Libraries connect tools. These are future architecture mappings unless implemented evidence is separately shown.</p><p><strong>MLOps versus application delivery.</strong> The python-slugify migration is application CI/CD under Supporting Capabilities, not a model training or deployment demonstration. MLOps applies when the assurance service develops and operates its own AI/ML models. Model Library Management, Model Serving and the MLOps Platform are related dependencies, not delivered capabilities claimed by this run.</p></aside>
-    </div>
-  </section>
-
-  <section class="slide capability-slide" id="slide-12" data-title="Appendix - Supporting Capabilities">
-    <div class="slide-content">
-      <div class="kicker reveal">Enterprise capability mapping · Appendix</div>
-      <h2 class="reveal">Build on existing enterprise capabilities.</h2>
-      <p class="lead reveal">Supporting Capabilities are served by existing enterprise technology capabilities. The release gate contributes evidence within that wider delivery system.</p>
-      <div class="appendix-grid reveal"><div class="card accent"><h3>L1 · Supporting Capabilities</h3><p class="mapping-level">L2 · Application Portfolio and Management</p><p>L3 · Application Test Management; Application CI/CD Pipeline Management; Application Release &amp; Deployment Management</p><p>Direct fit for the software-change demo; PASS remains an input to the release owner.</p></div><div class="card accent"><h3>L1 · Supporting Capabilities</h3><p class="mapping-level">L2 · Information Management</p><p>L3 · Ground Knowledge Retrieval; Knowledge Search &amp; Recommendation</p><p>Conceptual fit for Graphify context. It is optional context in this saved run.</p></div><div class="card accent"><h3>L1 · Supporting Capabilities</h3><p class="mapping-level">L2 · IT Security and IT Risk Management</p><p>L3 · Secret Management; Security Log Management</p><p>Enterprise dependencies for protecting tool credentials and security evidence.</p></div><div class="card accent"><h3>L1 · AI Infrastructure</h3><p class="mapping-level">L2 · Innovation Lab</p><p>L3 · Experimental Sandbox; Pre-Prod Exploration</p><p>Fit for controlled validation; production isolation and scale still need separate evidence.</p></div></div>
-      <div class="src reveal">Enterprise AI Capability Model (reference) V0.4.1 · Internal · pp. 13–15 (supporting relationships); pp. 20–21 (Innovation Lab)</div>
-      <aside class="speaker-notes" data-duration="01:00"><p><strong>Serving relationship.</strong> The p. 15 diagram groups enterprise L2/L3 capabilities serving AI. For example, Application Development and Operation → Application Test Management, Application CI/CD Pipeline Management, Application Source Code &amp; Version Control Management, Application Release &amp; Deployment Management and Enterprise Application Integration serve Application Portfolio and Management. These are not new AI-native capabilities owned by the gate.</p><p><strong>Knowledge and security.</strong> Knowledge Management → Ground Knowledge Retrieval and Knowledge Search &amp; Recommendation serve Information Management. Graphify is a conceptual source of code context, not evidence of a formal enterprise knowledge-service integration. Information Security &amp; Protection → Secret Management and Security Information and Event Management → Security Log Management serve IT Security and IT Risk Management.</p><p><strong>Remaining supporting areas.</strong> Data Governance and Data Management govern data used in assurance; Identity and Access Services supplies enterprise identities. Infrastructure and Services Management supports provisioning, compute and configuration. IT Asset &amp; Configuration Management tracks assets. IT Planning, Service Management and Governance supplies service oversight, incident management and monitoring. Risk Management supplies AI Model Inventory Management, Risk Reporting &amp; Self Service Analytics, and AI Model Risk Governance. These are dependencies to engage, not capabilities proven by the demo.</p><p><strong>Infrastructure scope.</strong> The AI Infrastructure domain also contains Data Storing. A local receipt directory does not establish its Client Data Storing or Hybergraph Data Storing capabilities. Map the controlled demo environment to Innovation Lab as an architectural fit, without asserting production-grade sandbox isolation.</p></aside>
+      <div class="kicker reveal">Enterprise capability mapping · Summary</div>
+      <h2 class="reveal">One assurance flow. Seven enterprise domains.</h2>
+      <p class="lead reveal">The Conceptual Diversity Evaluator produces assurance evidence; reviewed policy determines disposition. These mappings show capability alignment, not full enterprise delivery.</p>
+      <div class="appendix-grid reveal">
+        <div class="card accent">
+          <h3>Coordinate and deliver</h3>
+          <p class="mapping-level">AI-empowered Application Development · Supporting Capabilities</p>
+          <p>Agents and orchestration connect checks, conceptual evaluation and policy. Enterprise testing, CI/CD and release management consume the outcome.</p>
+        </div>
+        <div class="card accent">
+          <h3>Evaluate and oversee</h3>
+          <p class="mapping-level">AI Observability · AI Governance</p>
+          <p>AI Evaluation uses coverage, uncertainty and gap findings. Compliance Auditing uses policies, dispositions and linked receipts.</p>
+        </div>
+        <div class="card accent">
+          <h3>Constrain and protect</h3>
+          <p class="mapping-level">AI Security Management</p>
+          <p>AI Guardrail aligns to protected-file rules and policy review. Agent identity, scoped access and data protection remain enterprise integrations.</p>
+        </div>
+        <div class="card accent">
+          <h3>Validate and evolve</h3>
+          <p class="mapping-level">AI Infrastructure · Model Development</p>
+          <p>Innovation Lab supports controlled validation. MLOps applies to future assurance models; adaptive acquisition and production scale remain unproven.</p>
+        </div>
+      </div>
+      <div class="src reveal">Enterprise AI Capability Model (reference) V0.4.1 · Internal · p. 15 (hierarchy), pp. 16–27 (definitions)</div>
+      <aside class="speaker-notes" data-duration="01:00">
+        <p><strong>One-minute summary.</strong> The seven enterprise domains support a single assurance flow. Application Development coordinates capabilities; Supporting Capabilities supplies software testing, CI/CD and release management. Observability makes evaluation findings useful, Governance makes decisions reviewable, Security constrains candidate acceptance, and Infrastructure and Model Development support controlled evolution. The Conceptual Diversity Evaluator is an evidence-producing evaluator before final disposition, not a standalone release gate.</p>
+        <p><strong>Selected hierarchy.</strong> L1 is the domain, L2 the capability area, and L3 the specific capability. Application Development → AI Agents and Agentic AI → Routing and Orchestration / Tools Management and Tool Calling. Observability → AI Evaluation → Evaluation Framework / Evaluation Reporting. Governance → AI Compliance Management → Compliance Auditing. Security Management → AI Guardrail → Action controls / Tooling and Execution Controls. Supporting Capabilities → Application Portfolio and Management → Application Test Management / Application CI/CD Pipeline Management / Application Release &amp; Deployment Management. Infrastructure → Innovation Lab → Experimental Sandbox / Pre-Prod Exploration. Model Development → Model Operations (MLOps) → ML Workflows / Operational Model Version Control.</p>
+        <p><strong>Current versus proposed.</strong> Current assurance combines deterministic checks, reviewed conceptual mappings and linked receipts. Adaptive evidence acquisition, AI Gateway, interoperability services, enterprise agent identity, OpenTelemetry, Prompt Tracing and scorecard integration remain extension points. Local traces do not establish enterprise monitoring; file rules do not establish per-action access enforcement. Mapper measurement validity, production isolation and throughput need separate evidence.</p>
+        <p><strong>Ownership and dependencies.</strong> Policy owns disposition and the human release owner authorizes release. Graphify supplies optional code context. Enterprise knowledge, data, identity, security and risk services remain supporting dependencies. MLOps applies when operating assurance models; the python-slugify migration itself is application delivery.</p>
+        <p><strong>Source precision.</strong> Use the source model’s page 15 hierarchy and capability names rather than disputed numeric identifiers or totals. Tool Spine is the delivery context, not an eighth enterprise domain. Historical September receipts prove configured execution only.</p>
+      </aside>
     </div>
   </section>
 </main>
