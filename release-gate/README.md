@@ -274,7 +274,6 @@ changes and release notes before committing. CI enforces the same source with
 - [Adoption](docs/adoption.md): Repository onboarding, upgrade procedures, uninstall, and rollback.
 - [Changelog](CHANGELOG.md): Detailed version history and release status.
 - [License](LICENSE): Apache License 2.0 terms.
-- [Implementation Plan](docs/implementation-plan.md): TDD-first delivery and cross-platform verification checklist.
 - [Release Qualification](docs/qualification.md): Immutable RC construction, six-surface fresh-agent evidence, and promotion criteria.
 - [Schemas](schemas/): JSON Schema 2020-12 contracts for configuration, result, manifest, qualification, and decision observability.
 - [Examples](examples/): Generic, Python, and Node configuration templates.
