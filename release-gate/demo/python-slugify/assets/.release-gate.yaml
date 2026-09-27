@@ -1,5 +1,6 @@
 version: 1
 
+# Failure modes: scope_creep, test_tampering, policy_tampering.
 scope:
   allowed_paths:
     - "/setup.py"
@@ -128,6 +129,7 @@ limits:
   total_bytes: 209715200
 
 checks:
+  # Failure modes: public_api_regression, import_declaration_mismatch.
   - id: tests-and-coverage
     mode: differential
     severity: blocking
@@ -198,6 +200,7 @@ checks:
         operator: gte
         value: -1
 
+  # Failure mode: incomplete_migration.
   - id: task-consistency
     mode: candidate
     severity: blocking
@@ -241,6 +244,7 @@ checks:
         operator: eq
         value: 0
 
+  # Failure mode: type_regression (guarded, not observed in recorded runs).
   - id: types
     mode: candidate
     severity: advisory
