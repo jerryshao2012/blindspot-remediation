@@ -350,6 +350,85 @@ def test_gate_invocation_prefers_sibling_python(
     )
 
 
+@pytest.mark.parametrize(
+    ("platform", "python_name", "tool_python"),
+    [("darwin", "python", "bin/python"), ("win32", "python.exe", "Scripts/python.exe")],
+)
+def test_release_gate_python_prefers_the_sibling_interpreter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    python_name: str,
+    tool_python: str,
+) -> None:
+    driver = load_driver()
+    bin_dir = tmp_path / "venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "release-gate").touch()
+    (bin_dir / python_name).touch()
+    monkeypatch.setattr(driver.sys, "platform", platform)
+    monkeypatch.setattr(
+        driver.shutil, "which", lambda name: str(bin_dir / "release-gate")
+    )
+
+    assert driver._release_gate_python() == (bin_dir / python_name).resolve()
+
+
+@pytest.mark.parametrize(
+    ("platform", "tool_python"),
+    [("win32", ("Scripts", "python.exe")), ("darwin", ("bin", "python"))],
+)
+def test_release_gate_python_falls_back_to_the_uv_tool_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    tool_python: tuple[str, str],
+) -> None:
+    """uv's Windows launcher has no interpreter beside it (CI regression)."""
+
+    driver = load_driver()
+    launcher_dir = tmp_path / "uv-tool-bin-dir"
+    launcher_dir.mkdir()
+    (launcher_dir / "release-gate.exe").touch()
+    tools = tmp_path / "uv-tool-dir"
+    interpreter = tools.joinpath("release-gate", *tool_python)
+    interpreter.parent.mkdir(parents=True)
+    interpreter.touch()
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, f"{tools}\n", "")
+
+    monkeypatch.setattr(driver.sys, "platform", platform)
+    monkeypatch.setattr(
+        driver.shutil, "which", lambda name: str(launcher_dir / "release-gate.exe")
+    )
+    monkeypatch.setattr(driver.subprocess, "run", fake_run)
+
+    assert driver._release_gate_python() == interpreter
+    assert calls == [["uv", "tool", "dir"]]
+
+
+def test_release_gate_python_reports_when_no_interpreter_is_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = load_driver()
+    (tmp_path / "release-gate.exe").touch()
+
+    def missing_uv(argv: list[str], **kwargs: object) -> None:
+        raise FileNotFoundError("uv")
+
+    monkeypatch.setattr(driver.sys, "platform", "win32")
+    monkeypatch.setattr(
+        driver.shutil, "which", lambda name: str(tmp_path / "release-gate.exe")
+    )
+    monkeypatch.setattr(driver.subprocess, "run", missing_uv)
+
+    with pytest.raises(driver.DemoError, match="release-gate Python is unavailable"):
+        driver._release_gate_python()
+
+
 @pytest.mark.parametrize("layers", [False, True])
 def test_verify_runs_assurance_for_selected_scenarios(
     tmp_path: Path,

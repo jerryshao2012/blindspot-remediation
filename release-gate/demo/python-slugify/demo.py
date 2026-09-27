@@ -1327,11 +1327,32 @@ def _release_gate_python() -> Path:
         .resolve()
         .with_name("python.exe" if sys.platform == "win32" else "python")
     )
-    if not sibling.is_file():
-        raise DemoError(
-            "unable to load assurance policy: release-gate Python is unavailable"
+    if sibling.is_file():
+        return sibling
+    # On Windows, uv installs a launcher executable outside the tool
+    # environment, so no interpreter sits beside it; ask uv where it lives.
+    tool_python = _uv_tool_python()
+    if tool_python is not None:
+        return tool_python
+    raise DemoError(
+        "unable to load assurance policy: release-gate Python is unavailable"
+    )
+
+
+def _uv_tool_python() -> Path | None:
+    try:
+        result = subprocess.run(
+            ["uv", "tool", "dir"], check=True, capture_output=True, text=True
         )
-    return sibling
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    environment = Path(result.stdout.strip()) / "release-gate"
+    python = (
+        environment / "Scripts" / "python.exe"
+        if sys.platform == "win32"
+        else environment / "bin" / "python"
+    )
+    return python if python.is_file() else None
 
 
 def _load_assurance_policy(path: Path) -> dict[str, Any]:
