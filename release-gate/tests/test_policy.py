@@ -143,7 +143,35 @@ def test_assertion_failure_and_error_override_exit_pass() -> None:
         check(), candidate=execution(ExecutionClass.PASS), assertions=(failed, errored)
     )
     assert fail_outcome.status is CheckStatus.FAIL
+    assert fail_outcome.reason_codes == ("ASSERTION_FAILED",)
     assert error_outcome.status is CheckStatus.ERROR
+    assert error_outcome.reason_codes == ("ASSERTION_OPERAND_ERROR",)
+
+
+def test_process_error_drops_failure_reasons_from_failed_assertions() -> None:
+    """A collection error also fails the /errors assertion; ERROR must win."""
+
+    failed = AssertionOutcome(
+        state=AssertionState.FAIL,
+        actual=1,
+        reason_codes=("ASSERTION_FAILED",),
+    )
+    outcome = combine_check(
+        check(mode=CheckMode.DIFFERENTIAL),
+        baseline=execution(ExecutionClass.PASS),
+        candidate=execution(ExecutionClass.ERROR, ("COMMAND_EXIT_ERROR",)),
+        assertions=(failed,),
+        diagnostics=("REQUIRED_REPORT_MISSING",),
+    )
+
+    assert outcome.status is CheckStatus.ERROR
+    assert outcome.reason_codes == ("COMMAND_EXIT_ERROR", "REQUIRED_REPORT_MISSING")
+    assert outcome.assertions == (failed,)
+    decision = aggregate_verdict(
+        evaluate_scope(Scope(allowed_paths=("**",)), ("src/x",)), (outcome,)
+    )
+    assert decision.verdict is Verdict.NEEDS_HUMAN
+    assert "ASSERTION_FAILED" not in decision.reason_codes
 
 
 @pytest.mark.parametrize(

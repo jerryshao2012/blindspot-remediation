@@ -666,6 +666,76 @@ checks:
     verify_run(output / "metrics")
 
 
+def test_errored_check_with_failed_assertion_finalizes_needs_human(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Uncollectable tests exit as an error and also raise the error count."""
+
+    code = (
+        "import json;from pathlib import Path;"
+        "candidate=Path('tracked.txt').read_text().startswith('candidate');"
+        "Path('counts.json').write_text(json.dumps({'errors':int(candidate)}));"
+        "raise SystemExit(2 if candidate else 0)"
+    )
+    repo = repository(tmp_path, [sys.executable, "-c", code])
+    policy = f"""\
+version: 1
+scope:
+  allowed_paths: ["**"]
+  review_required_paths: ["/.release-gate.yaml"]
+checks:
+  - id: tests
+    mode: differential
+    severity: blocking
+    argv: {json.dumps([sys.executable, "-c", code])}
+    exit_classes:
+      pass: [0]
+      fail: [1]
+      error: [2]
+    reports:
+      - id: counts
+        parser: json-metrics
+        path: counts.json
+    assertions:
+      - report: counts
+        metric: /errors
+        comparison: candidate-minus-baseline
+        operator: lte
+        value: 0
+"""
+    (repo / ".release-gate.yaml").write_text(policy, encoding="utf-8")
+    git(repo, "add", ".release-gate.yaml")
+    git(repo, "commit", "-qm", "configure error counts")
+    (repo / "tracked.txt").write_text("candidate\n", encoding="utf-8")
+    output = tmp_path / "evidence"
+
+    assert (
+        main(
+            [
+                "run",
+                "--repo",
+                str(repo),
+                "--base",
+                "HEAD",
+                "--output",
+                str(output),
+                "--run-id",
+                "errored",
+            ]
+        )
+        == 2
+    )
+    capsys.readouterr()
+    result = json.loads((output / "errored/result.json").read_bytes())
+    [check] = result["checks"]
+    assert result["verdict"] == "NEEDS_HUMAN"
+    assert check["status"] == "ERROR"
+    assert "ASSERTION_FAILED" not in check["reason_codes"]
+    assert check["assertions"][0]["passed"] is False
+    assert check["assertions"][0]["reason_codes"] == ["ASSERTION_FAILED"]
+    verify_run(output / "errored")
+
+
 def test_differential_check_runs_base_then_candidate(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

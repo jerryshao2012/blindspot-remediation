@@ -108,6 +108,9 @@ def combine_check(
     reasons.update(diagnostics)
     if status is CheckStatus.PASS:
         reasons.intersection_update({"OPTIONAL_REPORT_MISSING", "STREAM_TRUNCATED"})
+    elif status is CheckStatus.ERROR:
+        # An error outranks failure; failed assertions keep their own reasons.
+        reasons.difference_update({"ASSERTION_FAILED", "COMMAND_FAILED"})
     return CheckOutcome(
         id=check.id,
         mode=check.mode,
