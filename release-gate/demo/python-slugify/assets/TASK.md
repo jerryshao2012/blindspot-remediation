@@ -21,7 +21,8 @@ remove `text-unidecode`:
 ## Constraints
 
 - Do not change the public API of `slugify()` or `smart_truncate()`.
-- Do not modify `test.py`, `.release-gate.yaml`, or Release Gate evidence.
+- Do not modify `test.py`, `.release-gate.yaml`, `.release-gate-assurance.yaml`,
+  or Release Gate evidence.
 - Keep the change as small as the task requires.
 
 ## Environment

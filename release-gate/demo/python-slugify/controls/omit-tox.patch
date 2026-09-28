@@ -1,0 +1,46 @@
+diff --git b/tox.ini a/tox.ini
+index 3c7afdb..0c16f5e 100644
+--- b/tox.ini
++++ a/tox.ini
+@@ -1,8 +1,8 @@
+ [tox]
+ env_list =
+     coverage-erase
+-    py{3.10, 3.11, 3.12, 3.13, 3.14}-unidecode
+-    pypy{3.11}-unidecode
++    py{3.10, 3.11, 3.12, 3.13, 3.14}-{unidecode, text_unidecode}
++    pypy{3.11}-{unidecode, text_unidecode}
+     coverage-report
+     coverage-html
+     mypy
+@@ -10,12 +10,16 @@ env_list =
+ 
+ [testenv]
+ depends =
+-    py{3.10, 3.11, 3.12, 3.13, 3.14}-unidecode: coverage-erase
+-    pypy{3.11}-unidecode: coverage-erase
++    py{3.10, 3.11, 3.12, 3.13, 3.14}-{unidecode, text_unidecode}: coverage-erase
++    pypy{3.11}-{unidecode, text_unidecode}: coverage-erase
+ deps =
+     coverage[toml]
+     pytest
+-    unidecode
++    unidecode: pip
++    unidecode: unidecode
++commands_pre:
++    # If testing unidecode, ensure text_unidecode is unavailable.
++    unidecode: pip uninstall --yes text_unidecode
+ commands =
+     coverage run -m pytest test.py
+ 
+@@ -31,8 +35,8 @@ commands =
+ [testenv:coverage-report]
+ base = coverage_base
+ depends =
+-    py{3.10, 3.11, 3.12, 3.13, 3.14}-unidecode
+-    pypy{3.11}-unidecode
++    py{3.10, 3.11, 3.12, 3.13, 3.14}-{unidecode, text_unidecode}
++    pypy{3.11}-{unidecode, text_unidecode}
+ commands_pre =
+     - coverage combine
+ commands =

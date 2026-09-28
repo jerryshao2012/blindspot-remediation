@@ -4,6 +4,24 @@ All notable changes to the standalone Release Gate are recorded here.
 
 ## Unreleased
 
+- Fix: a check whose command errors while one of its assertions also fails (for
+  example, tests that cannot be collected and so raise the JUnit error count)
+  now finalizes as `ERROR` and `NEEDS_HUMAN`. Previously it kept
+  `ASSERTION_FAILED` on the `ERROR` check, failed result-schema validation, and
+  `run`/`assure` exited 4 with an incomplete evidence package. The failed
+  assertion keeps its own `ASSERTION_FAILED` reason.
+- Demo only (`demo/python-slugify`): define X1 failure-mode mappings. The gate
+  policy names the failure modes each check guards in comments, and the
+  assurance policy adds a `failure_mode` dimension with reviewed test-case and
+  check-level mappings.
+- Demo only: label every verification layer MAPPED, SUBSTITUTED, UNAVAILABLE,
+  or N-A, and add `demo.py layers`, which never counts unverified, substituted,
+  or unevaluated evidence as coverage.
+- Demo only: add `verify --layers` with skip-evasion, omitted `tox.ini`,
+  undeclared dependency, and `CHANGELOG.md` scope-creep candidates, plus an
+  enforce-mode trusted base. The hidden oracle now also checks `README.md` and
+  `tox.ini` and treats a skipped transliteration as a failure.
+
 ## 0.7.0
 
 - Add `release-gate assure --base <ref>` to run the deterministic gate once,

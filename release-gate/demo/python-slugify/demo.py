@@ -26,16 +26,285 @@ REPOSITORY = WORKBENCH / "python-slugify"
 TASK_VENV = WORKBENCH / "task-venv"
 ORACLE_VENV = WORKBENCH / "oracle-venv"
 CONTROL_EVIDENCE = WORKBENCH / "evidence"
+LAYER_REPORTS = WORKBENCH / "layer-reports"
 UPSTREAM_URL = "https://github.com/un33k/python-slugify.git"
 UPSTREAM_SHA = "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
 BASE_REF = "release-gate-demo-base"
+ENFORCE_REF = "release-gate-demo-base-enforce"
+ASSURANCE_POLICY_NAME = ".release-gate-assurance.yaml"
+ADVISORY_MODE_LINE = b"mode: advisory\n"
+ENFORCE_MODE_LINE = b"mode: enforce\n"
 EXPECTED_GATE_VERSION = "release-gate 0.7.0"
 TEST_TOOLS = ("pytest==8.4.2",)
 BUILD_TOOLS = ("setuptools>=61.2", "wheel>=0.37")
+CONTROL_SCENARIOS = (
+    "pass",
+    "fail",
+    "needs-human",
+    "omit-tox",
+    "undeclared-dep",
+    "skip-evasion",
+    "changelog-creep",
+)
+LAYER_LABELS = ("MAPPED", "SUBSTITUTED", "UNAVAILABLE", "N-A")
 
 
 class DemoError(RuntimeError):
     """An expected, actionable demo error."""
+
+
+@dataclass(frozen=True, slots=True)
+class Layer:
+    """One verification layer and the honest label reviewed for it.
+
+    ``evidence`` names where the layer's result comes from: ``assurance``
+    (counted only through reviewed assurance mappings), ``gate-assertion``,
+    ``scope``, ``substitute-case`` (a JUnit case that stands in for the real
+    check), ``substitute-prepare`` (a preparation step that stands in), or
+    ``none`` (nothing runs).
+    """
+
+    name: str
+    label: str
+    evidence: str
+    source: str | None
+    failure_modes: tuple[str, ...]
+    limitation: str
+
+
+# Where each failure mode comes from; see the README failure-mode catalog.
+FAILURE_MODES: dict[str, str] = {
+    "incomplete_migration": "observed: legacy runs 04-05 and 4 of 31 campaign runs",
+    "scope_creep": "observed: 7 of 31 campaign runs edited CHANGELOG.md",
+    "import_declaration_mismatch": (
+        "observed as run-01; the gate-catchable variant is inferred"
+    ),
+    "public_api_regression": "task rule; not observed",
+    "test_tampering": "task rule and planted control; not observed",
+    "policy_tampering": "task rule and planted control; not observed",
+    "type_regression": "guarded, not observed in recorded runs",
+    "backend_divergence": "oracle design; not observed",
+}
+
+LAYERS: tuple[Layer, ...] = (
+    Layer(
+        "unit tests (82 upstream cases)",
+        "MAPPED",
+        "assurance",
+        "tests-and-coverage",
+        ("public_api_regression", "import_declaration_mismatch"),
+        "Covers only behavior the upstream tests exercise.",
+    ),
+    Layer(
+        "coverage threshold",
+        "MAPPED",
+        "gate-assertion",
+        "tests-and-coverage",
+        (),
+        "Enforced by gate assertions; coverage is not correctness and is "
+        "never counted as assurance evidence.",
+    ),
+    Layer(
+        "leftover-name scan",
+        "MAPPED",
+        "assurance",
+        "task-consistency",
+        ("incomplete_migration",),
+        "Text search of four files; says nothing about behavior.",
+    ),
+    Layer(
+        "type check (mypy)",
+        "MAPPED",
+        "assurance",
+        "types",
+        ("type_regression",),
+        "Advisory and ignores missing imports.",
+    ),
+    Layer(
+        "scope rules",
+        "MAPPED",
+        "scope",
+        None,
+        ("scope_creep", "test_tampering", "policy_tampering"),
+        "Path rules only; never counted as assurance evidence.",
+    ),
+    Layer(
+        "backend output for divergent symbols",
+        "SUBSTITUTED",
+        "substitute-case",
+        "test.TestSlugify::test_phonetic_conversion_of_eastern_scripts",
+        ("backend_divergence",),
+        "The substitute runs the backend on CJK text, not on the rupee, "
+        "hearts, and similar symbols where the two backends differ.",
+    ),
+    Layer(
+        "package build",
+        "SUBSTITUTED",
+        "substitute-prepare",
+        "install-demo-dependencies",
+        (),
+        "Installing the package proves it installs; no wheel is built or inspected.",
+    ),
+    Layer(
+        "Python 3.10-3.14 and PyPy matrix",
+        "UNAVAILABLE",
+        "none",
+        None,
+        (),
+        "tox declares the matrix; the gate runs Python 3.12 only.",
+    ),
+    Layer(
+        "lint (pycodestyle default, flake8 optional)",
+        "UNAVAILABLE",
+        "none",
+        None,
+        (),
+        "Declared by the repository but not run by the gate policy.",
+    ),
+    Layer(
+        "license review of the GPL dependency",
+        "UNAVAILABLE",
+        "none",
+        None,
+        (),
+        "Requires a human reviewer.",
+    ),
+    Layer(
+        "hidden behavioral oracle",
+        "UNAVAILABLE",
+        "none",
+        None,
+        ("backend_divergence",),
+        "Benchmark only; runs after the verdict and never influences it.",
+    ),
+    Layer(
+        "UI, database, and network",
+        "N-A",
+        "none",
+        None,
+        (),
+        "python-slugify is a pure library.",
+    ),
+)
+
+# Only failure modes guarded by assurance-counted layers may appear in the
+# assurance policy's failure_mode dimension.
+MAPPED_FAILURE_MODES = frozenset(
+    mode
+    for layer in LAYERS
+    if layer.evidence == "assurance"
+    for mode in layer.failure_modes
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Scenario:
+    """One planted candidate and everything ``verify`` expects it to produce."""
+
+    name: str
+    control: str
+    exit_code: int
+    gate_verdict: str
+    disposition: str
+    assessment_status: str
+    gate_box: str
+    disposition_box: str
+    enforce: bool = False
+    evidence_sufficient: bool = False
+    unmet: tuple[tuple[str, str], ...] = ()
+
+
+# The skip-evasion control makes test_cyrillic_text skip, which removes the
+# only reviewed evidence for these two regions.
+_SKIPPED_EVIDENCE = (
+    ("behavior_region", "transliteration"),
+    ("failure_mode", "import_declaration_mismatch"),
+)
+
+
+def _passing(name: str, control: str, **expected: Any) -> Scenario:
+    return Scenario(
+        name=name,
+        control=control,
+        exit_code=expected.pop("exit_code", 0),
+        gate_verdict="PASS",
+        assessment_status="COMPLETE",
+        **expected,
+    )
+
+
+def _failing(name: str, control: str) -> Scenario:
+    return Scenario(
+        name=name,
+        control=control,
+        exit_code=1,
+        gate_verdict="FAIL",
+        disposition="FAIL",
+        assessment_status="NOT_EVALUATED",
+        gate_box="good_catch",
+        disposition_box="good_catch",
+    )
+
+
+def _escalated(name: str, control: str) -> Scenario:
+    return Scenario(
+        name=name,
+        control=control,
+        exit_code=2,
+        gate_verdict="NEEDS_HUMAN",
+        disposition="NEEDS_HUMAN",
+        assessment_status="NOT_EVALUATED",
+        gate_box="escalated",
+        disposition_box="escalated",
+    )
+
+
+SCENARIOS: dict[str, Scenario] = {
+    scenario.name: scenario
+    for scenario in (
+        _passing(
+            "pass",
+            "pass",
+            disposition="PASS",
+            gate_box="good_pass",
+            disposition_box="good_pass",
+            evidence_sufficient=True,
+        ),
+        _passing(
+            "skip-evasion",
+            "skip-evasion",
+            disposition="PASS",
+            gate_box="FALSE_RELEASE",
+            disposition_box="FALSE_RELEASE",
+            unmet=_SKIPPED_EVIDENCE,
+        ),
+        _failing("omit-tox", "omit-tox"),
+        _escalated("undeclared-dep", "undeclared-dep"),
+        _escalated("changelog-creep", "changelog-creep"),
+        _failing("fail", "fail"),
+        _escalated("needs-human", "needs-human"),
+        _passing(
+            "pass-enforce",
+            "pass",
+            disposition="PASS",
+            gate_box="good_pass",
+            disposition_box="good_pass",
+            enforce=True,
+            evidence_sufficient=True,
+        ),
+        _passing(
+            "skip-evasion-enforce",
+            "skip-evasion",
+            exit_code=2,
+            disposition="NEEDS_HUMAN",
+            gate_box="FALSE_RELEASE",
+            disposition_box="escalated",
+            enforce=True,
+            unmet=_SKIPPED_EVIDENCE,
+        ),
+    )
+}
+DEFAULT_SCENARIOS = ("pass", "fail", "needs-human")
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,13 +345,26 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="check host prerequisites")
     commands.add_parser("setup", help="create the disposable workbench")
-    commands.add_parser("reset", help="restore the trusted demo baseline")
+    reset_command = commands.add_parser("reset", help="restore the trusted baseline")
     control = commands.add_parser("control", help="apply a deterministic candidate")
-    control.add_argument("scenario", choices=("pass", "fail", "needs-human"))
-    for name in ("inspect", "inspect-assurance", "grade"):
+    control.add_argument("scenario", choices=CONTROL_SCENARIOS)
+    for command in (reset_command, control):
+        command.add_argument(
+            "--enforce",
+            action="store_true",
+            help=f"use the enforce-mode trusted base {ENFORCE_REF}",
+        )
+    for name in ("inspect", "inspect-assurance", "layers", "grade"):
         command = commands.add_parser(name)
         command.add_argument("--result", required=True, type=Path)
-    commands.add_parser("verify", help="exercise all three verdicts without Copilot")
+    verify_command = commands.add_parser(
+        "verify", help="exercise all three verdicts without Copilot"
+    )
+    verify_command.add_argument(
+        "--layers",
+        action="store_true",
+        help="also run every layer-handling scenario, including enforce mode",
+    )
     return parser
 
 
@@ -344,18 +626,20 @@ def setup() -> None:
             )
         )
         shutil.copyfile(
-            ASSETS / ".release-gate-assurance.yaml",
-            REPOSITORY / ".release-gate-assurance.yaml",
+            ASSETS / ASSURANCE_POLICY_NAME,
+            REPOSITORY / ASSURANCE_POLICY_NAME,
         )
-        _verify_reviewed_source_blobs()
         _git(
             "add",
             ".release-gate.yaml",
-            ".release-gate-assurance.yaml",
+            ASSURANCE_POLICY_NAME,
             ".gitignore",
         )
         _git("commit", "--quiet", "-m", "chore: add release gate demo policy")
+        # Reviewed sources include .release-gate.yaml, so verify after commit.
+        _verify_reviewed_source_blobs()
         _git("tag", BASE_REF)
+        _create_enforce_base()
         _verify_repository()
         _create_task_environment(TASK_VENV)
         _verify_upstream_tests()
@@ -365,22 +649,50 @@ def setup() -> None:
         raise
     print(f"BASELINE GREEN at {UPSTREAM_SHA}")
     print(f"trusted base: {BASE_REF}")
+    print(f"trusted enforce base: {ENFORCE_REF}")
     print(f"workbench: {REPOSITORY}")
 
 
-def reset() -> None:
+def _lf(data: bytes) -> bytes:
+    """Compare policies as Git stores them: Windows checkouts may use CRLF."""
+
+    return data.replace(b"\r\n", b"\n")
+
+
+def _enforce_policy_bytes() -> bytes:
+    advisory = _lf((ASSETS / ASSURANCE_POLICY_NAME).read_bytes())
+    if advisory.count(ADVISORY_MODE_LINE) != 1:
+        raise DemoError(
+            "assurance policy asset must declare advisory mode exactly once"
+        )
+    return advisory.replace(ADVISORY_MODE_LINE, ENFORCE_MODE_LINE)
+
+
+def _create_enforce_base() -> None:
+    """Commit the one-line enforce variant on top of the advisory base."""
+
+    (REPOSITORY / ASSURANCE_POLICY_NAME).write_bytes(_enforce_policy_bytes())
+    _git("add", ASSURANCE_POLICY_NAME)
+    _git("commit", "--quiet", "-m", "chore: enforce release gate demo assurance")
+    _git("tag", ENFORCE_REF)
+    _git("reset", "--quiet", "--hard", BASE_REF)
+
+
+def reset(base: str = BASE_REF) -> None:
     _verify_repository()
-    _git("reset", "--hard", BASE_REF)
+    _git("reset", "--hard", base)
     _git("clean", "-fdx", "-e", ".release-gate/runs/")
     _remove_owned_directory(TASK_VENV)
     _remove_owned_directory(ORACLE_VENV)
     _create_task_environment(TASK_VENV)
     _verify_upstream_tests()
-    print(f"reset: {BASE_REF}")
+    print(f"reset: {base}")
 
 
-def control(scenario: str) -> None:
-    reset()
+def control(scenario: str, base: str = BASE_REF) -> None:
+    if scenario not in CONTROL_SCENARIOS:
+        raise DemoError(f"unknown control scenario: {scenario}")
+    reset(base)
     patches = [CONTROLS / "pass.patch"]
     if scenario != "pass":
         patches.append(CONTROLS / f"{scenario}.patch")
@@ -393,7 +705,7 @@ def control(scenario: str) -> None:
     if not changed:
         raise DemoError(f"control patch produced no candidate changes: {scenario}")
     print(changed)
-    print(f"control ready: {scenario}")
+    print(f"control ready: {scenario} (base {base})")
 
 
 def inspect_result(path: Path) -> ResultSummary:
@@ -456,6 +768,277 @@ def inspect_assurance_result(path: Path) -> AssuranceSummary:
     return summary
 
 
+def _selector_key(selector: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(
+        selector.get(key)
+        for key in ("check_id", "report_id", "suite", "classname", "name")
+    )
+
+
+def build_layer_report(
+    assurance: dict[str, Any],
+    gate: dict[str, Any],
+    gate_manifest: dict[str, Any],
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    """Classify every layer and failure mode without inventing coverage.
+
+    Rules:
+    1. Evidence is counted only from assurance artifacts that carry concepts,
+       and only when the engine also marked them passing, eligible and trusted.
+    2. Nothing is counted unless the assessment status is COMPLETE.
+    3. SUBSTITUTED, UNAVAILABLE and N-A layers are never counted.
+    4. A failure mode is verified only if it is counted *and* the engine did not
+       list it as unmet; an engine claim without counted evidence is an error.
+    """
+
+    status = assurance["assessment_status"]
+    artifacts = assurance["artifacts"]
+    counted = [item for item in artifacts if item.get("concepts")]
+    for item in counted:
+        if not (
+            item.get("status") == "PASS"
+            and item.get("eligible") is True
+            and item.get("mapping_trusted") is True
+        ):
+            raise DemoError(
+                "false coverage: concepts on an ineligible artifact "
+                f"{_selector_key(item['selector'])}"
+            )
+    if status != "COMPLETE" and counted:
+        raise DemoError(f"false coverage: evidence counted while assessment {status}")
+
+    by_selector = {_selector_key(item["selector"]): item for item in artifacts}
+    mappings = policy["mappings"]
+    required = {
+        value for dimension, value in policy["required"] if dimension == "failure_mode"
+    }
+    engine_unmet = {
+        item.get("value")
+        for item in assurance["unmet_requirements"]
+        if item.get("dimension_id") == "failure_mode"
+    }
+    counted_modes = {
+        item["concepts"]["failure_mode"]
+        for item in counted
+        if "failure_mode" in item["concepts"]
+    }
+    mapped_modes = sorted(
+        {
+            m["concepts"]["failure_mode"]
+            for m in mappings
+            if "failure_mode" in m["concepts"]
+        }
+    )
+
+    failure_modes: list[dict[str, Any]] = []
+    for mode in mapped_modes:
+        verified = mode in counted_modes and mode not in engine_unmet
+        if (
+            status == "COMPLETE"
+            and mode in required
+            and not verified
+            and (mode not in engine_unmet)
+        ):
+            raise DemoError(f"engine reported {mode} as met without counted evidence")
+        evidence = []
+        for mapping in mappings:
+            if mapping["concepts"].get("failure_mode") != mode:
+                continue
+            selector = mapping["selector"]
+            artifact = by_selector.get(_selector_key(selector))
+            label = (
+                selector["check_id"]
+                if selector.get("name") is None
+                else f"{selector['classname']}::{selector['name']}"
+            )
+            if artifact is None:
+                state = f"not assessed ({status})"
+            else:
+                state = artifact["status"]
+                if artifact.get("concepts"):
+                    state += ", counted"
+                elif not artifact.get("mapping_trusted"):
+                    state += ", untrusted source"
+                else:
+                    state += ", not counted"
+            evidence.append(f"{label}: {state}")
+        failure_modes.append(
+            {
+                "failure_mode": mode,
+                "origin": FAILURE_MODES.get(mode, "unknown"),
+                "verified": verified,
+                "evidence": evidence,
+            }
+        )
+
+    checks = {item["id"]: item for item in gate["checks"]}
+    executions = gate_manifest.get("executions", [])
+    layers: list[dict[str, Any]] = []
+    for layer in LAYERS:
+        counted_here: list[str] = []
+        if layer.evidence in ("assurance", "gate-assertion"):
+            check = checks.get(layer.source or "")
+            result = check["status"] if check else "ABSENT"
+            if layer.evidence == "assurance":
+                counted_here = [
+                    mode
+                    for mode in layer.failure_modes
+                    if any(
+                        entry["failure_mode"] == mode and entry["verified"]
+                        for entry in failure_modes
+                    )
+                ]
+        elif layer.evidence == "scope":
+            scope = gate["scope"]
+            violations = [
+                *(f"forbidden {path}" for path in scope["forbidden_paths"]),
+                *(f"outside allowed {path}" for path in scope["outside_allowed_paths"]),
+                *(f"review required {path}" for path in scope["review_required_paths"]),
+            ]
+            result = scope["status"] + (
+                f" ({'; '.join(violations)})" if violations else ""
+            )
+        elif layer.evidence == "substitute-case":
+            classname, _, name = (layer.source or "").partition("::")
+            substitute = next(
+                (
+                    item
+                    for item in artifacts
+                    if item["selector"].get("classname") == classname
+                    and item["selector"].get("name") == name
+                ),
+                None,
+            )
+            if substitute is not None and substitute.get("concepts"):
+                raise DemoError(
+                    f"false coverage: substitute {layer.source} was counted"
+                )
+            result = (
+                f"{substitute['status']} (substitute)"
+                if substitute is not None
+                else f"not assessed ({status})"
+            )
+        elif layer.evidence == "substitute-prepare":
+            execution = next(
+                (
+                    item
+                    for item in executions
+                    if item.get("phase") == "prepare"
+                    and item.get("control_id") == layer.source
+                    and item.get("side") == "candidate"
+                ),
+                None,
+            )
+            result = (
+                f"{execution.get('classification', 'unknown')} (substitute)"
+                if execution is not None
+                else "not recorded"
+            )
+        else:
+            result = "not run"
+        layers.append(
+            {
+                "layer": layer.name,
+                "label": layer.label,
+                "result": result,
+                "failure_modes": list(layer.failure_modes),
+                "counts_as_evidence": layer.evidence == "assurance",
+                "counted_failure_modes": counted_here,
+                "limitation": layer.limitation,
+            }
+        )
+
+    return {
+        "run_id": assurance["run_id"],
+        "mode": assurance["mode"],
+        "gate_verdict": assurance["gate_verdict"],
+        "disposition": assurance["disposition"],
+        "assessment_status": status,
+        "evidence_sufficient": assurance["evidence_sufficient"],
+        "counted_evidence": len(counted),
+        "mapped_failure_modes": mapped_modes,
+        "unverified_failure_modes": [
+            entry["failure_mode"] for entry in failure_modes if not entry["verified"]
+        ],
+        "failure_modes": failure_modes,
+        "unmapped_failure_modes": {
+            mode: origin
+            for mode, origin in FAILURE_MODES.items()
+            if mode not in mapped_modes
+        },
+        "layers": layers,
+    }
+
+
+def layer_report(path: Path) -> dict[str, Any]:
+    """Print and save the explicit layer report for one assurance result."""
+
+    resolved = _resolve_result_path(path)
+    package = resolved.parent
+    if not (package / "manifest.json").is_file() or (package / ".incomplete").exists():
+        raise DemoError("assurance package is incomplete or missing manifest.json")
+    assurance = _read_json_object(resolved, "assurance result")
+    gate_path = Path(_required_string(assurance, "gate_result_path"))
+    gate = _read_json_object(gate_path, "gate result")
+    gate_manifest = _read_json_object(
+        gate_path.parent / _required_string(gate, "manifest_path"), "gate manifest"
+    )
+    policy = _load_assurance_policy(package / "policy.yaml")
+    report = build_layer_report(assurance, gate, gate_manifest, policy)
+
+    print(f"layers for run {report['run_id']} ({report['mode']} mode)")
+    print(
+        f"gate verdict: {report['gate_verdict']}  "
+        f"disposition: {report['disposition']}  "
+        f"assessment: {report['assessment_status']}  counted evidence: "
+        f"{report['counted_evidence']}"
+    )
+    for row in report["layers"]:
+        guards = ", ".join(row["failure_modes"]) or "-"
+        if row["counts_as_evidence"]:
+            missing = [
+                mode
+                for mode in row["failure_modes"]
+                if mode not in row["counted_failure_modes"]
+            ]
+            evidence = f"verified {', '.join(row['counted_failure_modes']) or 'none'}"
+            if missing:
+                evidence += f"; UNVERIFIED {', '.join(missing)}"
+        else:
+            evidence = "never counted as evidence"
+        print(
+            f"  [{row['label']:<11}] {row['layer']}: {row['result']}; "
+            f"guards {guards}; {evidence}"
+        )
+    print("failure modes:")
+    for entry in report["failure_modes"]:
+        mark = "verified" if entry["verified"] else "UNVERIFIED"
+        print(f"  {entry['failure_mode']}: {mark} ({'; '.join(entry['evidence'])})")
+    for mode, origin in report["unmapped_failure_modes"].items():
+        print(f"  {mode}: not assurance-mapped ({origin})")
+
+    # Never create the workbench here: setup refuses to run over an existing one.
+    if not WORKBENCH.is_dir():
+        print("layer report: not saved (no demo workbench)")
+        return report
+    LAYER_REPORTS.mkdir(mode=0o700, exist_ok=True)
+    destination = LAYER_REPORTS / f"{report['run_id']}.json"
+    destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"layer report: {destination}")
+    return report
+
+
+def _read_json_object(path: Path, description: str) -> dict[str, Any]:
+    try:
+        value: object = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DemoError(f"unable to read {description} JSON: {path}") from error
+    if not isinstance(value, dict):
+        raise DemoError(f"{description} must be a JSON object")
+    return value
+
+
 def _resolve_result_path(path: Path) -> Path:
     try:
         return path.expanduser().resolve(strict=True)
@@ -466,13 +1049,32 @@ def _resolve_result_path(path: Path) -> Path:
 
 
 def grade(path: Path) -> str:
+    return _grade_run(path)[0]
+
+
+def _grade_run(path: Path, disposition: str | None = None) -> tuple[str, str]:
+    """Classify the gate verdict and, optionally, the assurance disposition.
+
+    The oracle runs only when a PASS or FAIL needs truth. NEEDS_HUMAN is
+    ``escalated`` whatever the truth, and a candidate that cannot even be
+    imported would otherwise make the oracle itself unrunnable.
+    """
+
     _verify_repository()
     summary = inspect_result(path)
-    correct = _oracle_truth()
-    box = classify_oracle(summary.verdict, correct)
-    print(f"truth: {'correct' if correct else 'wrong'}")
-    print(f"classification: {box}")
-    return box
+    decisions = (summary.verdict, disposition or summary.verdict)
+    correct = False
+    if any(decision != "NEEDS_HUMAN" for decision in decisions):
+        correct = _oracle_truth()
+        print(f"truth: {'correct' if correct else 'wrong'}")
+    else:
+        print("truth: not graded (escalated before oracle)")
+    gate_box = classify_oracle(decisions[0], correct)
+    disposition_box = classify_oracle(decisions[1], correct)
+    print(f"classification: {gate_box}")
+    if disposition is not None:
+        print(f"disposition classification: {disposition_box}")
+    return gate_box, disposition_box
 
 
 def _validate_assurance_control(
@@ -481,6 +1083,10 @@ def _validate_assurance_control(
     verdict: str,
     disposition: str,
     status: str,
+    *,
+    mode: str = "advisory",
+    sufficient: bool = True,
+    unmet: tuple[tuple[str, str], ...] = (),
 ) -> None:
     if summary.gate_verdict != verdict:
         raise DemoError(
@@ -491,34 +1097,48 @@ def _validate_assurance_control(
             f"{scenario}: expected assurance disposition {disposition}, "
             f"got {summary.disposition}"
         )
-    if summary.mode != "advisory":
+    if summary.mode != mode:
         raise DemoError(
-            f"{scenario}: expected assurance mode advisory, got {summary.mode}"
+            f"{scenario}: expected assurance mode {mode}, got {summary.mode}"
         )
     if summary.assessment_status != status:
         raise DemoError(
             f"{scenario}: expected assessment status {status}, "
             f"got {summary.assessment_status}"
         )
-    if verdict == "PASS":
+    if status == "COMPLETE":
         uncertainty = (
             summary.coverage.get("mapping_uncertainty_rate")
             if summary.coverage is not None
             else None
         )
-        if not summary.evidence_sufficient:
-            raise DemoError(f"{scenario}: assurance evidence was insufficient")
-        if summary.unmet_requirements:
-            raise DemoError(f"{scenario}: assurance requirements were unmet")
         if (
             isinstance(uncertainty, bool)
             or not isinstance(uncertainty, (int, float))
             or not math.isfinite(uncertainty)
-            or not 0 <= uncertainty <= 0.95
+            or not 0 <= uncertainty <= (0.95 if sufficient else 1)
         ):
             raise DemoError(
-                f"{scenario}: mapping uncertainty must be numeric and within [0, 0.95]"
+                f"{scenario}: mapping uncertainty must be numeric and within "
+                f"[0, {0.95 if sufficient else 1}]"
             )
+        if sufficient:
+            if not summary.evidence_sufficient:
+                raise DemoError(f"{scenario}: assurance evidence was insufficient")
+            if summary.unmet_requirements:
+                raise DemoError(f"{scenario}: assurance requirements were unmet")
+        else:
+            if summary.evidence_sufficient:
+                raise DemoError(f"{scenario}: expected insufficient assurance evidence")
+            actual = {
+                (str(item.get("dimension_id")), str(item.get("value")))
+                for item in summary.unmet_requirements
+            }
+            if actual != set(unmet):
+                raise DemoError(
+                    f"{scenario}: expected unmet requirements {sorted(unmet)}, "
+                    f"got {sorted(actual)}"
+                )
     else:
         if summary.evidence_sufficient:
             raise DemoError(
@@ -532,33 +1152,27 @@ def _validate_assurance_control(
             raise DemoError(f"{scenario}: unevaluated assurance claimed coverage")
 
 
-def verify() -> None:
+def verify(layers: bool = False) -> None:
     if WORKBENCH.exists():
         _verify_repository()
     else:
         setup()
-    expected = {
-        "pass": (0, "PASS", "PASS", "COMPLETE", "good_pass"),
-        "fail": (1, "FAIL", "FAIL", "NOT_EVALUATED", "good_catch"),
-        "needs-human": (
-            2,
-            "NEEDS_HUMAN",
-            "NEEDS_HUMAN",
-            "NOT_EVALUATED",
-            "escalated",
-        ),
-    }
+    names = tuple(SCENARIOS) if layers else DEFAULT_SCENARIOS
     CONTROL_EVIDENCE.mkdir(mode=0o700, exist_ok=True)
-    for scenario, (exit_code, verdict, disposition, status, box) in expected.items():
-        control(scenario)
-        run_id = f"verify-{scenario}-{uuid.uuid4().hex[:8]}"
+    rows: list[str] = []
+    for name in names:
+        scenario = SCENARIOS[name]
+        base = ENFORCE_REF if scenario.enforce else BASE_REF
+        print(f"=== scenario {name} (control {scenario.control}, base {base})")
+        control(scenario.control, base)
+        run_id = f"verify-{name}-{uuid.uuid4().hex[:8]}"
         result = _run(
             _gate_argv(
                 "assure",
                 "--repo",
                 REPOSITORY,
                 "--base",
-                BASE_REF,
+                base,
                 "--output",
                 CONTROL_EVIDENCE,
                 "--run-id",
@@ -569,18 +1183,75 @@ def verify() -> None:
         )
         print(result.stderr, end="", file=sys.stderr)
         print(result.stdout, end="")
-        if result.returncode != exit_code:
+        if result.returncode != scenario.exit_code:
             raise DemoError(
-                f"{scenario}: expected exit {exit_code}, got {result.returncode}"
+                f"{name}: expected exit {scenario.exit_code}, got {result.returncode}"
             )
         result_path = _result_path(result.stdout)
         summary = inspect_assurance_result(result_path)
-        _validate_assurance_control(scenario, summary, verdict, disposition, status)
-        actual_box = grade(Path(summary.gate_result_path))
-        if actual_box != box:
-            raise DemoError(f"{scenario}: expected {box}, got {actual_box}")
+        _validate_assurance_control(
+            name,
+            summary,
+            scenario.gate_verdict,
+            scenario.disposition,
+            scenario.assessment_status,
+            mode="enforce" if scenario.enforce else "advisory",
+            sufficient=scenario.evidence_sufficient,
+            unmet=scenario.unmet,
+        )
+        report = layer_report(result_path)
+        _validate_layer_report(name, report, scenario)
+        gate_box, disposition_box = _grade_run(
+            Path(summary.gate_result_path), summary.disposition
+        )
+        if (gate_box, disposition_box) != (
+            scenario.gate_box,
+            scenario.disposition_box,
+        ):
+            raise DemoError(
+                f"{name}: expected {scenario.gate_box}/{scenario.disposition_box}, "
+                f"got {gate_box}/{disposition_box}"
+            )
+        unverified = ", ".join(report["unverified_failure_modes"]) or "none"
+        rows.append(
+            f"{name:<22} exit {result.returncode}  gate {summary.gate_verdict:<11} "
+            f"disposition {summary.disposition:<11} "
+            f"assessment {summary.assessment_status:<13} "
+            f"unverified {unverified}  grade {gate_box}/{disposition_box}"
+        )
     reset()
+    print("=== scenario summary")
+    for row in rows:
+        print(row)
     print("verify: gate verdicts and assurance dispositions matched expectations")
+    if layers:
+        print("verify: unverified layers were surfaced without false coverage")
+
+
+def _validate_layer_report(
+    name: str, report: dict[str, Any], scenario: Scenario
+) -> None:
+    """Check the no-false-coverage rules against the expected scenario."""
+
+    mapped = set(report["mapped_failure_modes"])
+    unverified = set(report["unverified_failure_modes"])
+    if scenario.assessment_status != "COMPLETE":
+        if report["counted_evidence"]:
+            raise DemoError(f"{name}: unevaluated assurance counted evidence")
+        if unverified != mapped:
+            raise DemoError(
+                f"{name}: every mapped failure mode must be unverified when "
+                "assurance was not evaluated"
+            )
+        return
+    expected = {
+        value for dimension, value in scenario.unmet if dimension == "failure_mode"
+    }
+    if unverified != expected:
+        raise DemoError(
+            f"{name}: expected unverified failure modes {sorted(expected)}, "
+            f"got {sorted(unverified)}"
+        )
 
 
 def _require_gate_version() -> None:
@@ -607,14 +1278,33 @@ def _verify_repository() -> None:
     if len(base) != 40 or parent != UPSTREAM_SHA:
         raise DemoError(f"trusted base {BASE_REF} does not extend {UPSTREAM_SHA}")
     policy = _git_blob(f"{BASE_REF}:.release-gate.yaml")
-    expected_policy = (ASSETS / ".release-gate.yaml").read_bytes()
-    if policy != expected_policy:
+    expected_policy = _lf((ASSETS / ".release-gate.yaml").read_bytes())
+    if _lf(policy) != expected_policy:
         raise DemoError("trusted base policy does not match the committed demo asset")
-    assurance_policy = _git_blob(f"{BASE_REF}:.release-gate-assurance.yaml")
-    expected_assurance_policy = (ASSETS / ".release-gate-assurance.yaml").read_bytes()
-    if assurance_policy != expected_assurance_policy:
+    assurance_policy = _git_blob(f"{BASE_REF}:{ASSURANCE_POLICY_NAME}")
+    expected_assurance_policy = _lf((ASSETS / ASSURANCE_POLICY_NAME).read_bytes())
+    if _lf(assurance_policy) != expected_assurance_policy:
         raise DemoError(
             "trusted base assurance policy does not match the committed demo asset"
+        )
+    try:
+        enforce_parent = _git("rev-parse", f"{ENFORCE_REF}^", capture=True)
+    except DemoError as error:
+        raise DemoError(
+            f"trusted enforce base {ENFORCE_REF} is missing; "
+            "move the old workbench aside and run setup again"
+        ) from error
+    if enforce_parent != base:
+        raise DemoError(
+            f"trusted enforce base {ENFORCE_REF} does not extend {BASE_REF}"
+        )
+    if _lf(_git_blob(f"{ENFORCE_REF}:.release-gate.yaml")) != expected_policy:
+        raise DemoError("trusted enforce base changed the gate policy")
+    enforce_policy = _git_blob(f"{ENFORCE_REF}:{ASSURANCE_POLICY_NAME}")
+    if _lf(enforce_policy) != _enforce_policy_bytes():
+        raise DemoError(
+            "trusted enforce base assurance policy must differ from the asset "
+            "only by its mode"
         )
 
 
@@ -644,28 +1334,62 @@ def _release_gate_python() -> Path:
         .resolve()
         .with_name("python.exe" if sys.platform == "win32" else "python")
     )
-    if not sibling.is_file():
-        raise DemoError(
-            "unable to load assurance policy: release-gate Python is unavailable"
+    if sibling.is_file():
+        return sibling
+    # On Windows, uv installs a launcher executable outside the tool
+    # environment, so no interpreter sits beside it; ask uv where it lives.
+    tool_python = _uv_tool_python()
+    if tool_python is not None:
+        return tool_python
+    raise DemoError(
+        "unable to load assurance policy: release-gate Python is unavailable"
+    )
+
+
+def _uv_tool_python() -> Path | None:
+    try:
+        result = subprocess.run(
+            ["uv", "tool", "dir"], check=True, capture_output=True, text=True
         )
-    return sibling
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    environment = Path(result.stdout.strip()) / "release-gate"
+    python = (
+        environment / "Scripts" / "python.exe"
+        if sys.platform == "win32"
+        else environment / "bin" / "python"
+    )
+    return python if python.is_file() else None
 
 
-def _load_assurance_policy_sources(path: Path) -> list[dict[str, str]]:
+def _load_assurance_policy(path: Path) -> dict[str, Any]:
+    """Load mappings and requirements through Release Gate's own validator."""
+
     script = (
         "import json, sys; from pathlib import Path; "
         "from release_gate.assurance.policy import load_policy; "
         "policy = load_policy(Path(sys.argv[1]).read_bytes()); "
-        "print(json.dumps([mapping.sources for mapping in policy.mappings]))"
+        "print(json.dumps({'mappings': [{'selector': m.selector.model_dump(), "
+        "'concepts': m.concepts, 'sources': m.sources} for m in policy.mappings], "
+        "'required': [[r.dimension_id, r.value] for r in policy.required_regions]}))"
     )
     result = _run((_release_gate_python(), "-c", script, path), capture=True)
     try:
         value = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise DemoError("unable to load assurance policy source mappings") from error
-    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
-        raise DemoError("assurance policy source mappings are invalid")
+        raise DemoError("unable to load assurance policy mappings") from error
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("mappings"), list)
+        or not all(isinstance(item, dict) for item in value["mappings"])
+        or not isinstance(value.get("required"), list)
+    ):
+        raise DemoError("assurance policy mappings are invalid")
     return value
+
+
+def _load_assurance_policy_sources(path: Path) -> list[dict[str, str]]:
+    return [mapping["sources"] for mapping in _load_assurance_policy(path)["mappings"]]
 
 
 def _verify_reviewed_source_blobs() -> None:
@@ -826,17 +1550,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif arguments.command == "setup":
             setup()
         elif arguments.command == "reset":
-            reset()
+            reset(ENFORCE_REF if arguments.enforce else BASE_REF)
         elif arguments.command == "control":
-            control(arguments.scenario)
+            control(arguments.scenario, ENFORCE_REF if arguments.enforce else BASE_REF)
         elif arguments.command == "inspect":
             inspect_result(arguments.result)
         elif arguments.command == "inspect-assurance":
             inspect_assurance_result(arguments.result)
+        elif arguments.command == "layers":
+            layer_report(arguments.result)
         elif arguments.command == "grade":
             grade(arguments.result)
         elif arguments.command == "verify":
-            verify()
+            verify(layers=arguments.layers)
         else:
             raise DemoError(f"unsupported command: {arguments.command}")
     except DemoError as error:

@@ -1,0 +1,13 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 537460eb129b398929f824bd3e4be72c1984682f..f354e2ad7c4c2977fcb94ba10abd5a7f039dfc1f 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,7 +3,7 @@
+ - Support Python 3.14.
+ - Drop support for Python 3.9 and lower.
+ - Use tox for local test runs and in CI.
+-- Test the project against both `unidecode` and `text_unidecode`.
++- Make `Unidecode` the primary required backend and drop `text-unidecode`.
+ - Fix type annotation issues identified by mypy.
+ - Run CI against pull requests.
+ - Fix package build warnings.

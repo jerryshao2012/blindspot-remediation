@@ -1,7 +1,9 @@
 diff --git a/.release-gate.yaml b/.release-gate.yaml
+index bd9b09d..3281dcf 100644
 --- a/.release-gate.yaml
 +++ b/.release-gate.yaml
-@@ -216,2 +216,3 @@ checks:
+@@ -270,3 +270,4 @@ checks:
+           - "slugify"
            - "--ignore-missing-imports"
          inherit_environment: ["PATH", "PATHEXT", "SYSTEMROOT"]
 +# deterministic Release Gate policy-review control
