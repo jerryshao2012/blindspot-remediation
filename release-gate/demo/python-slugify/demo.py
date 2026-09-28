@@ -653,8 +653,14 @@ def setup() -> None:
     print(f"workbench: {REPOSITORY}")
 
 
+def _lf(data: bytes) -> bytes:
+    """Compare policies as Git stores them: Windows checkouts may use CRLF."""
+
+    return data.replace(b"\r\n", b"\n")
+
+
 def _enforce_policy_bytes() -> bytes:
-    advisory = (ASSETS / ASSURANCE_POLICY_NAME).read_bytes()
+    advisory = _lf((ASSETS / ASSURANCE_POLICY_NAME).read_bytes())
     if advisory.count(ADVISORY_MODE_LINE) != 1:
         raise DemoError(
             "assurance policy asset must declare advisory mode exactly once"
@@ -1272,12 +1278,12 @@ def _verify_repository() -> None:
     if len(base) != 40 or parent != UPSTREAM_SHA:
         raise DemoError(f"trusted base {BASE_REF} does not extend {UPSTREAM_SHA}")
     policy = _git_blob(f"{BASE_REF}:.release-gate.yaml")
-    expected_policy = (ASSETS / ".release-gate.yaml").read_bytes()
-    if policy != expected_policy:
+    expected_policy = _lf((ASSETS / ".release-gate.yaml").read_bytes())
+    if _lf(policy) != expected_policy:
         raise DemoError("trusted base policy does not match the committed demo asset")
     assurance_policy = _git_blob(f"{BASE_REF}:{ASSURANCE_POLICY_NAME}")
-    expected_assurance_policy = (ASSETS / ASSURANCE_POLICY_NAME).read_bytes()
-    if assurance_policy != expected_assurance_policy:
+    expected_assurance_policy = _lf((ASSETS / ASSURANCE_POLICY_NAME).read_bytes())
+    if _lf(assurance_policy) != expected_assurance_policy:
         raise DemoError(
             "trusted base assurance policy does not match the committed demo asset"
         )
@@ -1292,9 +1298,10 @@ def _verify_repository() -> None:
         raise DemoError(
             f"trusted enforce base {ENFORCE_REF} does not extend {BASE_REF}"
         )
-    if _git_blob(f"{ENFORCE_REF}:.release-gate.yaml") != expected_policy:
+    if _lf(_git_blob(f"{ENFORCE_REF}:.release-gate.yaml")) != expected_policy:
         raise DemoError("trusted enforce base changed the gate policy")
-    if _git_blob(f"{ENFORCE_REF}:{ASSURANCE_POLICY_NAME}") != _enforce_policy_bytes():
+    enforce_policy = _git_blob(f"{ENFORCE_REF}:{ASSURANCE_POLICY_NAME}")
+    if _lf(enforce_policy) != _enforce_policy_bytes():
         raise DemoError(
             "trusted enforce base assurance policy must differ from the asset "
             "only by its mode"

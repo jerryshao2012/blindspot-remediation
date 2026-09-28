@@ -22,6 +22,12 @@ POLICY = DEMO / "assets" / ".release-gate.yaml"
 ASSURANCE_POLICY = DEMO / "assets" / ".release-gate-assurance.yaml"
 
 
+def _lf(data: bytes) -> bytes:
+    """Windows checkouts may use CRLF; Git stores and hashes LF."""
+
+    return data.replace(b"\r\n", b"\n")
+
+
 def load_driver() -> ModuleType:
     spec = importlib.util.spec_from_file_location("python_slugify_demo", DRIVER)
     assert spec is not None and spec.loader is not None
@@ -778,7 +784,7 @@ def test_demo_assurance_policy_is_reviewed_and_valid() -> None:
     assert policy.limits.max_elapsed_seconds <= 30.0
 
     test_digest = "f10f27fa48230d93c34826c7e3c03336ea9fa5103c5a0706174c586470403eda"
-    policy_digest = hashlib.sha256(POLICY.read_bytes()).hexdigest()
+    policy_digest = hashlib.sha256(_lf(POLICY.read_bytes())).hexdigest()
     rows = [
         (
             mapping.selector.check_id,
@@ -864,8 +870,7 @@ def test_demo_assurance_policy_is_reviewed_and_valid() -> None:
 def test_gate_policy_source_digest_is_the_committed_asset_blob() -> None:
     """The assurance policy trusts the LF bytes Git stores for the gate policy."""
 
-    raw = POLICY.read_bytes()
-    assert b"\r\n" not in raw
+    raw = _lf(POLICY.read_bytes())
     digests = {
         digest
         for mapping in load_policy(ASSURANCE_POLICY.read_bytes()).mappings
@@ -928,7 +933,7 @@ def test_enforce_policy_differs_from_the_asset_only_by_mode(
     advisory = ASSURANCE_POLICY.read_bytes()
 
     assert load_policy(enforce).mode == "enforce"
-    assert enforce.replace(b"mode: enforce\n", b"mode: advisory\n") == advisory
+    assert enforce.replace(b"mode: enforce\n", b"mode: advisory\n") == _lf(advisory)
 
     assets = tmp_path / "assets"
     assets.mkdir()
@@ -1014,7 +1019,7 @@ def test_reviewed_source_validation_rejects_stale_policy_digest(
     (repository / "test.py").write_bytes(b"trusted contents\n")
     # The reviewed gate policy is itself a source; keep it valid so only the
     # stale test.py digest is reported.
-    (repository / ".release-gate.yaml").write_bytes(POLICY.read_bytes())
+    (repository / ".release-gate.yaml").write_bytes(_lf(POLICY.read_bytes()))
     subprocess.run(
         ["git", "add", "test.py", ".release-gate.yaml"], cwd=repository, check=True
     )
