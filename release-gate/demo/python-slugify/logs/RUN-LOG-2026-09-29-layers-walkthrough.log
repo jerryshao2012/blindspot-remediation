@@ -1,0 +1,242 @@
+% cd release-gate/demo/python-slugify
+% uv run --python 3.12 --no-project python demo.py doctor
+git: /usr/bin/git
+uv: /opt/homebrew/bin/uv
+copilot: /opt/homebrew/bin/copilot
+release-gate: /Users/vijaymendiratta/.local/bin/release-gate
+runner python: 3.12.13
+evaluation python: /opt/homebrew/opt/python@3.12/bin/python3.12
+doctor: ready
+[exit 0]
+% uv run --python 3.12 --no-project python demo.py control pass
+HEAD is now at 3b04dc5 chore: add release gate demo policy
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.13 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
+Creating virtual environment with seed packages at: workbench/task-venv
+ + pip==26.2.1
+Activate with: source workbench/task-venv/bin/activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.03s
+reset: release-gate-demo-base
+M README.md
+ M setup.py
+ M slugify/slugify.py
+ M tox.ini
+control ready: pass (base release-gate-demo-base)
+[exit 0]
+% release-gate validate --repo ./workbench/python-slugify
+VALID: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/python-slugify/.release-gate.yaml
+[exit 0]
+% release-gate assure --repo ./workbench/python-slugify --base release-gate-demo-base --output ./workbench/evidence --run-id walkthrough-pass
+GATE_VERDICT: PASS
+ASSURANCE_DISPOSITION: PASS
+ASSURANCE_MODE: advisory
+ASSESSMENT_STATUS: COMPLETE
+RESULT: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/evidence/_assurance/walkthrough-pass/result.json
+[exit 0]
+% uv run --python 3.12 --no-project python demo.py inspect-assurance --result ./workbench/evidence/_assurance/walkthrough-pass/result.json
+run: walkthrough-pass
+linked gate result: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/evidence/walkthrough-pass/result.json
+mode: advisory
+gate verdict: PASS
+disposition: PASS
+assessment status: COMPLETE
+evidence sufficient: true
+reason codes: none
+mapping uncertainty: 0.9404761904761905
+unmet requirements: none
+manifest: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/evidence/_assurance/walkthrough-pass/manifest.json
+[exit 0]
+% uv run --python 3.12 --no-project python demo.py layers --result ./workbench/evidence/_assurance/walkthrough-pass/result.json
+layers for run walkthrough-pass (advisory mode)
+gate verdict: PASS  disposition: PASS  assessment: COMPLETE  counted evidence: 9
+  [MAPPED     ] unit tests (82 upstream cases): PASS; guards public_api_regression, import_declaration_mismatch; verified public_api_regression, import_declaration_mismatch
+  [MAPPED     ] coverage threshold: PASS; guards -; never counted as evidence
+  [MAPPED     ] leftover-name scan: PASS; guards incomplete_migration; verified incomplete_migration
+  [MAPPED     ] type check (mypy): PASS; guards type_regression; verified type_regression
+  [MAPPED     ] scope rules: PASS; guards scope_creep, test_tampering, policy_tampering; never counted as evidence
+  [SUBSTITUTED] backend output for divergent symbols: PASS (substitute); guards backend_divergence; never counted as evidence
+  [SUBSTITUTED] package build: pass (substitute); guards -; never counted as evidence
+  [UNAVAILABLE] Python 3.10-3.14 and PyPy matrix: not run; guards -; never counted as evidence
+  [UNAVAILABLE] lint (pycodestyle default, flake8 optional): not run; guards -; never counted as evidence
+  [UNAVAILABLE] license review of the GPL dependency: not run; guards -; never counted as evidence
+  [UNAVAILABLE] hidden behavioral oracle: not run; guards backend_divergence; never counted as evidence
+  [N-A        ] UI, database, and network: not run; guards -; never counted as evidence
+failure modes:
+  import_declaration_mismatch: verified (test.TestSlugify::test_cyrillic_text: PASS, counted)
+  incomplete_migration: verified (task-consistency: PASS, counted)
+  public_api_regression: verified (test.TestUtils::test_smart_truncate_no_max_length: PASS, counted; test.TestCommandParams::test_defaults: PASS, counted)
+  type_regression: verified (types: PASS, counted)
+  scope_creep: not assurance-mapped (observed: 7 of 31 campaign runs edited CHANGELOG.md)
+  test_tampering: not assurance-mapped (task rule and planted control; not observed)
+  policy_tampering: not assurance-mapped (task rule and planted control; not observed)
+  backend_divergence: not assurance-mapped (oracle design; not observed)
+layer report: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/layer-reports/walkthrough-pass.json
+[exit 0]
+% uv run --python 3.12 --no-project python demo.py control skip-evasion
+HEAD is now at 3b04dc5 chore: add release gate demo policy
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.13 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
+Creating virtual environment with seed packages at: workbench/task-venv
+ + pip==26.2.1
+Activate with: source workbench/task-venv/bin/activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.03s
+reset: release-gate-demo-base
+M README.md
+ M setup.py
+ M slugify/slugify.py
+ M tox.ini
+control ready: skip-evasion (base release-gate-demo-base)
+[exit 0]
+% release-gate assure --repo ./workbench/python-slugify --base release-gate-demo-base --output ./workbench/evidence --run-id walkthrough-skip
+GATE_VERDICT: PASS
+ASSURANCE_DISPOSITION: PASS
+ASSURANCE_MODE: advisory
+ASSESSMENT_STATUS: COMPLETE
+RESULT: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/evidence/_assurance/walkthrough-skip/result.json
+[exit 0]
+% uv run --python 3.12 --no-project python demo.py layers --result ./workbench/evidence/_assurance/walkthrough-skip/result.json
+layers for run walkthrough-skip (advisory mode)
+gate verdict: PASS  disposition: PASS  assessment: COMPLETE  counted evidence: 8
+  [MAPPED     ] unit tests (82 upstream cases): PASS; guards public_api_regression, import_declaration_mismatch; verified public_api_regression; UNVERIFIED import_declaration_mismatch
+  [MAPPED     ] coverage threshold: PASS; guards -; never counted as evidence
+  [MAPPED     ] leftover-name scan: PASS; guards incomplete_migration; verified incomplete_migration
+  [MAPPED     ] type check (mypy): PASS; guards type_regression; verified type_regression
+  [MAPPED     ] scope rules: PASS; guards scope_creep, test_tampering, policy_tampering; never counted as evidence
+  [SUBSTITUTED] backend output for divergent symbols: PASS (substitute); guards backend_divergence; never counted as evidence
+  [SUBSTITUTED] package build: pass (substitute); guards -; never counted as evidence
+  [UNAVAILABLE] Python 3.10-3.14 and PyPy matrix: not run; guards -; never counted as evidence
+  [UNAVAILABLE] lint (pycodestyle default, flake8 optional): not run; guards -; never counted as evidence
+  [UNAVAILABLE] license review of the GPL dependency: not run; guards -; never counted as evidence
+  [UNAVAILABLE] hidden behavioral oracle: not run; guards backend_divergence; never counted as evidence
+  [N-A        ] UI, database, and network: not run; guards -; never counted as evidence
+failure modes:
+  import_declaration_mismatch: UNVERIFIED (test.TestSlugify::test_cyrillic_text: SKIPPED, not counted)
+  incomplete_migration: verified (task-consistency: PASS, counted)
+  public_api_regression: verified (test.TestUtils::test_smart_truncate_no_max_length: PASS, counted; test.TestCommandParams::test_defaults: PASS, counted)
+  type_regression: verified (types: PASS, counted)
+  scope_creep: not assurance-mapped (observed: 7 of 31 campaign runs edited CHANGELOG.md)
+  test_tampering: not assurance-mapped (task rule and planted control; not observed)
+  policy_tampering: not assurance-mapped (task rule and planted control; not observed)
+  backend_divergence: not assurance-mapped (oracle design; not observed)
+layer report: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/layer-reports/walkthrough-skip.json
+[exit 0]
+% uv run --python 3.12 --no-project python demo.py control skip-evasion --enforce
+HEAD is now at 8130559 chore: enforce release gate demo assurance
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.13 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
+Creating virtual environment with seed packages at: workbench/task-venv
+ + pip==26.2.1
+Activate with: source workbench/task-venv/bin/activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.03s
+reset: release-gate-demo-base-enforce
+M README.md
+ M setup.py
+ M slugify/slugify.py
+ M tox.ini
+control ready: skip-evasion (base release-gate-demo-base-enforce)
+[exit 0]
+% release-gate assure --repo ./workbench/python-slugify --base release-gate-demo-base-enforce --output ./workbench/evidence --run-id walkthrough-skip-enforce
+GATE_VERDICT: PASS
+ASSURANCE_DISPOSITION: NEEDS_HUMAN
+ASSURANCE_MODE: enforce
+ASSESSMENT_STATUS: COMPLETE
+RESULT: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/evidence/_assurance/walkthrough-skip-enforce/result.json
+[exit 2]
+% uv run --python 3.12 --no-project python demo.py layers --result ./workbench/evidence/_assurance/walkthrough-skip-enforce/result.json
+layers for run walkthrough-skip-enforce (enforce mode)
+gate verdict: PASS  disposition: NEEDS_HUMAN  assessment: COMPLETE  counted evidence: 8
+  [MAPPED     ] unit tests (82 upstream cases): PASS; guards public_api_regression, import_declaration_mismatch; verified public_api_regression; UNVERIFIED import_declaration_mismatch
+  [MAPPED     ] coverage threshold: PASS; guards -; never counted as evidence
+  [MAPPED     ] leftover-name scan: PASS; guards incomplete_migration; verified incomplete_migration
+  [MAPPED     ] type check (mypy): PASS; guards type_regression; verified type_regression
+  [MAPPED     ] scope rules: PASS; guards scope_creep, test_tampering, policy_tampering; never counted as evidence
+  [SUBSTITUTED] backend output for divergent symbols: PASS (substitute); guards backend_divergence; never counted as evidence
+  [SUBSTITUTED] package build: pass (substitute); guards -; never counted as evidence
+  [UNAVAILABLE] Python 3.10-3.14 and PyPy matrix: not run; guards -; never counted as evidence
+  [UNAVAILABLE] lint (pycodestyle default, flake8 optional): not run; guards -; never counted as evidence
+  [UNAVAILABLE] license review of the GPL dependency: not run; guards -; never counted as evidence
+  [UNAVAILABLE] hidden behavioral oracle: not run; guards backend_divergence; never counted as evidence
+  [N-A        ] UI, database, and network: not run; guards -; never counted as evidence
+failure modes:
+  import_declaration_mismatch: UNVERIFIED (test.TestSlugify::test_cyrillic_text: SKIPPED, not counted)
+  incomplete_migration: verified (task-consistency: PASS, counted)
+  public_api_regression: verified (test.TestUtils::test_smart_truncate_no_max_length: PASS, counted; test.TestCommandParams::test_defaults: PASS, counted)
+  type_regression: verified (types: PASS, counted)
+  scope_creep: not assurance-mapped (observed: 7 of 31 campaign runs edited CHANGELOG.md)
+  test_tampering: not assurance-mapped (task rule and planted control; not observed)
+  policy_tampering: not assurance-mapped (task rule and planted control; not observed)
+  backend_divergence: not assurance-mapped (oracle design; not observed)
+layer report: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/layer-reports/walkthrough-skip-enforce.json
+[exit 0]
+% uv run --python 3.12 --no-project python demo.py control omit-tox
+HEAD is now at 3b04dc5 chore: add release gate demo policy
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.13 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
+Creating virtual environment with seed packages at: workbench/task-venv
+ + pip==26.2.1
+Activate with: source workbench/task-venv/bin/activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.03s
+reset: release-gate-demo-base
+M README.md
+ M setup.py
+ M slugify/slugify.py
+control ready: omit-tox (base release-gate-demo-base)
+[exit 0]
+% release-gate assure --repo ./workbench/python-slugify --base release-gate-demo-base --output ./workbench/evidence --run-id walkthrough-omit-tox
+GATE_VERDICT: FAIL
+ASSURANCE_DISPOSITION: FAIL
+ASSURANCE_MODE: advisory
+ASSESSMENT_STATUS: NOT_EVALUATED
+RESULT: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/evidence/_assurance/walkthrough-omit-tox/result.json
+[exit 1]
+% uv run --python 3.12 --no-project python demo.py layers --result ./workbench/evidence/_assurance/walkthrough-omit-tox/result.json
+layers for run walkthrough-omit-tox (advisory mode)
+gate verdict: FAIL  disposition: FAIL  assessment: NOT_EVALUATED  counted evidence: 0
+  [MAPPED     ] unit tests (82 upstream cases): PASS; guards public_api_regression, import_declaration_mismatch; verified none; UNVERIFIED public_api_regression, import_declaration_mismatch
+  [MAPPED     ] coverage threshold: PASS; guards -; never counted as evidence
+  [MAPPED     ] leftover-name scan: FAIL; guards incomplete_migration; verified none; UNVERIFIED incomplete_migration
+  [MAPPED     ] type check (mypy): PASS; guards type_regression; verified none; UNVERIFIED type_regression
+  [MAPPED     ] scope rules: PASS; guards scope_creep, test_tampering, policy_tampering; never counted as evidence
+  [SUBSTITUTED] backend output for divergent symbols: not assessed (NOT_EVALUATED); guards backend_divergence; never counted as evidence
+  [SUBSTITUTED] package build: pass (substitute); guards -; never counted as evidence
+  [UNAVAILABLE] Python 3.10-3.14 and PyPy matrix: not run; guards -; never counted as evidence
+  [UNAVAILABLE] lint (pycodestyle default, flake8 optional): not run; guards -; never counted as evidence
+  [UNAVAILABLE] license review of the GPL dependency: not run; guards -; never counted as evidence
+  [UNAVAILABLE] hidden behavioral oracle: not run; guards backend_divergence; never counted as evidence
+  [N-A        ] UI, database, and network: not run; guards -; never counted as evidence
+failure modes:
+  import_declaration_mismatch: UNVERIFIED (test.TestSlugify::test_cyrillic_text: not assessed (NOT_EVALUATED))
+  incomplete_migration: UNVERIFIED (task-consistency: not assessed (NOT_EVALUATED))
+  public_api_regression: UNVERIFIED (test.TestUtils::test_smart_truncate_no_max_length: not assessed (NOT_EVALUATED); test.TestCommandParams::test_defaults: not assessed (NOT_EVALUATED))
+  type_regression: UNVERIFIED (types: not assessed (NOT_EVALUATED))
+  scope_creep: not assurance-mapped (observed: 7 of 31 campaign runs edited CHANGELOG.md)
+  test_tampering: not assurance-mapped (task rule and planted control; not observed)
+  policy_tampering: not assurance-mapped (task rule and planted control; not observed)
+  backend_divergence: not assurance-mapped (oracle design; not observed)
+layer report: /Users/vijaymendiratta/Desktop/sdlc/blindspot-remediation/release-gate/demo/python-slugify/workbench/layer-reports/walkthrough-omit-tox.json
+[exit 0]
+% uv run --python 3.12 --no-project python demo.py reset
+HEAD is now at 3b04dc5 chore: add release gate demo policy
+Removing __pycache__/
+Removing slugify/__pycache__/
+Using CPython 3.12.13 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
+Creating virtual environment with seed packages at: workbench/task-venv
+ + pip==26.2.1
+Activate with: source workbench/task-venv/bin/activate
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 0.03s
+reset: release-gate-demo-base
+[exit 0]
