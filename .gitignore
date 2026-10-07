@@ -43,6 +43,7 @@ update.sh
 demo/workbench/
 
 # Local demo proxy credentials
+release-gate/demo/env.windows.shell.ps1
 release-gate/demo/env.ps1
 release-gate/demo/env.sh
 demo/runs/live-*-executor.json

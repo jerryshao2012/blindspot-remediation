@@ -211,14 +211,41 @@ required installer version is not yet available from your configured npm
 registry. If a release asset URL fails with `HTTP 404`, the immutable final
 GitHub release asset is not published yet.
 
+Installing the `release-gate` CLI with `uv tool install` does not install or
+register a GitHub Copilot skill. The CLI and skill are separate artifacts, so
+`release-gate --version` can succeed while Release Gate is absent from
+Copilot's skills list.
+
 For local development in this repository only (not final release installation),
-install the checked-in skill directory directly:
+install the checked-in skill directory directly. On macOS, run these commands
+from the repository root:
 
 ```bash
 npx --yes skills@1.5.22 remove release-gate --global --agent github-copilot --yes
 npx --yes skills@1.5.22 add ./release-gate/skills/release-gate --global --copy --agent github-copilot
 npx --yes skills@1.5.22 list --global --agent github-copilot
 ```
+
+The installed skill should then be visible to GitHub Copilot. This requires
+Node.js 22.20 or newer and a trusted npm registry certificate. If npm reports
+`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, connect to the required network or
+configure the corporate CA for Node; do not disable npm TLS verification.
+
+If the pinned Skills CLI cannot reach npm, install the checked-in skill
+directly into Copilot's global macOS skill directory:
+
+```bash
+mkdir -p "$HOME/.copilot/skills"
+rm -rf "$HOME/.copilot/skills/release-gate"
+cp -R ./release-gate/skills/release-gate "$HOME/.copilot/skills/release-gate"
+test -f "$HOME/.copilot/skills/release-gate/SKILL.md"
+"$HOME/.local/bin/release-gate" --version
+```
+
+Reload the Copilot session or window after copying so the skill list is
+rediscovered. The CLI must report `release-gate 0.7.0`; this local copy is a
+development fallback and does not replace the checksum-verified release
+installation.
 
 This workaround bypasses unavailable release assets and should be replaced with
 the pinned checksum-verified release workflow in this document as soon as the
@@ -420,6 +447,31 @@ npx --yes skills@1.5.23 list --global --agent antigravity-cli
 The skill and CLI now differ temporarily. Do not invoke Release Gate while the
 skill and CLI versions differ. Replace the CLI from the verified local wheel,
 never from a package index, and confirm the exact version:
+
+### macOS and Linux
+
+From the `release-gate` checkout, after creating its Python 3.11-3.13
+environment with `uv sync`, build the combined local wheel. Source the
+local environment script when the configured BMO package index is required:
+
+```bash
+cd /path/to/blindspot-remediation/release-gate
+. demo/env.sh
+.venv/bin/python -m build --wheel --no-isolation --outdir dist .
+uv tool uninstall release-gate 2>/dev/null || true
+uv tool install --python .venv/bin/python ./dist/release_gate-0.7.0-py3-none-any.whl
+export PATH="$HOME/.local/bin:$PATH"
+release-gate --version
+# required output: release-gate 0.7.0
+```
+
+The local wheel is authoritative; `uv tool install` may still resolve the
+CLI's ordinary third-party dependencies from the configured package index.
+`--offline` is valid only when every required dependency is already available
+in uv's cache. The `--python` option is required when the system Python is
+outside the project's supported 3.11-3.13 range.
+
+### Windows PowerShell
 
 ```bash
 uv tool uninstall release-gate
