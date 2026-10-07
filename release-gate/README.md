@@ -241,7 +241,7 @@ The [`demo/`](demo/README.md) directory contains complete, reproducible end-to-e
    * Run automated tests with `./run.sh verify` and `./run.sh verify-repair` (or `.\run.ps1` on Windows).
 
 3. **[`demo/release-gate-demo.html`](demo/release-gate-demo.html):**
-   * Standalone interactive visual slide presentation and architectural overview of Release Gate, failure modes, bounded repair loops, and decision observability.
+   * Standalone interactive visual slide presentation and architectural overview of Release Gate, failure modes, bounded repair loops, and decision observability (also accessible via the [Presentation Hub](https://jerryshao2012.github.io/blindspot-remediation/docs/presentations.html)).
 
 4. **Enterprise Proxy Configuration ([`demo/env.example.ps1`](demo/env.example.ps1) / [`demo/env.example.sh`](demo/env.example.sh)):**
    * Checked-in, credential-free environment templates for enterprise networks with custom TLS certificate stores (`UV_SYSTEM_CERTS`) and authenticated HTTP/HTTPS proxies.
