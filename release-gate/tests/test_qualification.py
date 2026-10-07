@@ -192,8 +192,6 @@ def _complete_evidence() -> dict[str, object]:
         wheel,
         f"release_gate-{__version__}.tar.gz",
         *archives.values(),
-        "conceptual_diversity_mapper-1.0.0-py3-none-any.whl",
-        "conceptual_diversity_mapper-1.0.0.tar.gz",
         "SHA256SUMS",
     }
     assets = [_asset(name) for name in sorted(asset_names)]

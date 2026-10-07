@@ -12,9 +12,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples"))
 
-import E1_evidence_diversity_mapper_reference as edmr  # noqa: E402
+import E1_evidence_diversity_mapper_reference as edmr
 
 
 def build_stack():
@@ -46,7 +46,7 @@ def test_schema_validates():
 def test_bundle_is_assessed_end_to_end():
     """Criteria 1, 8, 9, 10, 12: a bundle produces regions, gaps, and requests."""
 
-    schema, engine, adapter = build_stack()
+    schema, _engine, adapter = build_stack()
 
     bundle = edmr.build_example_evidence_bundle()
 
@@ -70,7 +70,7 @@ def test_bundle_is_assessed_end_to_end():
 def test_lineage_aware_count_is_lower_than_raw_count():
     """Criterion 7 and 8: three boundary artifacts share one lineage root."""
 
-    schema, engine, adapter = build_stack()
+    schema, _engine, adapter = build_stack()
 
     bundle = edmr.build_example_evidence_bundle()
 
@@ -103,7 +103,7 @@ def test_lineage_aware_count_is_lower_than_raw_count():
 def test_absent_region_is_detected():
     """Criterion 9: concurrency is absent from the example bundle."""
 
-    schema, engine, adapter = build_stack()
+    schema, _engine, adapter = build_stack()
 
     result = adapter.assess_evidence_bundle(
         bundle=edmr.build_example_evidence_bundle(),
@@ -124,7 +124,7 @@ def test_absent_region_is_detected():
 def test_unknown_state_is_preserved():
     """Criterion 3: a missing hint becomes UNKNOWN, not False."""
 
-    schema, engine, adapter = build_stack()
+    schema, engine, _adapter = build_stack()
 
     artifact = edmr.ArtifactDescriptor(
         artifact_id="artifact_without_hints",
@@ -147,7 +147,7 @@ def test_unknown_state_is_preserved():
 def test_budget_of_zero_produces_no_requests():
     """Criterion 11: the caller budget is respected."""
 
-    schema, engine, adapter = build_stack()
+    schema, _engine, adapter = build_stack()
 
     result = adapter.assess_evidence_bundle(
         bundle=edmr.build_example_evidence_bundle(),

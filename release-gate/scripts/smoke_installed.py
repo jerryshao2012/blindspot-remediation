@@ -16,21 +16,6 @@ def main() -> int:
     if len(wheels) != 1:
         raise SystemExit(f"expected exactly one wheel, found {len(wheels)}")
     with tempfile.TemporaryDirectory(prefix="release-gate-wheel-") as temporary:
-        mapper_dist = Path(temporary) / "mapper"
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "build",
-                "--no-isolation",
-                "--wheel",
-                "--outdir",
-                str(mapper_dist),
-            ],
-            cwd=root.parent / "E1-E2-conceptual-diversity-mapper",
-            check=True,
-        )
-        mapper_wheel = next(mapper_dist.glob("*.whl"))
         environment = Path(temporary) / "venv"
         subprocess.run(
             [sys.executable, "-m", "venv", "--system-site-packages", str(environment)],
@@ -50,7 +35,6 @@ def main() -> int:
                 "pip",
                 "install",
                 "--no-deps",
-                str(mapper_wheel),
                 str(wheels[0]),
             ],
             check=True,

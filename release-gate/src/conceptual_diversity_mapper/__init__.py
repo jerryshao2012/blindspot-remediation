@@ -106,14 +106,13 @@ import json
 import math
 import time
 import uuid
-
 from abc import ABC, abstractmethod
-from collections import Counter, defaultdict
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Iterable, Mapping, Sequence
-
+from typing import Any, ClassVar
 
 # =============================================================================
 # UNIVERSAL PRODUCT CONSTANTS
@@ -164,7 +163,7 @@ UNIVERSAL_ABSENT_VALUE = "__ABSENT__"
 def utc_now_iso() -> str:
     """Return a stable ISO-8601 UTC timestamp."""
 
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def stable_hash(value: Any) -> str:
@@ -712,7 +711,7 @@ class RuleBasedArtifactConceptMapper(
     importing evidence-domain classes into the generic engine.
     """
 
-    SUPPORTED_OPERATORS = {
+    SUPPORTED_OPERATORS: ClassVar[set[str]] = {
         "equals",
         "contains",
         "exists",
@@ -1017,11 +1016,6 @@ class DuplicateAnalyzer:
         artifacts: Sequence[ArtifactDescriptor],
         mappings: Sequence[ConceptMapping],
     ) -> tuple[DuplicationAssessment, ...]:
-
-        artifact_lookup = {
-            artifact.artifact_id: artifact
-            for artifact in artifacts
-        }
 
         mapping_lookup = {
             mapping.artifact_id: mapping

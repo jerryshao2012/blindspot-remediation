@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Bundle the conceptual diversity mapper, reference example, and tests in Release Gate. Installation and release qualification now require one wheel instead of two.
+
+
 All notable changes to the standalone Release Gate are recorded here.
 
 ## Unreleased

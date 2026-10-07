@@ -86,3 +86,21 @@ def test_package_does_not_read_or_bundle_legacy_demo() -> None:
     assert package_files
     assert all("demo/gate" not in path.as_posix() for path in package_files)
     assert (REPOSITORY_ROOT / "demo" / "gate" / "gate.sh").exists()
+
+
+def test_mapper_is_bundled_without_a_separate_dependency() -> None:
+    import conceptual_diversity_mapper
+
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert (
+        "src/conceptual_diversity_mapper"
+        in metadata["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]
+    )
+    assert all(
+        Requirement(item).name != "conceptual-diversity-mapper"
+        for item in metadata["project"]["dependencies"]
+    )
+    assert (
+        Path(conceptual_diversity_mapper.__file__).resolve()
+        == ROOT / "src/conceptual_diversity_mapper/__init__.py"
+    )

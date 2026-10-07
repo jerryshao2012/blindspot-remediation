@@ -45,14 +45,12 @@ Python checksum command itself is also safe to run from PowerShell.
 
 ## Download and verify the CLI
 
-Download the release checksum manifest and exact wheels:
+Download the release checksum manifest and exact wheel:
 
 ```bash
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/SHA256SUMS
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release_gate-0.7.0-py3-none-any.whl
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/conceptual_diversity_mapper-1.0.0-py3-none-any.whl
 grep '  release_gate-0.7.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-grep '  conceptual_diversity_mapper-1.0.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
 ```
 
 Review that the checksum line came from the same GitHub release, names exactly
@@ -60,11 +58,11 @@ one asset, and reports `OK`. On systems that provide `sha256sum` instead of
 `shasum`, use the equivalent check against that single manifest line. Stop if
 the file is absent, duplicated, or mismatched.
 
-Install only the verified local wheels, replacing any existing `uv` tool with
+Install only the verified local wheel, replacing any existing `uv` tool with
 the same name, and confirm the resolved executable:
 
 ```bash
-uv tool install --force --with ./conceptual_diversity_mapper-1.0.0-py3-none-any.whl ./release_gate-0.7.0-py3-none-any.whl
+uv tool install --force ./release_gate-0.7.0-py3-none-any.whl
 release-gate --version
 ```
 
@@ -77,7 +75,7 @@ prove that the wheel itself is correct and then inspect every executable that
 PowerShell can resolve:
 
 ```powershell
-uv tool run --with .\conceptual_diversity_mapper-1.0.0-py3-none-any.whl --from .\release_gate-0.7.0-py3-none-any.whl release-gate --version
+uv tool run --from .\release_gate-0.7.0-py3-none-any.whl release-gate --version
 Get-Command release-gate -All
 uv tool list
 release-gate --version
@@ -97,14 +95,13 @@ CLI in that venv separately from the global tool:
 ```powershell
 $venv = 'C:\path\to\release-gate\.venv\Scripts\python.exe'
 uv pip install --python $venv --reinstall --no-deps --offline 'C:\path\to\release-gate\dist\release_gate-0.7.0-py3-none-any.whl'
-uv pip install --python $venv --reinstall --no-deps --offline 'C:\path\to\release-gate\dist\conceptual_diversity_mapper-1.0.0-py3-none-any.whl'
 release-gate --version
 ```
 
 Alternatively, do not activate the repository `.venv` when using the global
 CLI. Use `Get-Command release-gate -All` to confirm which executable wins.
 
-The checksum manifest covers the Release Gate wheel, mapper wheel, host skill
+The checksum manifest covers the Release Gate wheel, host skill
 archives, and source distributions. `uv tool install` still resolves ordinary
 third-party dependency ranges from the configured package index at install time,
 and those dependency bytes are outside the release asset checksum. The
@@ -182,14 +179,14 @@ If the command resolves to `$HOME\.local\bin\release-gate.exe`, it is typically 
 ```powershell
 $root = 'C:\path\to\release-gate'
 uv tool uninstall release-gate
-uv tool install --offline --with (Join-Path $root 'dist\\conceptual_diversity_mapper-1.0.0-py3-none-any.whl') (Join-Path $root 'dist\\release_gate-0.7.0-py3-none-any.whl')
+uv tool install --offline (Join-Path $root 'dist\\release_gate-0.7.0-py3-none-any.whl')
 release-gate --version
 ```
 
 The wheel must be built from the checkout containing the desired source
 version. Installing a file named `release_gate-0.7.0-...whl` cannot correct a
 wheel whose embedded metadata still says `0.3.0`; inspect the wheel's direct
-version with `uv tool run --with .\conceptual_diversity_mapper-1.0.0-py3-none-any.whl --from .\release_gate-0.7.0-py3-none-any.whl` before diagnosing `PATH`.
+version with `uv tool run --from .\release_gate-0.7.0-py3-none-any.whl` before diagnosing `PATH`.
 
 If `uv` cannot resolve dependencies because the package index is unavailable or returns an authorization error, first verify the checkout's isolated launcher:
 
@@ -351,13 +348,12 @@ tamper-evident when budget and artifact slots permit it.
 
 Never use self-update, and never use an unpinned `skills update`. Retain the
 prior wheels, host archive, and `SHA256SUMS` in a separate rollback directory.
-Then download the 0.7.0 `SHA256SUMS`, Release Gate wheel, mapper wheel, and
+Then download the 0.7.0 `SHA256SUMS`, Release Gate wheel, and
 exactly one archive for the host target into a fresh directory:
 
 ```bash
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/SHA256SUMS
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release_gate-0.7.0-py3-none-any.whl
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/conceptual_diversity_mapper-1.0.0-py3-none-any.whl
 ```
 
 Choose exactly one matching host download-and-check pair below. Do not download
@@ -369,19 +365,19 @@ asset, and compares all bytestring digests before any removal.
 ```bash
 # GitHub Copilot CLI
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-copilot-0.7.0.tar.gz
-uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl conceptual_diversity_mapper-1.0.0-py3-none-any.whl release-gate-skill-copilot-0.7.0.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl release-gate-skill-copilot-0.7.0.tar.gz
 
 # Codex CLI and IDE
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-codex-0.7.0.tar.gz
-uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl conceptual_diversity_mapper-1.0.0-py3-none-any.whl release-gate-skill-codex-0.7.0.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl release-gate-skill-codex-0.7.0.tar.gz
 
 # Claude Code
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-claude-code-0.7.0.tar.gz
-uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl conceptual_diversity_mapper-1.0.0-py3-none-any.whl release-gate-skill-claude-code-0.7.0.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl release-gate-skill-claude-code-0.7.0.tar.gz
 
 # Antigravity IDE or CLI (one shared archive)
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release-gate-skill-antigravity-0.7.0.tar.gz
-uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl conceptual_diversity_mapper-1.0.0-py3-none-any.whl release-gate-skill-antigravity-0.7.0.tar.gz
+uv run --no-project python -c "import hashlib,pathlib,re,sys; names=sys.argv[1:]; lines=pathlib.Path('SHA256SUMS').read_text(encoding='ascii').splitlines(); valid_entries=[re.fullmatch(r'[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*', line) is not None for line in lines]; (lines and all(valid_entries)) or sys.exit('invalid SHA256SUMS'); matches={name:[line for line in lines if line.endswith('  '+name)] for name in names}; all(len(matches[name]) == 1 for name in names) or sys.exit('expected exactly one SHA256SUMS entry per asset'); all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == matches[name][0][:64] for name in names) or sys.exit('SHA-256 mismatch'); print('\n'.join(f'{name}: OK' for name in names))" release_gate-0.7.0-py3-none-any.whl release-gate-skill-antigravity-0.7.0.tar.gz
 ```
 
 Stop unless the manifest came from the same immutable 0.7.0 release and both
@@ -428,7 +424,7 @@ never from a package index, and confirm the exact version:
 ```bash
 uv tool uninstall release-gate
 python -m build --wheel --no-isolation
-uv tool install --offline --with .\dist\conceptual_diversity_mapper-1.0.0-py3-none-any.whl .\dist\release_gate-0.7.0-py3-none-any.whl
+uv tool install --offline .\dist\release_gate-0.7.0-py3-none-any.whl
 release-gate --version
 # required output: release-gate 0.7.0
 ```
@@ -504,14 +500,12 @@ jobs:
           # Download immutable manifest and wheel
           curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/SHA256SUMS
           curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release_gate-0.7.0-py3-none-any.whl
-          curl -fLO https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/conceptual_diversity_mapper-1.0.0-py3-none-any.whl
           
           # Verify checksum
           grep '  release_gate-0.7.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-          grep '  conceptual_diversity_mapper-1.0.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
           
           # Install CLI
-          uv tool install --with ./conceptual_diversity_mapper-1.0.0-py3-none-any.whl ./release_gate-0.7.0-py3-none-any.whl
+          uv tool install ./release_gate-0.7.0-py3-none-any.whl
 
       - name: Run Release Gate Validate
         run: release-gate validate --repo .

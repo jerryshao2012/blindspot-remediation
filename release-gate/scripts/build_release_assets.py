@@ -77,21 +77,6 @@ def build_release_assets(root: Path, output_dir: Path, tag: str) -> None:
         subprocess.run(
             [
                 sys.executable,
-                "-m",
-                "build",
-                "--no-isolation",
-                "--wheel",
-                "--sdist",
-                "--outdir",
-                str(package_dir),
-            ],
-            cwd=root.parent / "E1-E2-conceptual-diversity-mapper",
-            env=environment,
-            check=True,
-        )
-        subprocess.run(
-            [
-                sys.executable,
                 str(root / "scripts/build_skill_archives.py"),
                 "--output-dir",
                 str(skill_dir),

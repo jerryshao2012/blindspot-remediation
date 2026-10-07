@@ -63,7 +63,7 @@ repo_demo_0 + repo_evidence  --prompt_EBA----->  repo_demo_1
 |---|---|---|
 | `repo_0` | One integrated repository implementing A + B as a single `l1_automation` package | **Partially.** The artifacts were unpacked here and run individually, but the merge into one package never happened. The A-series and B-series share zero imports. |
 | `repo_demo_0` | A laptop-size cut of `repo_0` that ends at GateDecision and adds an LLM API connector (`L1_LLM_BASE_URL/_API_KEY/_MODEL`) | **No.** `prompt_truncate` was never executed. No model client of any kind exists in the tree. |
-| `repo_evidence` | E1/E2 preserved verbatim as their own repository | **Yes** — `E1-E2-conceptual-diversity-mapper/`. |
+| `repo_evidence` | E1/E2 engine bundled with Release Gate | **Yes** — `release-gate/src/conceptual_diversity_mapper/`. |
 | `repo_demo_1` | `repo_demo_0` with the mapper integrated into the gate's evidence planning | **No.** `prompt_EBA` was never executed. Its integration target, an `EvidencePlanner` class, exists nowhere in the tree. |
 
 ## 3. The five prompts
@@ -113,14 +113,9 @@ component.** Eight of twelve components are islands.
 
 ## 6. E1 / E2 — the Evidence Diversity Mapper
 
-`E1-E2-conceptual-diversity-mapper/` — a ~4,000-line reference implementation plus a
-long README, preserved verbatim per `prompt_E`. Its job: given a set of artifacts and
-a concept schema, say which conceptual regions are covered, sparse, or missing.
+`release-gate/src/conceptual_diversity_mapper/` contains the domain-neutral engine originally delivered under E1/E2. Its job is to map artifacts onto a concept schema and describe covered, sparse, or missing regions. It is now bundled in the Release Gate distribution and used by release assurance through `release_gate.assurance.adapter`.
 
-It was never integrated into anything (that was `prompt_EBA`, never run). Its first
-real use, per K, is simpler and cheaper than the planned integration: **audit the
-benchmark corpus** — "these repos are all OOP libraries, none is service-shaped" — to
-tell us what our benchmark cannot see. Park it until we have a corpus worth auditing.
+The original conceptual design is maintained in `release-gate/docs/conceptual-diversity-mapper.md`; the executable reference example lives in `release-gate/examples/E1_evidence_diversity_mapper_reference.py`. The separate E1/E2 folder and mapper distribution have been retired. The engine can also support a benchmark corpus audit; coverage measurement itself remains separate from release decisions.
 
 ## 7. How the artifacts map to K's HLD diagram
 
@@ -202,7 +197,7 @@ none of it directly, and inherits two modules and five ideas.
 ### What remains
 
 1. **Corpus expansion:** Carding X2 (`itsdangerous`) and X3 (`cachetools`) on the bench.
-2. **The mapper as a corpus audit:** Using `E1-E2-conceptual-diversity-mapper/` to analyze what
+2. **The mapper as a corpus audit:** Using `release-gate/src/conceptual_diversity_mapper/` to analyze what
    service-shaped architectures the benchmark currently lacks.
 3. **The backtest (NOTES N-8):** Replaying the gate over ~200 real historical merged changes in a
    target repository, using reverts as ground-truth labels.

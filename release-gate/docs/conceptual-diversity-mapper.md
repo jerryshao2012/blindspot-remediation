@@ -1,3 +1,5 @@
+> This engine is bundled with Release Gate. Install `release-gate`; no separate mapper package is required. Source: `src/conceptual_diversity_mapper/`. Evidence adapters: `src/release_gate/assurance/`. Reference example: `examples/E1_evidence_diversity_mapper_reference.py`.
+
 # Conceptual Diversity Mapper
 
 ## A Domain-Neutral Engine for Conceptual Coverage Mapping, Gap Detection, and Targeted Expansion
@@ -1708,9 +1710,23 @@ This keeps responsibilities clear and prevents conceptual coverage logic from be
 
 ---
 
-# 41. Suggested Package Structure
+# 41. Current Package Structure and Future Options
 
-As the reference implementation grows, the single-file prototype can be separated into modules:
+The current implementation is maintained in one distribution:
+
+```text
+release-gate/
+  src/conceptual_diversity_mapper/__init__.py   # generic engine
+  src/release_gate/assurance/adapter.py         # evidence contracts and adapter
+  src/release_gate/assurance/service.py         # release assurance integration
+  examples/E1_evidence_diversity_mapper_reference.py
+  tests/test_mapper_reference.py
+  docs/conceptual-diversity-mapper.md
+```
+
+Install Release Gate to use both namespaces. From its checkout, run the deterministic example with `uv run python examples/E1_evidence_diversity_mapper_reference.py` and its smoke tests with `uv run pytest tests/test_mapper_reference.py`.
+
+The following is a future modularization proposal, not the shipped layout. As the engine grows, it can be separated into modules without introducing a second distribution:
 
     conceptual_diversity_mapper/
     |

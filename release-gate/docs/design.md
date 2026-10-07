@@ -344,3 +344,7 @@ The repair harness wraps the gate with a bounded, deterministic state machine:
 - **Base-trusted playbooks**: Optional repair playbooks located under `.release-gate/repair/` are read exclusively from the base commit.
 - **Safe apply**: Applies passing candidate patches to the source worktree transactionally only after verifying that the source worktree still matches candidate `C0`.
 - **Chained session evidence**: All attempts and approvals are persisted under `_repairs/<session-id>/` with SHA-256 manifest validation.
+
+## Bundled conceptual diversity engine
+
+Release Gate ships the domain-neutral `conceptual_diversity_mapper` module in the same wheel as `release_gate`. Assurance imports the existing module directly; there is no separate distribution, sibling checkout, or mapper version to install. Evidence-domain contracts remain in `release_gate.assurance.adapter`, and release decisions remain owned by Release Gate policy. The mapper reference example and smoke tests are maintained under `examples/` and `tests/`. See [the mapper contracts](conceptual-diversity-mapper.md).

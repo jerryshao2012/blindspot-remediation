@@ -261,8 +261,6 @@ def validate_evidence(
             f"release-gate-skill-{host}-{version}.tar.gz"
             for host in set(SURFACES.values())
         ),
-        "conceptual_diversity_mapper-1.0.0-py3-none-any.whl",
-        "conceptual_diversity_mapper-1.0.0.tar.gz",
         "SHA256SUMS",
     }
     if set(assets) != expected_assets:

@@ -69,19 +69,17 @@ The following are release-ready commands, not an availability announcement. Run 
 <!-- release-version-sync:start -->
 All fenced `bash` download commands require a POSIX shell. On Windows, run them in Git Bash; do not paste the `curl` lines into PowerShell.
 
-For example, download `SHA256SUMS`, `release_gate-0.7.0-py3-none-any.whl`, and `conceptual_diversity_mapper-1.0.0-py3-none-any.whl` from the immutable `release-gate-v0.7.0` release, verify both wheel entries, and then install them together:
+For example, download `SHA256SUMS`, `release_gate-0.7.0-py3-none-any.whl` from the immutable `release-gate-v0.7.0` release, verify the wheel entry, and then install the wheel:
 
 ```bash
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/SHA256SUMS
 curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/release_gate-0.7.0-py3-none-any.whl
-curl --fail --location --remote-name https://github.com/jerryshao2012/blindspot-remediation/releases/download/release-gate-v0.7.0/conceptual_diversity_mapper-1.0.0-py3-none-any.whl
 grep '  release_gate-0.7.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-grep '  conceptual_diversity_mapper-1.0.0-py3-none-any.whl$' SHA256SUMS | shasum -a 256 --check -
-uv tool install --with ./conceptual_diversity_mapper-1.0.0-py3-none-any.whl ./release_gate-0.7.0-py3-none-any.whl
+uv tool install ./release_gate-0.7.0-py3-none-any.whl
 release-gate --version
 ```
 
-The published SHA-256 checksums cover the Release Gate wheel, mapper wheel, host skill archives, and source distributions. `uv tool install` still resolves ordinary third-party dependency ranges from the configured package index at install time; those dependency bytes are outside the release asset checksum. The development `uv.lock` is not consumed by this tool installation. Operators that require a reproducible complete environment must separately control and record the index and resolved dependency artifacts.
+The published SHA-256 checksums cover the Release Gate wheel, host skill archives, and source distributions. `uv tool install` still resolves ordinary third-party dependency ranges from the configured package index at install time; those dependency bytes are outside the release asset checksum. The development `uv.lock` is not consumed by this tool installation. Operators that require a reproducible complete environment must separately control and record the index and resolved dependency artifacts.
 
 Then install the matching assistant archive with `skills@1.5.23`, always using `--global`, `--copy`, and the explicit host target. This Codex example passes the immutable release asset URL directly, after the separate download and checksum review described in [Adoption](docs/adoption.md):
 
@@ -134,7 +132,7 @@ The skill and CLI versions now differ temporarily. Do not invoke Release Gate wh
 
 ```bash
 uv tool uninstall release-gate
-uv tool install --with ./conceptual_diversity_mapper-1.0.0-py3-none-any.whl ./release_gate-0.7.0-py3-none-any.whl
+uv tool install ./release_gate-0.7.0-py3-none-any.whl
 release-gate --version
 # required output: release-gate 0.7.0
 ```
@@ -283,3 +281,5 @@ changes and release notes before committing. CI enforces the same source with
 
 Source and releases live in the [blindspot-remediation repository](https://github.com/jerryshao2012/blindspot-remediation).
 Use [GitHub issues](https://github.com/jerryshao2012/blindspot-remediation/issues) for non-sensitive inquiries. Report vulnerabilities through [private vulnerability reporting](https://github.com/jerryshao2012/blindspot-remediation/security/advisories/new) per the [security policy](SECURITY.md).
+
+The conceptual diversity engine is bundled in the Release Gate wheel. See [mapper architecture and contracts](docs/conceptual-diversity-mapper.md); the `conceptual_diversity_mapper` import path is preserved.

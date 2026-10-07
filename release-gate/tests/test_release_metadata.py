@@ -189,7 +189,7 @@ def test_install_docs_bound_checksums_to_release_assets_not_dependencies() -> No
         "\n".join((_read("README.md"), _read("docs/adoption.md"))).split()
     )
 
-    assert "checksums cover the Release Gate wheel, mapper wheel" in release_docs
+    assert "checksums cover the Release Gate wheel" in release_docs
     assert "resolves ordinary third-party dependency ranges" in release_docs
     assert "outside the release asset checksum" in release_docs
     assert "development `uv.lock` is not consumed" in release_docs
@@ -233,13 +233,12 @@ def test_install_examples_are_gated_on_publication_and_explain_redownload() -> N
 def test_upgrade_commands_remove_then_install_verified_pinned_artifacts() -> None:
     adoption = _read("docs/adoption.md")
     wheel = f"release_gate-{__version__}-py3-none-any.whl"
-    mapper = "conceptual_diversity_mapper-1.0.0-py3-none-any.whl"
     wheel_url = f"{REPOSITORY}/releases/download/{RELEASE_TAG}/{wheel}"
 
     assert f"curl --fail --location --remote-name {wheel_url}" in adoption
     assert "uv tool uninstall release-gate" in adoption
     assert (
-        f"uv tool install --offline --with .\\dist\\{mapper} .\\dist\\{wheel}"
+        f"uv tool install --offline .\\dist\\{wheel}"
         in adoption
     )
     for host, agent in HOST_AGENTS.items():
@@ -260,7 +259,6 @@ def test_readme_documents_safe_updates_for_every_host() -> None:
     upgrade = readme.split(heading, 1)[1].split("Invoke the skill explicitly", 1)[0]
     normalized = " ".join(upgrade.split())
     wheel = f"release_gate-{__version__}-py3-none-any.whl"
-    mapper = "conceptual_diversity_mapper-1.0.0-py3-none-any.whl"
 
     for phrase in (
         "only after the final GitHub release is published",
@@ -308,7 +306,7 @@ def test_readme_documents_safe_updates_for_every_host() -> None:
     cli_block = (
         "```bash\n"
         "uv tool uninstall release-gate\n"
-        f"uv tool install --with ./{mapper} ./{wheel}\n"
+        f"uv tool install ./{wheel}\n"
         "release-gate --version\n"
         f"# required output: release-gate {__version__}\n"
         "```"
@@ -398,10 +396,9 @@ def test_upgrade_checksum_commands_are_cross_platform_and_require_one_entry() ->
     ):
         assert upgrade.count(guard) == 4
     wheel = f"release_gate-{__version__}-py3-none-any.whl"
-    mapper = "conceptual_diversity_mapper-1.0.0-py3-none-any.whl"
     for host in HOST_AGENTS:
         archive = f"release-gate-skill-{host}-{__version__}.tar.gz"
-        assert f'" {wheel} {mapper} {archive}' in upgrade
+        assert f'" {wheel} {archive}' in upgrade
     assert "PowerShell" in upgrade
     assert "macOS" in upgrade
     for document in (adoption, _read("README.md")):

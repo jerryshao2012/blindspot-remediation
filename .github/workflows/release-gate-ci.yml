@@ -5,7 +5,6 @@ on:
     paths:
       - ".gitignore"
       - "release-gate/**"
-      - "E1-E2-conceptual-diversity-mapper/**"
       - "!release-gate/demo/*.html"
       - "!release-gate/**/*.md"
       - "!release-gate/**/README*"
@@ -15,7 +14,6 @@ on:
     paths:
       - ".gitignore"
       - "release-gate/**"
-      - "E1-E2-conceptual-diversity-mapper/**"
       - "!release-gate/demo/*.html"
       - "!release-gate/**/*.md"
       - "!release-gate/**/README*"
@@ -109,7 +107,7 @@ jobs:
           python-version: "3.12"
           version: "0.12.5"
       - name: Install Release Gate from this checkout
-        run: uv tool install --with ./E1-E2-conceptual-diversity-mapper ./release-gate
+        run: uv tool install ./release-gate
       - name: Verify PASS, FAIL, and NEEDS_HUMAN controls
         run: python release-gate/demo/python-slugify/demo.py verify
 
@@ -139,6 +137,6 @@ jobs:
           python-version: "3.12"
           version: "0.12.5"
       - name: Install Release Gate from this checkout
-        run: uv tool install --with ./E1-E2-conceptual-diversity-mapper ./release-gate
+        run: uv tool install ./release-gate
       - name: Verify oracle and PASS, FAIL, and NEEDS_HUMAN controls
         run: python release-gate/demo/rate-limiter/demo.py verify

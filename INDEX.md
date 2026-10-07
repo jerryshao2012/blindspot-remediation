@@ -46,8 +46,8 @@ Source: [prompts/repo_diagram.txt](prompts/repo_diagram.txt)
 | `B6` | production configuration + reconciliation | [B6-production-configuration/](B6-production-configuration/) |
 | `B7` | cross-component consistency review | [B7-consistency-review/](B7-consistency-review/) |
 | `B8` | master README | [B8-master-readme/README.md](B8-master-readme/README.md) |
-| `E1.txt` | evidence diversity mapper | [E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.py](E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.py) |
-| `E2.txt` | its README | [E1-E2-conceptual-diversity-mapper/README.md](E1-E2-conceptual-diversity-mapper/README.md) |
+| `E1.txt` | evidence diversity mapper | [release-gate/examples/E1_evidence_diversity_mapper_reference.py](release-gate/examples/E1_evidence_diversity_mapper_reference.py) |
+| `E2.txt` | its README | [release-gate/docs/conceptual-diversity-mapper.md](release-gate/docs/conceptual-diversity-mapper.md) |
 | `prompt_AB_.txt` | reconstruct one repository from A + B | [prompts/prompt_AB_.txt](prompts/prompt_AB_.txt) |
 | `prompt_truncate.txt` | cut down to a laptop-runnable demo | [prompts/prompt_truncate.txt](prompts/prompt_truncate.txt) |
 | `prompt_E.txt` | preserve E1/E2 verbatim | [prompts/prompt_E.txt](prompts/prompt_E.txt) |
@@ -125,7 +125,7 @@ break the cross-component contract.
 | `A10-execution-environment/` | `execution_environment` | — |
 | `A11-task-specification-registry/` | `task_specification_registry` | — |
 | `A12-workflow-integration/` | `engineering_workflow_integration` | httpx |
-| `E1-E2-conceptual-diversity-mapper/` | single module, not a package | — |
+| `release-gate/src/conceptual_diversity_mapper/` | `conceptual_diversity_mapper` (bundled with Release Gate) | — |
 | `B1-consolidated-shared-contracts/` | `ai_engineering_contracts` — **collides with A1** | — |
 | `B4-composition-root/` | `l1_automation.bootstrap` | — |
 | `B5-evaluation-campaign/` | `l1_automation.evaluation` | — |
@@ -148,10 +148,10 @@ for d in A2-change-execution-service A3-release-gate-service A4-evidence-storage
 done
 ```
 
-The E1/E2 mapper has no third-party dependency and needs no install. Run it directly:
+The E1/E2 mapper is bundled with Release Gate. Run its reference example after installing Release Gate:
 
 ```bash
-python E1-E2-conceptual-diversity-mapper/E1_evidence_diversity_mapper_reference.py
+python release-gate/examples/E1_evidence_diversity_mapper_reference.py
 ```
 
 **The B-series needs its own virtual environment.** B1 must never be installed beside

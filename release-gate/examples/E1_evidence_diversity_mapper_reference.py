@@ -1,6 +1,6 @@
 """Compatibility entry point for the original conceptual mapper demonstration.
 
-Install conceptual-diversity-mapper and release-gate before running this file.
+Install release-gate before running this file.
 """
 from dataclasses import asdict
 import json
