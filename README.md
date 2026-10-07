@@ -179,7 +179,7 @@ demo/
 
 Directory `docs/`, launched locally via [`serve-presentations.sh`](serve-presentations.sh)
 (macOS/Linux) or [`serve-presentations.ps1`](serve-presentations.ps1) (Windows PowerShell):
-- **Presentation Hub (`docs/presentations.html`):** Interactive presentation
+- **Presentation Hub ([`docs/presentations.html`](https://jerryshao2012.github.io/blindspot-remediation/docs/presentations.html)):** Interactive presentation
   portal hosted on GitHub Pages and localhost.
 - **Deep-Dive Decks:** Includes *Code Assistant Skill & Plugin Development*,
   *X1 — Behind the Scenes* (packaging and divergence walkthrough),
