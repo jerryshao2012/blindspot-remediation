@@ -417,6 +417,6 @@ Always report *counts with denominators*, never one composite score. "1 false re
 - [**`ORIGINS.md`**](ORIGINS.md) — The scaffolding explained: original artifacts, what was kept, and evolution.
 - [**`INDEX.md`**](INDEX.md) — Where every artifact went, test status, and sixteen catalogued defects.
 - [**`NOTES.md`**](NOTES.md) — Architecture decisions and open questions (`N-6` on offline measurement, `N-10` on rate limiter).
-- [**`docs/presentations.html`**](docs/presentations.html) — Interactive presentation hub for deep-dive slide decks.
+- [**`docs/presentations.html`**](https://jerryshao2012.github.io/blindspot-remediation/docs/presentations.html) — Interactive presentation hub for deep-dive slide decks.
 - `demo/gate/gate.sh` — The original bash teaching gate.
 
