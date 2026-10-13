@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, NoReturn, cast
 
 from release_gate import __version__
+from release_gate.cli_init import init_repository
+from release_gate.cli_repair import handle_repair
 from release_gate.config import (
     MAX_CONFIG_BYTES,
     ConfigError,
@@ -21,7 +23,6 @@ from release_gate.config import (
     load_config_bytes,
 )
 from release_gate.engine import GateInputError, run_gate
-from release_gate.cli_repair import handle_repair
 
 _POLICY_NAME = ".release-gate.yaml"
 _EVIDENCE_IGNORE = "/.release-gate/runs/"
@@ -105,7 +106,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if arguments.command == "init":
             source = Path(arguments.from_config) if arguments.from_config else None
-            return _init(Path(arguments.repo), from_config=source)
+            return init_repository(Path(arguments.repo), from_config=source)
         if arguments.command == "validate":
             return _validate(Path(arguments.repo))
         if arguments.command == "assure":
@@ -217,61 +218,7 @@ def _repository(path: Path) -> Path:
 
 
 def _init(path: Path, *, from_config: Path | None = None) -> int:
-    policy_bytes = (
-        _read_approved_config(from_config)
-        if from_config is not None
-        else _INITIAL_POLICY.encode("utf-8")
-    )
-    load_config_bytes(
-        policy_bytes,
-        source=str(from_config) if from_config is not None else "<generic draft>",
-    )
-    repository = _repository(path)
-    policy = repository / _POLICY_NAME
-    ignore = repository / ".gitignore"
-    _require_absent_policy(policy)
-    ignore_snapshot = _snapshot_ignore(ignore)
-
-    policy_stage: _PolicyStage | None = None
-    locked_ignore: _LockedIgnore | None = None
-    try:
-        policy_stage = _stage_policy(repository, policy_bytes)
-        _transaction_hook("before-policy-create", policy)
-        _require_absent_policy(policy)
-        _transaction_hook("before-ignore-write", ignore)
-        _require_absent_policy(policy)
-        locked_ignore = _open_locked_ignore(ignore, ignore_snapshot)
-        _append_locked_ignore(ignore, locked_ignore)
-        _publish_policy(
-            policy_stage,
-            policy,
-            policy_bytes,
-            ignore_path=ignore,
-            locked_ignore=locked_ignore,
-        )
-    except Exception as error:
-        if locked_ignore is not None:
-            _rollback_locked_ignore(ignore, locked_ignore)
-        if isinstance(error, ConfigError):
-            raise
-        if isinstance(error, OSError):
-            message = error.strerror or str(error)
-            raise ConfigError(
-                f"{repository}: initialization failed: {message}"
-            ) from error
-        raise
-    finally:
-        if locked_ignore is not None:
-            _close_locked_ignore(locked_ignore)
-        if policy_stage is not None:
-            _discard_policy_stage(policy_stage)
-    # Publication is the commit point. Diagnostics after it are best effort so a
-    # closed stdout cannot turn a committed initialization into an error result.
-    try:
-        print(f"INITIALIZED: {policy}")
-    except (OSError, UnicodeError):
-        pass
-    return 0
+    return init_repository(path, from_config=from_config)
 
 
 def _read_approved_config(path: Path) -> bytes:
