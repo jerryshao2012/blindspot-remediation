@@ -31,7 +31,7 @@ def try_lock(descriptor: int, windows_lock: Callable[[int, bool], None]) -> bool
             os.SEEK_SET,
         )
         return True
-    except OSError:
+    except (OSError, ValueError):
         return False
 
 
