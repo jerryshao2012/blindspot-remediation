@@ -217,10 +217,6 @@ def _repository(path: Path) -> Path:
     return resolved
 
 
-def _init(path: Path, *, from_config: Path | None = None) -> int:
-    return init_repository(path, from_config=from_config)
-
-
 def _read_approved_config(path: Path) -> bytes:
     try:
         inspected = os.lstat(path)
