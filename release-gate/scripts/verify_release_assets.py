@@ -125,7 +125,7 @@ def _verify_wheel(path: Path, version: str) -> None:
         entrypoints = [
             name for name in names if name.endswith(".dist-info/entry_points.txt")
         ]
-        if "conceptual_diversity_mapper/__init__.py" not in names:
+        if "release_gate/conceptual_diversity_mapper/__init__.py" not in names:
             raise ValueError("wheel is missing the bundled conceptual diversity mapper")
         if len(metadata) != 1 or len(entrypoints) != 1:
             raise ValueError("wheel metadata or entry points are missing")

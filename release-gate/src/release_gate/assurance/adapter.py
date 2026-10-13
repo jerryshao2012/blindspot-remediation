@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from conceptual_diversity_mapper import (
+from release_gate.conceptual_diversity_mapper import (
     ArtifactDescriptor,
     ArtifactLineage,
     ConceptMapping,

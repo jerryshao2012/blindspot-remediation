@@ -89,11 +89,11 @@ def test_package_does_not_read_or_bundle_legacy_demo() -> None:
 
 
 def test_mapper_is_bundled_without_a_separate_dependency() -> None:
-    import conceptual_diversity_mapper
+    import release_gate.conceptual_diversity_mapper
 
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert (
-        "src/conceptual_diversity_mapper"
+        "src/release_gate"
         in metadata["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]
     )
     assert all(
@@ -101,6 +101,6 @@ def test_mapper_is_bundled_without_a_separate_dependency() -> None:
         for item in metadata["project"]["dependencies"]
     )
     assert (
-        Path(conceptual_diversity_mapper.__file__).resolve()
-        == ROOT / "src/conceptual_diversity_mapper/__init__.py"
+        Path(release_gate.conceptual_diversity_mapper.__file__).resolve()
+        == ROOT / "src/release_gate/conceptual_diversity_mapper/__init__.py"
     )

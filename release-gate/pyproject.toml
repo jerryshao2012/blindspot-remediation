@@ -48,7 +48,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/release_gate", "src/conceptual_diversity_mapper"]
+packages = ["src/release_gate"]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
@@ -91,4 +91,4 @@ select = ["E", "F", "I", "B", "UP", "RUF"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 # Preserve the public str/Enum representation of the relocated mapper.
-"src/conceptual_diversity_mapper/**" = ["UP042"]
+"src/release_gate/conceptual_diversity_mapper/**" = ["UP042"]

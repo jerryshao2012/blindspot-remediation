@@ -4,7 +4,7 @@ Install release-gate before running this file.
 """
 from dataclasses import asdict
 import json
-from conceptual_diversity_mapper import *  # noqa: F403
+from release_gate.conceptual_diversity_mapper import *  # noqa: F403
 from release_gate.assurance.adapter import *  # noqa: F403
 
 def build_example_evidence_schema() -> ConceptSchema:

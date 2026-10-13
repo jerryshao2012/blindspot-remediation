@@ -12,7 +12,7 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from conceptual_diversity_mapper import (
+from release_gate.conceptual_diversity_mapper import (
     ConceptDimension,
     ConceptSchema,
     DerivationMethod,
