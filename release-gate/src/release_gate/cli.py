@@ -17,10 +17,8 @@ from release_gate import __version__
 from release_gate.cli_init import init_repository
 from release_gate.cli_repair import handle_repair
 from release_gate.config import (
-    MAX_CONFIG_BYTES,
     ConfigError,
     load_config,
-    load_config_bytes,
 )
 from release_gate.engine import GateInputError, run_gate
 
@@ -215,80 +213,6 @@ def _repository(path: Path) -> Path:
     if not resolved.is_dir():
         raise ConfigError(f"{resolved}: repository path is not a directory")
     return resolved
-
-
-def _read_approved_config(path: Path) -> bytes:
-    try:
-        inspected = os.lstat(path)
-    except OSError as error:
-        raise ConfigError(
-            f"{path}: unable to read configuration: {error.strerror}"
-        ) from error
-    if not _is_regular_non_reparse(inspected):
-        raise ConfigError(
-            f"{path}: configuration source must be an ordinary non-reparse file"
-        )
-    if inspected.st_size > MAX_CONFIG_BYTES:
-        raise ConfigError(f"{path}: configuration exceeds the 1 MiB UTF-8 limit")
-
-    flags = (
-        os.O_RDONLY
-        | getattr(os, "O_BINARY", 0)
-        | getattr(os, "O_NONBLOCK", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-    )
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as error:
-        raise ConfigError(
-            f"{path}: unable to read configuration: {error.strerror}"
-        ) from error
-    try:
-        opened = os.fstat(descriptor)
-        if not _is_regular_non_reparse(opened) or _identity(opened) != _identity(
-            inspected
-        ):
-            raise ConfigError(f"{path}: configuration source changed before reading")
-        data = _read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
-        if len(data) > MAX_CONFIG_BYTES:
-            raise ConfigError(f"{path}: configuration exceeds the 1 MiB UTF-8 limit")
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        confirmation = _read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
-        final = os.fstat(descriptor)
-        if (
-            confirmation != data
-            or _file_change_signature(final) != _file_change_signature(opened)
-            or final.st_size != len(data)
-        ):
-            raise ConfigError(f"{path}: configuration changed while being read")
-        try:
-            final_path = os.lstat(path)
-        except OSError as error:
-            raise ConfigError(f"{path}: configuration source changed") from error
-        if not _is_regular_non_reparse(final_path) or _identity(
-            final_path
-        ) != _identity(opened):
-            raise ConfigError(f"{path}: configuration source changed")
-    finally:
-        os.close(descriptor)
-    load_config_bytes(data, source=str(path))
-    return data
-
-
-def _read_bounded_descriptor(descriptor: int, limit: int) -> bytes:
-    chunks: list[bytes] = []
-    remaining = limit + 1
-    while remaining:
-        chunk = os.read(descriptor, min(remaining, 64 * 1024))
-        if not chunk:
-            break
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
-
-
-def _file_change_signature(status: os.stat_result) -> tuple[int, int, int]:
-    return (status.st_size, status.st_mtime_ns, status.st_ctime_ns)
 
 
 def _require_absent_policy(path: Path) -> None:

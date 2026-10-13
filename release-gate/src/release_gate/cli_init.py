@@ -13,7 +13,7 @@ def init_repository(path: Path, *, from_config: Path | None = None) -> int:
     from release_gate import cli
 
     policy_bytes = (
-        cli._read_approved_config(from_config)
+        read_approved_config(from_config)
         if from_config is not None
         else cli._INITIAL_POLICY.encode("utf-8")
     )
@@ -102,15 +102,15 @@ def read_approved_config(path: Path) -> bytes:
             opened
         ) != cli._identity(inspected):
             raise ConfigError(f"{path}: configuration source changed before reading")
-        data = cli._read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
+        data = _read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
         if len(data) > MAX_CONFIG_BYTES:
             raise ConfigError(f"{path}: configuration exceeds the 1 MiB UTF-8 limit")
         os.lseek(descriptor, 0, os.SEEK_SET)
-        confirmation = cli._read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
+        confirmation = _read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
         final = os.fstat(descriptor)
         if (
             confirmation != data
-            or cli._file_change_signature(final) != cli._file_change_signature(opened)
+            or _file_change_signature(final) != _file_change_signature(opened)
             or final.st_size != len(data)
         ):
             raise ConfigError(f"{path}: configuration changed while being read")
@@ -126,3 +126,19 @@ def read_approved_config(path: Path) -> bytes:
         os.close(descriptor)
     load_config_bytes(data, source=str(path))
     return data
+
+
+def _read_bounded_descriptor(descriptor: int, limit: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = limit + 1
+    while remaining:
+        chunk = os.read(descriptor, min(remaining, 64 * 1024))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _file_change_signature(status: os.stat_result) -> tuple[int, int, int]:
+    return (status.st_size, status.st_mtime_ns, status.st_ctime_ns)
