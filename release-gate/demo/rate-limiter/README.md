@@ -105,6 +105,12 @@ The final line must be:
 verify: PASS, FAIL, and NEEDS_HUMAN controls matched expectations
 ```
 
+The direct command form is:
+
+```zsh
+uv run --python 3.12 --no-project python demo.py verify
+```
+
 Do not treat an earlier green line as completion. `verify` fails if setup, the
 oracle, any gate result, or the final reset fails.
 
@@ -134,6 +140,12 @@ The final line must be:
 
 ```text
 verify-repair: C0 FAIL -> C1 FAIL -> C2 PASS -> applied (total 4m12s)
+```
+
+The direct command form is:
+
+```zsh
+uv run --python 3.12 --no-project python demo.py verify-repair
 ```
 
 The repair command also prints explicit stage markers, each timed from the end
@@ -167,7 +179,8 @@ remain outside the source repository and outside gate evidence. The repair
 workflow leaves the host `TEMP`/`TMP` settings unchanged so `uv` can clean up
 its own cache safely on Windows. Generated repair state is removed only after
 successful apply and all assertions pass; if the command fails, it remains for
-diagnosis. Run `demo.py reset` before retrying.
+diagnosis. Run `demo.py reset` before retrying. Temporary repair workspaces use
+`workbench/repair-temp`.
 
 The automated repair check also proves source isolation: while C1 and C2 are
 evaluated, the source worktree remains byte-for-byte at C0. After final apply,

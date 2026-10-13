@@ -41,7 +41,7 @@ MARKED_RELEASE_FILES = {
             re.compile(rf"(?<=same immutable ){SEMVER}(?= release)"),
             re.compile(rf"(?m)^{SEMVER}(?= copied skill)"),
         ),
-        71,
+        74,
     ),
     Path("release-gate/docs/cli.md"): (
         (*MARKED_PATTERNS, re.compile(rf"(?<=The ){SEMVER}(?= assistant archives)")),

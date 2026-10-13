@@ -1038,7 +1038,7 @@
           if (this.isOpen) this.render(this.presentation.currentSlide);
         }
 
-        async openPopup() {
+        openPopup() {
           if (this.popupWindow && !this.popupWindow.closed) {
             this.popupWindow.focus();
             this.render(this.presentation.currentSlide);
@@ -1046,9 +1046,12 @@
           }
 
           if (this.screenAccessState === "needs-permission") {
-            try {
-              await this.requestScreenAccess();
-            } catch (e) {}
+            return this.requestScreenAccess()
+              .catch(() => null)
+              .then(() => {
+                if (!window.__activation) return null;
+                return this.openPopup();
+              });
           }
 
           if (this.screenDetails && !this.targetWindowBounds) {
@@ -1085,12 +1088,12 @@
           };
 
           moveWindow();
-          setTimeout(moveWindow, 80);
+          setTimeout(moveWindow, 100);
           setTimeout(moveWindow, 250);
           setTimeout(moveWindow, 600);
           this.clearPlacementCheck();
           if (readyPlacement) {
-            this.placementCheckTimer = setTimeout(() => this.verifyPopupPlacement(popup, bounds), 400);
+            this.placementCheckTimer = setTimeout(() => this.verifyPopupPlacement(popup, bounds), 350);
           }
 
           this.initPopupDocument();

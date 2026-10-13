@@ -180,6 +180,7 @@
   .drawer-header { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--terminal-soft); padding-bottom:.7rem; }
   .drawer-header h4 { font-family:var(--font-mono); font-size:var(--small-size); color:var(--blue-bright); }
   .drawer-actions { display:flex; align-items:center; gap:.5rem; }
+    .notes-status { min-width: 0; color: var(--muted); font-size: .72rem; }
   .drawer .popout-btn { background:var(--terminal-soft); border:1px solid rgba(115,195,235,.3); color:var(--sky);
     border-radius:5px; padding:.2rem .55rem; cursor:pointer; font-family:var(--font-mono); font-size:var(--micro-size); transition:all .2s; }
   .drawer .popout-btn:hover { background:var(--blue); color:#fff; }
@@ -537,7 +538,8 @@
   <div class="drawer-header">
     <h4 id="drawerTitle">Notes</h4>
     <div class="drawer-actions">
-      <button class="popout-btn" id="drawerPopoutBtn" type="button" title="Pop out notes into a separate window on secondary screen">↗ Pop out</button>
+      <span class="notes-status" id="notesStatus" role="status" aria-live="polite"></span>
+      <button class="popout-btn" id="notesPopoutBtn" type="button" title="Pop out notes into a separate window on secondary screen">↗ Pop out</button>
       <button class="close" id="drawerClose" type="button" title="Close drawer (Esc)">✕</button>
     </div>
   </div>
@@ -614,8 +616,20 @@
   /* ===========================================
      SPEAKER NOTES MANAGER + SECONDARY DISPLAY
      =========================================== */
-  class SpeakerNotesManager {
-    constructor() {
+  class PresenterNotes {
+    constructor(presentation) {
+      this.presentation = presentation || { slides, currentSlide: current };
+      this.drawer = document.getElementById("notesDrawer") || drawer;
+      this.title = document.getElementById("notesTitle") || drawerTitle;
+      this.content = document.getElementById("notesContent") || drawerBody;
+      this.target = document.getElementById("slideTarget");
+      this.timerLabel = document.getElementById("sessionTimer") || drawerTimer;
+      this.timerButton = document.getElementById("timerToggle") || drawerTimerToggle;
+      this.timerResetButton = document.getElementById("timerReset") || document.getElementById("drawerTimerReset");
+      this.popoutButton = document.getElementById("notesPopoutBtn") || drawerPopoutBtn;
+      this.closeButton = document.getElementById("notesClose") || drawerClose;
+      this.notesStatus = document.getElementById("notesStatus");
+      this.isOpen = false;
       this.popupWindow = null;
       this.running = false;
       this.startedAt = null;
@@ -635,10 +649,18 @@
       this.handleScreenTopologyChange = () => this.recomputeTargetScreen();
       this.handleScreenPermissionChange = () => this.onScreenPermissionChange();
 
-      drawerTimerToggle?.addEventListener("click", () => this.toggleTimer());
-      drawerTimerReset?.addEventListener("click", () => this.resetTimer());
-      drawerPopoutBtn?.addEventListener("click", () => this.handlePopupActivation());
-      drawerClose?.addEventListener("click", () => this.toggleDrawer(false));
+      this.timerButton?.addEventListener("click", () => this.toggleTimer());
+      this.timerResetButton?.addEventListener("click", () => this.resetTimer());
+      this.popoutButton?.addEventListener("click", () => this.handlePopupActivation());
+      this.closeButton?.addEventListener("click", () => this.toggleDrawer(false));
+
+      document.addEventListener("keydown", event => {
+        if ((event.key === "n" || event.key === "N") && !event.target?.isContentEditable) {
+          event.preventDefault();
+          this.handlePopupActivation();
+        }
+        if (event.key === "Escape" && this.isOpen) this.toggleDrawer(false);
+      });
 
       window.addEventListener("beforeunload", () => {
         this.screenAccessGeneration += 1;
@@ -655,13 +677,37 @@
       void this.initializeScreenAccess();
     }
 
+    setScreenAccessState(state, message = "") {
+      this.screenAccessState = state;
+      this.renderScreenAccessState();
+      this.setScreenStatus(message);
+    }
+
+    setScreenStatus(message) {
+      if (!this.notesStatus) return;
+      this.notesStatus.textContent = message || "";
+      this.notesStatus.classList.toggle("visible", Boolean(message));
+    }
+
+    renderScreenAccessState() {
+      if (!this.popoutButton) return;
+      const labels = {
+        checking: "Checking displays…",
+        requesting: "Checking displays…",
+        "needs-permission": "↗ Pop out",
+        ready: "Open speaker view",
+        fallback: "Open speaker view"
+      };
+      this.popoutButton.textContent = labels[this.screenAccessState] || "Open speaker view";
+    }
+
     hasScreenDetailsApi() {
       return typeof window.getScreenDetails === "function";
     }
 
     async initializeScreenAccess() {
       if (!this.hasScreenDetailsApi()) {
-        this.screenAccessState = "fallback";
+        this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
         return;
       }
 
@@ -669,12 +715,12 @@
       try {
         permission = await navigator.permissions?.query?.({ name: "window-management" });
       } catch (error) {
-        this.screenAccessState = "needs-permission";
+        this.setScreenAccessState("needs-permission");
         return;
       }
 
       if (!permission) {
-        this.screenAccessState = "needs-permission";
+        this.setScreenAccessState("needs-permission");
         return;
       }
 
@@ -682,25 +728,25 @@
       permission.addEventListener?.("change", this.handleScreenPermissionChange);
 
       if (permission.state === "denied") {
-        this.screenAccessState = "fallback";
+        this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
       } else if (permission.state === "granted") {
         this.startWarmScreenDetails();
       } else {
-        this.screenAccessState = "needs-permission";
+        this.setScreenAccessState("needs-permission");
       }
     }
 
     startWarmScreenDetails() {
       if (this.screenAccessPromise) {
-        this.screenAccessState = "checking";
+        this.setScreenAccessState("checking");
         return this.screenAccessPromise;
       }
       this.clearScreenDetails();
       const generation = this.screenAccessGeneration;
-      this.screenAccessState = "checking";
+      this.setScreenAccessState("checking");
       return this.loadScreenDetails(generation).catch(() => {
         if (generation === this.screenAccessGeneration) {
-          this.screenAccessState = "fallback";
+          this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
         }
       });
     }
@@ -723,20 +769,20 @@
 
     async requestScreenAccess() {
       if (!this.hasScreenDetailsApi()) {
-        this.screenAccessState = "fallback";
+        this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
         return null;
       }
       if (this.screenAccessOperation) return this.screenAccessOperation.promise;
 
       this.clearScreenDetails();
       const generation = this.screenAccessGeneration;
-      this.screenAccessState = "requesting";
+      this.setScreenAccessState("requesting");
       const operation = {};
       operation.generation = generation;
       operation.promise = this.loadScreenDetails(generation)
         .catch(() => {
           if (generation === this.screenAccessGeneration) {
-            this.screenAccessState = "fallback";
+            this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
           }
           return null;
         })
@@ -791,10 +837,10 @@
       this.targetScreen = this.selectTargetScreen(this.screenDetails);
       if (this.targetScreen) {
         this.targetWindowBounds = this.boundsForScreen(this.targetScreen);
-        this.screenAccessState = "ready";
+        this.setScreenAccessState("ready", "Display access ready. Activate again to open speaker view.");
       } else {
         this.targetWindowBounds = null;
-        this.screenAccessState = "fallback";
+        this.setScreenAccessState("fallback", "A second display is unavailable; speaker view will open here.");
       }
     }
 
@@ -831,17 +877,32 @@
       }
     }
 
+    verifyPopupPlacement(popup, bounds) {
+      if (!popup || popup.closed || this.popupWindow !== popup || !bounds) return;
+      const hasScreenXY = Number.isFinite(popup.screenX) && Number.isFinite(popup.screenY);
+      const hasScreenLeftTop = Number.isFinite(popup.screenLeft) && Number.isFinite(popup.screenTop);
+      const x = hasScreenXY ? popup.screenX : (hasScreenLeftTop ? popup.screenLeft : null);
+      const y = hasScreenXY ? popup.screenY : (hasScreenLeftTop ? popup.screenTop : null);
+      if (x === null || y === null) return;
+      const tolerance = 8;
+      const inside = x >= bounds.fullLeft - tolerance &&
+        x < bounds.fullLeft + bounds.fullWidth + tolerance &&
+        y >= bounds.fullTop - tolerance &&
+        y < bounds.fullTop + bounds.fullHeight + tolerance;
+      this.setScreenStatus(inside ? "" : "The browser kept speaker view on this display. Move it to the other display manually.");
+    }
+
     onScreenPermissionChange() {
       const state = this.screenPermission?.state;
       if (state === "prompt") {
         this.clearScreenDetails();
-        this.screenAccessState = "needs-permission";
+        this.setScreenAccessState("needs-permission");
       } else if (state === "denied") {
         this.clearScreenDetails();
-        this.screenAccessState = "fallback";
+        this.setScreenAccessState("fallback", "Display access unavailable; speaker view will open here.");
       } else if (state === "granted") {
         if (this.screenAccessOperation) {
-          this.screenAccessState = "requesting";
+          this.setScreenAccessState("requesting");
         } else {
           this.startWarmScreenDetails();
         }
@@ -851,7 +912,7 @@
     async handlePopupActivation() {
       if (this.popupWindow && !this.popupWindow.closed) {
         this.popupWindow.focus();
-        this.render(current);
+        this.render(this.presentation.currentSlide);
         return this.popupWindow;
       }
 
@@ -864,10 +925,11 @@
     }
 
     toggleDrawer(force) {
-      const open = typeof force === "boolean" ? force : !drawer.classList.contains("open");
-      drawer.classList.toggle("open", open);
-      drawer.setAttribute("aria-hidden", String(!open));
-      if (open) renderDrawerNotes(current);
+      const open = typeof force === "boolean" ? force : !this.drawer.classList.contains("open");
+      this.isOpen = open;
+      this.drawer.classList.toggle("open", open);
+      this.drawer.setAttribute("aria-hidden", String(!open));
+      if (open) this.render(this.presentation.currentSlide);
     }
 
     milliseconds() {
@@ -887,12 +949,12 @@
         this.startedAt = null;
         clearInterval(this.interval);
         this.interval = null;
-        if (drawerTimerToggle) drawerTimerToggle.textContent = "Resume";
+        if (this.timerButton) this.timerButton.textContent = "Resume";
       } else {
         this.running = true;
         this.startedAt = Date.now();
         this.interval = setInterval(() => this.renderTimer(), 500);
-        if (drawerTimerToggle) drawerTimerToggle.textContent = "Pause";
+        if (this.timerButton) this.timerButton.textContent = "Pause";
       }
       this.renderTimer();
     }
@@ -900,7 +962,7 @@
     renderTimer() {
       const total = Math.floor(this.milliseconds() / 1000);
       const timeStr = `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")} / 30:00`;
-      if (drawerTimer) drawerTimer.textContent = timeStr;
+      if (this.timerLabel) this.timerLabel.textContent = timeStr;
 
       if (this.popupWindow && !this.popupWindow.closed) {
         try {
@@ -927,17 +989,20 @@
       }
     }
 
-    async openPopup() {
+    openPopup() {
       if (this.popupWindow && !this.popupWindow.closed) {
         this.popupWindow.focus();
-        this.render(current);
+        this.render(this.presentation.currentSlide);
         return this.popupWindow;
       }
 
       if (this.screenAccessState === "needs-permission") {
-        try {
-          await this.requestScreenAccess();
-        } catch (e) {}
+        return this.requestScreenAccess()
+          .catch(() => null)
+          .then(() => {
+            if (!window.__activation) return null;
+            return this.openPopup();
+          });
       }
 
       if (this.screenDetails && !this.targetWindowBounds) {
@@ -951,7 +1016,7 @@
       const features = `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
 
       try {
-        this.popupWindow = window.open("", "ExecutiveOverviewSpeakerNotes", features);
+        this.popupWindow = window.open("", "ReleaseGateSpeakerNotes", features);
       } catch (e) {
         console.warn("Popup window opening failed", e);
       }
@@ -974,9 +1039,13 @@
       };
 
       moveWindow();
-      setTimeout(moveWindow, 80);
+      setTimeout(moveWindow, 100);
       setTimeout(moveWindow, 250);
       setTimeout(moveWindow, 600);
+      this.clearPlacementCheck();
+      if (readyPlacement) {
+        this.placementCheckTimer = setTimeout(() => this.verifyPopupPlacement(popup, bounds), 350);
+      }
 
       this.initPopupDocument();
       this.popupWindow.focus();
@@ -1314,7 +1383,7 @@
   <header class="speaker-header">
     <div class="header-left">
       <span class="deck-badge">Speaker View</span>
-      <span class="slide-badge" id="popupSlideBadge">SLIDE 1 OF ${slides.length}</span>
+      <span class="slide-badge" id="popupSlideBadge">SLIDE 1 OF ${this.presentation.slides.length}</span>
     </div>
     <div class="header-center">
       <div class="clock-pill">Clock: <strong id="popupWallClock">--:--:--</strong></div>
@@ -1380,8 +1449,8 @@
       const win = this.popupWindow;
       win.addEventListener("beforeunload", () => { this.popupWindow = null; });
 
-      doc.getElementById("popupBtnNext")?.addEventListener("click", () => goTo(current + 1));
-      doc.getElementById("popupBtnPrev")?.addEventListener("click", () => goTo(current - 1));
+      doc.getElementById("popupBtnNext")?.addEventListener("click", () => this.presentation.goTo(this.presentation.currentSlide + 1));
+      doc.getElementById("popupBtnPrev")?.addEventListener("click", () => this.presentation.goTo(this.presentation.currentSlide - 1));
       doc.getElementById("popupTimerToggle")?.addEventListener("click", () => this.toggleTimer());
       doc.getElementById("popupTimerReset")?.addEventListener("click", () => this.resetTimer());
       doc.getElementById("popupFontPlus")?.addEventListener("click", () => this.changePopupFontSize(1));
@@ -1410,13 +1479,13 @@
       const listEl = doc.getElementById("popupSlideList");
       if (listEl) {
         listEl.innerHTML = "";
-        slides.forEach((slide, idx) => {
+        this.presentation.slides.forEach((slide, idx) => {
           const item = doc.createElement("button");
           item.type = "button";
           item.className = "slide-nav-item";
           item.dataset.slideIdx = String(idx);
           item.innerHTML = `<span class="slide-nav-num">${String(idx + 1).padStart(2, "0")}</span> <span>${slide.dataset.title || slide.querySelector("h1, h2")?.textContent || `Slide ${idx + 1}`}</span>`;
-          item.addEventListener("click", () => goTo(idx));
+          item.addEventListener("click", () => this.presentation.goTo(idx));
           listEl.appendChild(item);
         });
       }
@@ -1426,22 +1495,22 @@
         const key = event.key;
         if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(key)) {
           event.preventDefault();
-          goTo(current + 1);
+          this.presentation.goTo(this.presentation.currentSlide + 1);
         } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(key)) {
           event.preventDefault();
-          goTo(current - 1);
+          this.presentation.goTo(this.presentation.currentSlide - 1);
         } else if (key === "Home") {
           event.preventDefault();
-          goTo(0);
+          this.presentation.goTo(0);
         } else if (key === "End") {
           event.preventDefault();
-          goTo(slides.length - 1);
+          this.presentation.goTo(this.presentation.slides.length - 1);
         } else if (["1", "2", "3", "4", "5", "6", "7", "8", "9"].includes(key)) {
           event.preventDefault();
-          goTo(Number(key) - 1);
+          this.presentation.goTo(Number(key) - 1);
         } else if (key === "0") {
           event.preventDefault();
-          goTo(9);
+          this.presentation.goTo(9);
         } else if (key.toLowerCase() === "t") {
           event.preventDefault();
           this.toggleTimer();
@@ -1457,19 +1526,19 @@
         }
       });
 
-      this.render(current);
+      this.render(this.presentation.currentSlide);
       this.renderTimer();
     }
 
     render(index) {
-      const slide = slides[index];
+      const slide = this.presentation.slides[index];
       if (!slide) return;
       const notes = slide.querySelector(".speaker-notes");
 
       if (this.popupWindow && !this.popupWindow.closed) {
         try {
           const doc = this.popupWindow.document;
-          const total = slides.length;
+          const total = this.presentation.slides.length;
           const badge = doc.getElementById("popupSlideBadge");
           if (badge) badge.textContent = `SLIDE ${index + 1} OF ${total}`;
 
@@ -1497,7 +1566,7 @@
           const nextPrevEl = doc.getElementById("popupNextPreview");
 
           if (nextIndex < total) {
-            const nextSlide = slides[nextIndex];
+            const nextSlide = this.presentation.slides[nextIndex];
             const nextNotes = nextSlide.querySelector(".speaker-notes");
             if (nextTitleEl) nextTitleEl.textContent = `${nextIndex + 1}. ${nextSlide.dataset.title || nextSlide.querySelector("h1, h2")?.textContent || `Slide ${nextIndex + 1}`}`;
             if (nextDurEl) nextDurEl.textContent = nextNotes?.dataset.duration || "";
@@ -1524,7 +1593,9 @@
     }
   }
 
-  const speakerNotes = new SpeakerNotesManager();
+  class PresentationEditor {}
+
+  const speakerNotes = new PresenterNotes({ slides, currentSlide: current, goTo });
 
   document.addEventListener("keydown", (e) => {
     if (e.target.isContentEditable || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
