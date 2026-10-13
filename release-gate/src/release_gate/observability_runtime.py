@@ -21,6 +21,11 @@ from release_gate.observability import (
     render_html,
     render_json,
 )
+from release_gate.observability_locks import (
+    try_lock as _backend_try_lock,
+    unlock as _backend_unlock,
+    uses_windows_backend as _backend_uses_windows,
+)
 
 _NAMESPACE = "_observability"
 _LOCK_NAME = ".refresh.lock"
@@ -804,42 +809,11 @@ def _same_open_file_at(descriptor: int, directory_fd: int, name: str) -> bool:
 
 
 def _try_lock(descriptor: int) -> bool:
-    if os.name == "nt":
-        return _try_lock_windows(descriptor)
-    import fcntl
-
-    try:
-        fcntl.lockf(
-            descriptor,
-            fcntl.LOCK_EX | fcntl.LOCK_NB,
-            1,
-            _LOCK_OFFSET,
-            os.SEEK_SET,
-        )
-        return True
-    except OSError:
-        return False
+    return _backend_try_lock(descriptor, _windows_file_lock)
 
 
 def _unlock(descriptor: int) -> None:
-    if os.name == "nt":
-        _unlock_windows(descriptor)
-    else:
-        import fcntl
-
-        fcntl.lockf(descriptor, fcntl.LOCK_UN, 1, _LOCK_OFFSET, os.SEEK_SET)
-
-
-def _try_lock_windows(descriptor: int) -> bool:  # pragma: no cover - Windows CI
-    try:
-        _windows_file_lock(descriptor, lock=True)
-    except OSError:
-        return False
-    return True
-
-
-def _unlock_windows(descriptor: int) -> None:  # pragma: no cover - Windows CI
-    _windows_file_lock(descriptor, lock=False)
+    _backend_unlock(descriptor, _windows_file_lock)
 
 
 def _windows_file_lock(  # pragma: no cover - Windows CI
@@ -1071,7 +1045,7 @@ def _release_local(identity: tuple[int, int] | None) -> None:
 
 
 def _uses_windows_backend() -> bool:
-    return os.name == "nt"
+    return _backend_uses_windows()
 
 
 def _acquire_windows(
