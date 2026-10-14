@@ -1,14 +1,12 @@
 """
-evidence_diversity_mapper_reference.py
-======================================
+release_gate.conceptual_diversity_mapper
+========================================
 
-REFERENCE ARCHITECTURE
-----------------------
+DOMAIN-NEUTRAL CONCEPTUAL DIVERSITY ENGINE
+------------------------------------------
 
-This file implements a domain-neutral Conceptual Diversity Engine underneath
-an evidence-specific client-facing adapter.
-
-The key architectural decision is:
+This package is the generic engine only. It knows nothing about evidence,
+releases, or any other artifact domain.
 
     CLIENT / L1 ENGINEERING AUTOMATION
                     |
@@ -18,11 +16,11 @@ The key architectural decision is:
                     | EvidenceCoverageGap
                     | EvidenceExpansionRequest
                     v
-        EvidenceDiversityMapperAdapter
+        EvidenceDiversityMapperAdapter          <- release_gate.assurance.adapter
                     |
                     | translates domain contracts
                     v
-         GenericDiversityEngine
+         GenericDiversityEngine                 <- THIS PACKAGE
                     |
         +-----------+------------+
         |           |            |
@@ -30,7 +28,8 @@ The key architectural decision is:
         |           |            |
         +-----------+------------+
 
-The internal generic engine is intentionally invisible to the L1 client.
+The engine is intentionally invisible to the L1 client, which interacts only
+with the evidence adapter.
 
 WHY THIS BOUNDARY
 -----------------
@@ -43,10 +42,11 @@ Therefore:
 
 1. ConceptSchema, conceptual mapping, coverage analysis, gap identification,
    uncertainty, lineage, duplication, budgets, and expansion assessment are
-   implemented generically.
+   implemented here, generically.
 
 2. EvidenceArtifact, EvidenceBundle, and the translation between evidence
-   concepts and generic artifact contracts live in an evidence adapter.
+   concepts and generic artifact contracts live in the evidence adapter at
+   release_gate.assurance.adapter. They are deliberately NOT in this package.
 
 3. ReleaseGateService, PASS/FAIL/HUMAN_REVIEW_REQUIRED, test execution,
    mutation execution, and code generation are deliberately NOT part of this
@@ -61,7 +61,7 @@ Therefore:
 IMPLEMENTATION STATUS
 ---------------------
 
-This file provides a runnable deterministic reference implementation of:
+This package provides a runnable deterministic reference implementation of:
 
 - versioned concept schemas;
 - categorical, ordinal, continuous, boolean, and multi-label dimensions;
@@ -80,10 +80,10 @@ This file provides a runnable deterministic reference implementation of:
 - budget-aware ExpansionRequests;
 - expansion candidate re-mapping;
 - expansion assessment;
-- observability counters;
-- evidence-domain adapter;
-- deterministic test doubles;
-- an end-to-end example.
+- observability counters.
+
+Deterministic test doubles, the evidence adapter, and an end-to-end example
+live outside this package.
 
 Integrations whose runtime parameters cannot be known here explicitly raise
 NotImplementedError. There are no silent placeholders or TODO implementations.
@@ -2461,13 +2461,3 @@ class GenericDiversityEngine(
             )
 
         return actual == desired
-
-
-# =============================================================================
-# EVIDENCE-DOMAIN CONTRACTS
-# =============================================================================
-#
-# These are what the internal L1 client should interact with.
-#
-# The client does NOT need to know ArtifactDescriptor or GenericDiversityEngine
-# exist underneath.
