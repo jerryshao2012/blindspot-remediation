@@ -23,7 +23,11 @@ from release_gate.observability import (
 )
 from release_gate.observability_locks import (
     try_lock as _backend_try_lock,
+)
+from release_gate.observability_locks import (
     unlock as _backend_unlock,
+)
+from release_gate.observability_locks import (
     uses_windows_backend as _backend_uses_windows,
 )
 
@@ -817,7 +821,7 @@ def _unlock(descriptor: int) -> None:
 
 
 def _windows_file_lock(  # pragma: no cover - Windows CI
-    descriptor: int, *, lock: bool
+    descriptor: int, lock: bool
 ) -> None:
     import ctypes
     from ctypes import wintypes

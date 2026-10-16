@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -121,6 +123,14 @@ def test_run_scripts_never_interpolate_untrusted_workflow_inputs() -> None:
 
 
 def test_every_workflow_shell_script_passes_bash_syntax_check() -> None:
+    bash = shutil.which("bash")
+    if os.name == "nt":
+        git = shutil.which("git")
+        assert git is not None, "Git for Windows is required"
+        # Prefer Git Bash over the WSL launcher on the Windows system PATH.
+        git_root = Path(git).resolve().parent.parent
+        bash = str(git_root / "bin" / "bash.exe")
+    assert bash is not None, "Bash is required for workflow syntax checks"
     for path in (CI, RELEASE):
         workflow = _workflow(path)
         for job_name, job in workflow["jobs"].items():
@@ -129,9 +139,8 @@ def test_every_workflow_shell_script_passes_bash_syntax_check() -> None:
                     continue
                 script = re.sub(r"\$\{\{.*?\}\}", "github-expression", step["run"])
                 result = subprocess.run(
-                    ["bash", "-n"],
-                    input=script,
-                    text=True,
+                    [bash, "-n"],
+                    input=script.encode("utf-8"),
                     capture_output=True,
                     check=False,
                 )

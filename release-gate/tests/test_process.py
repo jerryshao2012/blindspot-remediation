@@ -145,7 +145,7 @@ def test_environment_is_closed_and_engine_home_wins(tmp_path: Path) -> None:
     code = (
         "import json, os; "
         "print(json.dumps({k: os.environ.get(k) for k in "
-        "['HOME','TMPDIR','ALLOWED','LITERAL','SECRET']}))"
+        "['HOME','TMPDIR','TEMP','TMP','USERPROFILE','ALLOWED','LITERAL','SECRET']}))"
     )
     spec = command(
         code,
@@ -169,9 +169,23 @@ def test_environment_is_closed_and_engine_home_wins(tmp_path: Path) -> None:
     assert values["LITERAL"] == "configured"
     assert values["SECRET"] is None
     assert values["HOME"]
-    assert values["TMPDIR"]
+    assert values["TEMP" if os.name == "nt" else "TMPDIR"]
     assert not Path(values["HOME"]).exists()
-    assert result.environment_names == ("ALLOWED", "HOME", "LITERAL", "TMPDIR")
+    if os.name == "nt":
+        assert values["USERPROFILE"] == values["HOME"]
+        assert values["TMP"] == values["TEMP"]
+        assert result.environment_names == (
+            "ALLOWED",
+            "HOME",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "LITERAL",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
+        )
+    else:
+        assert result.environment_names == ("ALLOWED", "HOME", "LITERAL", "TMPDIR")
 
 
 def test_streams_are_drained_hashed_and_retained_to_limit(tmp_path: Path) -> None:

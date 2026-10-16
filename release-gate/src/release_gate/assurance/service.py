@@ -12,6 +12,9 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from pydantic import Field
+
+from release_gate import __version__
 from release_gate.conceptual_diversity_mapper import (
     ConceptDimension,
     ConceptSchema,
@@ -22,9 +25,6 @@ from release_gate.conceptual_diversity_mapper import (
     ResourceBudget,
     RuleBasedArtifactConceptMapper,
 )
-from pydantic import Field
-
-from release_gate import __version__
 from release_gate.config import ConfigError
 from release_gate.engine import GateInputError, run_captured_gate
 from release_gate.evidence import EvidenceError, _validate_document, verify_run

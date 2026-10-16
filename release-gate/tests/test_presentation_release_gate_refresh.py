@@ -4,7 +4,6 @@ import re
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -29,19 +28,26 @@ def test_x1_deck_uses_september_online_release_gate_evidence() -> None:
     assert "No hidden oracle ran; semantic correctness is not proven." in source
     assert "September 1 automated verification" in source
     assert "20260827T143722Z-58368f55bad1" not in source
-    assert "trace.json             <span class=\"dim\">12 events" not in source
+    assert 'trace.json             <span class="dim">12 events' not in source
 
 
-def test_executive_and_architecture_distinguish_online_gate_from_offline_oracle() -> None:
+def test_executive_and_architecture_distinguish_online_gate_from_offline_oracle() -> (
+    None
+):
     executive = read("release-gate/demo/release-gate-demo.html")
     architecture = read("docs/architecture.html")
 
     assert slide_count(executive) == 10
-    assert "production ends with evidence review and a human release decision" in executive
+    assert (
+        "production ends with evidence review and a human release decision" in executive
+    )
     assert "offline known-answer qualification" in executive
     assert "2026-09-02 online PASS" in executive
     assert "tests-and-coverage PASS · task-consistency PASS · types PASS" in executive
-    assert "assistant/control candidate → deterministic gate → evidence review → human release decision" in architecture
+    assert (
+        "assistant/control candidate → deterministic gate → "
+        "evidence review → human release decision"
+    ) in architecture
     assert "known-answer controls → gate → hidden oracle grading" in architecture
     assert "RUN-LOG-2026-09-02-online-pass.md" in architecture
     assert "RUN-LOG-2026-09-01-automated-verification.md" in architecture
@@ -51,12 +57,14 @@ def test_hub_reflects_refreshed_x1_duration_and_release_gate_positioning() -> No
     source = read("docs/presentations.html")
     index = read("index.html")
 
-    assert 'url=./docs/presentations.html' in index
+    assert "url=./docs/presentations.html" in index
     assert 'href="./docs/presentations.html"' in index
     assert "16 Slides · 25m" in source
     assert "production-style online gate run" in source
     assert "offline calibration" in source
-    assert "production evidence review from benchmark-only oracle qualification" in source
+    assert (
+        "production evidence review from benchmark-only oracle qualification" in source
+    )
 
 
 def test_presentation_entrypoints_reference_existing_local_files() -> None:
@@ -77,7 +85,12 @@ def test_presentation_entrypoints_reference_existing_local_files() -> None:
             ref = href or css_url
             parsed = urlsplit(ref)
             path_ref = unquote(parsed.path)
-            if parsed.scheme or ref.startswith(("/", "#")) or path_ref.startswith("#") or ref.startswith(("data:", "mailto:", "javascript:")):
+            if (
+                parsed.scheme
+                or ref.startswith(("/", "#"))
+                or path_ref.startswith("#")
+                or ref.startswith(("data:", "mailto:", "javascript:"))
+            ):
                 continue
             target = (path.parent / path_ref).resolve()
             if not target.exists():

@@ -161,7 +161,9 @@ def test_minimum_independent_support_is_enforced(tmp_path):
 def test_mapper_is_installable_domain_neutral_package():
     import importlib.util
 
-    assert importlib.util.find_spec("release_gate.conceptual_diversity_mapper") is not None
+    assert (
+        importlib.util.find_spec("release_gate.conceptual_diversity_mapper") is not None
+    )
 
 
 def update_base_policy(repo, update):

@@ -106,7 +106,9 @@ def _read_version(root: Path) -> str:
     source = (root / CANONICAL_VERSION).read_text(encoding="utf-8")
     matches = re.findall(rf'^__version__ = "({SEMVER})"$', source, re.MULTILINE)
     if len(matches) != 1:
-        raise ValueError(f"expected one canonical __version__ in {CANONICAL_VERSION}")
+        raise ValueError(
+            f"expected one canonical __version__ in {CANONICAL_VERSION.as_posix()}"
+        )
     return matches[0]
 
 
@@ -124,7 +126,7 @@ def _replace_expected(
         replacements += count
     if replacements != expected_count:
         raise ValueError(
-            f"expected {expected_count} release version targets in {path}; "
+            f"expected {expected_count} release version targets in {path.as_posix()}; "
             f"found {replacements}"
         )
     return updated
@@ -138,11 +140,15 @@ def _synchronize_marked(
     expected_count: int,
 ) -> str:
     if text.count(MARKER_START) != 1 or text.count(MARKER_END) != 1:
-        raise ValueError(f"expected exactly one release version sync block in {path}")
+        raise ValueError(
+            f"expected exactly one release version sync block in {path.as_posix()}"
+        )
     start = text.index(MARKER_START) + len(MARKER_START)
     end = text.index(MARKER_END)
     if start >= end:
-        raise ValueError(f"release version sync markers are out of order in {path}")
+        raise ValueError(
+            f"release version sync markers are out of order in {path.as_posix()}"
+        )
     body = _replace_expected(path, text[start:end], version, patterns, expected_count)
     return text[:start] + body + text[end:]
 
@@ -150,7 +156,9 @@ def _synchronize_marked(
 def _compatibility_text(path: Path, version: str) -> str:
     value = json.loads(path.read_text(encoding="utf-8"))
     if value.get("cli", {}).get("name") != "release-gate":
-        raise ValueError(f"unexpected compatibility metadata in {COMPATIBILITY}")
+        raise ValueError(
+            f"unexpected compatibility metadata in {COMPATIBILITY.as_posix()}"
+        )
     value["cli"]["version"] = version
     return json.dumps(value, indent=2) + "\n"
 

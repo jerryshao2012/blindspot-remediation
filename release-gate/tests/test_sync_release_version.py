@@ -272,3 +272,17 @@ def test_release_version_check_rejects_missing_or_extra_anchored_targets(
 def test_ci_checks_generated_release_version_surfaces() -> None:
     text = CI.read_text(encoding="utf-8")
     assert "python scripts/sync_release_version.py --check" in text
+
+
+def test_diagnostics_use_portable_paths():
+    import runpy
+    from pathlib import PureWindowsPath
+
+    import pytest
+
+    module = runpy.run_path(str(SCRIPT))
+    path = PureWindowsPath("release-gate/README.md")
+    with pytest.raises(ValueError, match=r"release-gate/README\.md"):
+        module["_synchronize_marked"](path, "", "1.0.0", (), 0)
+    with pytest.raises(ValueError, match=r"release-gate/README\.md"):
+        module["_replace_expected"](path, "", "1.0.0", (), 1)

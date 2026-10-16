@@ -257,6 +257,8 @@ def _snapshot_ignore(path: Path) -> _IgnoreSnapshot:
         if _identity(final) != _identity(opened) or final.st_size != len(content):
             raise ConfigError(f"{path}: Git ignore file changed during inspection")
         _require_path_identity(path, _identity(opened))
+    except OSError as error:
+        raise ConfigError(f"{path}: unable to read Git ignore file") from error
     finally:
         os.close(descriptor)
 

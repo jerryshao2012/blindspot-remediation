@@ -99,7 +99,7 @@ def _read_regular(path: Path) -> bytes:
     if (
         not _is_regular_non_reparse(current)
         or _identity(current) != _identity(opened)
-        or _change_signature(current) != _change_signature(opened)
+        or _change_signature(current) != _change_signature(observed)
     ):
         raise ValueError(f"archive source changed while reading: {path}")
     return data

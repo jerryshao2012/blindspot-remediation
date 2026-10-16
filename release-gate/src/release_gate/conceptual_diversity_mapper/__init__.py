@@ -112,7 +112,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 # =============================================================================
 # UNIVERSAL PRODUCT CONSTANTS
@@ -880,7 +880,7 @@ class RuleBasedArtifactConceptMapper(
         actual_value = attributes[rule.attribute_name]
 
         if rule.operator == "equals":
-            return actual_value == rule.expected_value
+            return cast(bool, actual_value == rule.expected_value)
 
         if rule.operator == "contains":
             if isinstance(
@@ -1031,9 +1031,9 @@ class DuplicateAnalyzer:
 
         signatures: dict[str, list[str]] = defaultdict(list)
 
-        for mapping in mappings:
-            signature = self._mapping_signature(mapping)
-            signatures[signature].append(mapping.artifact_id)
+        for mapped_artifact in mappings:
+            signature = self._mapping_signature(mapped_artifact)
+            signatures[signature].append(mapped_artifact.artifact_id)
 
         parent_lookup = {
             artifact.artifact_id:
@@ -2460,4 +2460,4 @@ class GenericDiversityEngine(
                 ),
             )
 
-        return actual == desired
+        return cast(bool, actual == desired)

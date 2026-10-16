@@ -674,7 +674,8 @@ def test_installed_windows_stage_repairs_through_held_descriptor(
     os.fsync(descriptor)
     session = RefreshSession(root, _summary("run-one"))
     session.namespace = namespace
-    session._namespace_fd = os.open(namespace, os.O_RDONLY)
+    session._namespace_fd = runtime._open_windows_directory(namespace)
+    assert session._namespace_fd is not None
     monkeypatch.setattr(RefreshSession, "_safe_namespace", lambda self: True)
     monkeypatch.setattr(
         runtime,

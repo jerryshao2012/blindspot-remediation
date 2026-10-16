@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DECKS = {
     ROOT / "docs/code-assistant-skill-plugin-development.html": "class InlineEditor",
@@ -27,7 +26,9 @@ def extract_presenter_notes(path: Path, end_marker: str) -> str:
 
 def inline_scripts(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
-    return re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", source, re.DOTALL | re.IGNORECASE)
+    return re.findall(
+        r"<script(?:\s[^>]*)?>(.*?)</script>", source, re.DOTALL | re.IGNORECASE
+    )
 
 
 class IdParser(HTMLParser):
@@ -579,7 +580,7 @@ scenario(payload.scenario).then(
     process.exit(1);
   },
 );
-"""
+"""  # noqa: E501
 
 
 def run_node(path: Path, scenario: str) -> dict:
@@ -592,6 +593,7 @@ def run_node(path: Path, scenario: str) -> dict:
         cwd=ROOT,
         input=json.dumps(payload),
         text=True,
+        encoding="utf-8",
         capture_output=True,
         check=False,
     )
@@ -617,9 +619,14 @@ def test_complete_inline_scripts_compile(path: Path) -> None:
     assert scripts
     for script in scripts:
         subprocess.run(
-            ["node", "-e", 'const fs = require("fs"); new Function(fs.readFileSync(0, "utf8"));'],
+            [
+                "node",
+                "-e",
+                'const fs = require("fs"); new Function(fs.readFileSync(0, "utf8"));',
+            ],
             input=script,
             text=True,
+            encoding="utf-8",
             check=True,
         )
 
@@ -632,26 +639,39 @@ def test_status_markup_has_single_exact_live_region_before_popout(path: Path) ->
 
     assert len(parser.ids) == len(set(parser.ids))
     assert parser.notes_status_attrs == [
-        {"class": "notes-status", "id": "notesStatus", "role": "status", "aria-live": "polite"}
+        {
+            "class": "notes-status",
+            "id": "notesStatus",
+            "role": "status",
+            "aria-live": "polite",
+        }
     ]
     assert source.index('id="notesStatus"') < source.index('id="notesPopoutBtn"')
     assert ".notes-status" in source
 
 
 @pytest.mark.parametrize("path", DECKS)
-def test_state_unsupported_api_enters_resolved_fallback_without_opening(path: Path) -> None:
+def test_state_unsupported_api_enters_resolved_fallback_without_opening(
+    path: Path,
+) -> None:
     result = run_node(path, "unsupported")
 
     assert result["state"] == "fallback"
     assert result["label"] == "Open speaker view"
-    assert result["status"] == "Display access unavailable; speaker view will open here."
+    assert (
+        result["status"] == "Display access unavailable; speaker view will open here."
+    )
     assert result["statusVisible"] is True
     assert result["opens"] == 0
 
 
-@pytest.mark.parametrize("scenario", ["permission_missing_with_api", "permission_throwing_with_api"])
+@pytest.mark.parametrize(
+    "scenario", ["permission_missing_with_api", "permission_throwing_with_api"]
+)
 @pytest.mark.parametrize("path", DECKS)
-def test_state_undecided_permission_requires_user_activation(path: Path, scenario: str) -> None:
+def test_state_undecided_permission_requires_user_activation(
+    path: Path, scenario: str
+) -> None:
     result = run_node(path, scenario)
 
     assert result["state"] == "needs-permission"
@@ -660,7 +680,9 @@ def test_state_undecided_permission_requires_user_activation(path: Path, scenari
 
 
 @pytest.mark.parametrize("path", DECKS)
-def test_popup_granted_warmup_opens_synchronously_on_secondary_with_negative_coordinates(path: Path) -> None:
+def test_popup_warmup_opens_synchronously_on_secondary_with_negative_coordinates(
+    path: Path,
+) -> None:
     result = run_node(path, "granted_ready_open")
 
     assert result["state"] == "ready"
@@ -674,22 +696,35 @@ def test_popup_granted_warmup_opens_synchronously_on_secondary_with_negative_coo
 
 
 @pytest.mark.parametrize("path", DECKS)
-def test_state_prompted_grant_reaches_ready_but_needs_fresh_activation(path: Path) -> None:
+def test_state_prompted_grant_reaches_ready_but_needs_fresh_activation(
+    path: Path,
+) -> None:
     result = run_node(path, "needs_permission_fresh_activation")
 
     assert result["afterFirst"]["state"] == "ready"
-    assert result["afterFirst"]["status"] == "Display access ready. Activate again to open speaker view."
+    assert (
+        result["afterFirst"]["status"]
+        == "Display access ready. Activate again to open speaker view."
+    )
     assert result["afterFirst"]["opens"] == 0
     assert result["secondOpened"] is True
     assert result["opens"] == 1
 
 
-@pytest.mark.parametrize("scenario,message", [
-    ("needs_permission_denied", "Display access unavailable; speaker view will open here."),
-    ("one_screen", "A second display is unavailable; speaker view will open here."),
-])
+@pytest.mark.parametrize(
+    "scenario,message",
+    [
+        (
+            "needs_permission_denied",
+            "Display access unavailable; speaker view will open here.",
+        ),
+        ("one_screen", "A second display is unavailable; speaker view will open here."),
+    ],
+)
 @pytest.mark.parametrize("path", DECKS)
-def test_state_prompted_fallback_requires_fresh_activation(path: Path, scenario: str, message: str) -> None:
+def test_state_prompted_fallback_requires_fresh_activation(
+    path: Path, scenario: str, message: str
+) -> None:
     result = run_node(path, scenario)
 
     assert result["afterFirst"]["state"] == "fallback"
@@ -713,7 +748,10 @@ def test_state_permission_changes_remap_without_opening(path: Path) -> None:
     result = run_node(path, "permission_changes")
 
     assert result["denied"]["state"] == "fallback"
-    assert result["denied"]["status"] == "Display access unavailable; speaker view will open here."
+    assert (
+        result["denied"]["status"]
+        == "Display access unavailable; speaker view will open here."
+    )
     assert result["prompt"]["state"] == "needs-permission"
     assert result["granted"]["state"] == "ready"
     assert result["granted"]["opens"] == 0
@@ -739,7 +777,9 @@ def test_state_granted_warmup_deduplicates_in_flight_screen_details(path: Path) 
 
 
 @pytest.mark.parametrize("path", DECKS)
-def test_state_stale_inflight_screen_details_does_not_capture_fresh_request(path: Path) -> None:
+def test_state_stale_inflight_screen_details_does_not_capture_fresh_request(
+    path: Path,
+) -> None:
     result = run_node(path, "stale_inflight_does_not_capture_fresh_request")
 
     assert result["initialCalls"] == 1
@@ -751,7 +791,9 @@ def test_state_stale_inflight_screen_details_does_not_capture_fresh_request(path
 
 
 @pytest.mark.parametrize("path", DECKS)
-def test_state_topology_invalidation_ignores_stale_generation_without_opening(path: Path) -> None:
+def test_state_topology_invalidation_ignores_stale_generation_without_opening(
+    path: Path,
+) -> None:
     result = run_node(path, "topology_and_stale")
 
     assert result["initial"]["state"] == "ready"
@@ -766,38 +808,54 @@ def test_state_screen_topology_events_recompute_without_opening(path: Path) -> N
 
     assert result["initial"]["state"] == "ready"
     assert result["afterScreensChange"]["state"] == "fallback"
-    assert result["afterScreensChange"]["status"] == "A second display is unavailable; speaker view will open here."
+    assert (
+        result["afterScreensChange"]["status"]
+        == "A second display is unavailable; speaker view will open here."
+    )
     assert result["final"]["state"] == "ready"
     assert result["targetLeft"] == 1440
     assert result["opens"] == 0
 
 
 @pytest.mark.parametrize("path", DECKS)
-def test_state_current_screen_exclusion_uses_identity_or_equal_bounds(path: Path) -> None:
+def test_state_current_screen_exclusion_uses_identity_or_equal_bounds(
+    path: Path,
+) -> None:
     result = run_node(path, "bounds_equal_exclusion")
 
     assert result == {"targetLeft": -1920, "state": "ready"}
 
 
 @pytest.mark.parametrize("path", DECKS)
-def test_popup_placement_warning_uses_finite_coordinates_and_tolerance(path: Path) -> None:
+def test_popup_placement_warning_uses_finite_coordinates_and_tolerance(
+    path: Path,
+) -> None:
     result = run_node(path, "placement_warning")
 
-    assert result["status"] == "The browser kept speaker view on this display. Move it to the other display manually."
+    assert result["status"] == (
+        "The browser kept speaker view on this display. "
+        "Move it to the other display manually."
+    )
 
 
 @pytest.mark.parametrize("path", DECKS)
 def test_popup_absent_popup_coordinates_do_not_false_warn(path: Path) -> None:
     result = run_node(path, "placement_no_false_warning")
 
-    assert result["status"] != "The browser kept speaker view on this display. Move it to the other display manually."
+    assert result["status"] != (
+        "The browser kept speaker view on this display. "
+        "Move it to the other display manually."
+    )
 
 
 @pytest.mark.parametrize("path", DECKS)
 def test_popup_placement_uses_complete_coordinate_pairs(path: Path) -> None:
     result = run_node(path, "placement_pair_fallback")
 
-    assert result["status"] == "The browser kept speaker view on this display. Move it to the other display manually."
+    assert result["status"] == (
+        "The browser kept speaker view on this display. "
+        "Move it to the other display manually."
+    )
 
 
 @pytest.mark.parametrize("path", DECKS)
@@ -805,7 +863,10 @@ def test_popup_placement_uses_half_open_eight_pixel_tolerance(path: Path) -> Non
     result = run_node(path, "placement_tolerance_boundary")
 
     assert result["inside"]["status"] == ""
-    assert result["outside"]["status"] == "The browser kept speaker view on this display. Move it to the other display manually."
+    assert result["outside"]["status"] == (
+        "The browser kept speaker view on this display. "
+        "Move it to the other display manually."
+    )
 
 
 @pytest.mark.parametrize("path", DECKS)

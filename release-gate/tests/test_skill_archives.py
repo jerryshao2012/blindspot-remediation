@@ -342,3 +342,25 @@ def test_codex_archive_disables_implicit_invocation(tmp_path: Path) -> None:
     assert metadata["policy"] == {"allow_implicit_invocation": False}
     assert "$release-gate" in metadata["interface"]["default_prompt"]
     archive.close()
+
+
+def test_source_path_and_descriptor_ctimes_need_not_match(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"unchanged")
+    reader = runpy.run_path(str(SCRIPT))["_read_regular"]
+    real_lstat = os.lstat
+
+    def path_stat(path):
+        status = real_lstat(path)
+        fields = {
+            name: getattr(status, name)
+            for name in dir(status)
+            if name.startswith("st_")
+        }
+        fields["st_ctime_ns"] += 1
+        return SimpleNamespace(**fields)
+
+    monkeypatch.setattr(os, "lstat", path_stat)
+    assert reader(source) == b"unchanged"

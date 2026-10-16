@@ -649,7 +649,9 @@ def test_mutation_runner_restores_crlf_source_byte_for_byte(tmp_path: Path) -> N
     copied = tmp_path / "demo"
     shutil.copytree(DEMO, copied, ignore=shutil.ignore_patterns("workbench", ".venv"))
     target = copied / "src" / "ratelimiter" / "__init__.py"
-    target.write_bytes(target.read_bytes().replace(b"\n", b"\r\n"))
+    target.write_bytes(
+        target.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+    )
     before = target.read_bytes()
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(copied / "src")

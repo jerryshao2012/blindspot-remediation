@@ -40,3 +40,11 @@ def test_windows_lock_failure_returns_false(monkeypatch: pytest.MonkeyPatch) -> 
         raise OSError("lock failed")
 
     assert not observability_locks.try_lock(7, windows_lock)
+
+
+def test_runtime_windows_callback_accepts_dispatch_arguments() -> None:
+    import inspect
+
+    from release_gate import observability_runtime
+
+    inspect.signature(observability_runtime._windows_file_lock).bind(7, True)

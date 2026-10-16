@@ -254,8 +254,9 @@ def test_record_and_refresh_creates_private_record_and_matching_aggregates(
     assert stored["run_id"] == "first"
     assert aggregate["record_count"] == 1
     assert aggregate["generation_id"] in paths.report.read_text()
-    assert paths.record.stat().st_mode & 0o777 == 0o600
-    assert (root / "records").stat().st_mode & 0o777 == 0o700
+    if os.name != "nt":
+        assert paths.record.stat().st_mode & 0o777 == 0o600
+        assert (root / "records").stat().st_mode & 0o777 == 0o700
 
 
 def test_identical_repeat_is_idempotent_and_preserves_record_bytes(

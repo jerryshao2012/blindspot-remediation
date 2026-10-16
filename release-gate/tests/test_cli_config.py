@@ -666,3 +666,18 @@ def test_invalid_cli_usage_returns_exit_3(
     result = capsys.readouterr()
     assert result.out == ""
     assert result.err.startswith("ERROR: ")
+
+
+def test_init_reports_unreadable_ignore_as_configuration_error(tmp_path, monkeypatch):
+    source = tmp_path / "approved.yaml"
+    source.write_bytes(_VALID_POLICY)
+    (tmp_path / ".gitignore").write_bytes(b"owned\n")
+    real_fdopen = os.fdopen
+
+    def denied_read(descriptor, *args, **kwargs):
+        if args and args[0] == "rb":
+            raise PermissionError("file is locked")
+        return real_fdopen(descriptor, *args, **kwargs)
+
+    monkeypatch.setattr(os, "fdopen", denied_read)
+    assert main(["init", "--repo", str(tmp_path), "--from-config", str(source)]) == 3
