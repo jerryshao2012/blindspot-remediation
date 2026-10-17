@@ -277,3 +277,15 @@ def test_rejects_cwd_that_resolves_outside_clone(tmp_path: Path) -> None:
     assert result.classification is ExecutionClass.ERROR
     assert result.reason_codes == ("COMMAND_SPAWN_FAILED",)
     assert result.exit_code is None
+
+
+def test_windows_environment_preserves_system_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(process_module.os, "name", "nt")
+    environment, missing = process_module._build_environment(
+        command("print('ok')"),
+        {"SystemRoot": "C:\\Windows", "SECRET": "hidden"},
+        tmp_path,
+    )
+    assert not missing
+    assert environment["SystemRoot"] == "C:\\Windows"
+    assert "SECRET" not in environment

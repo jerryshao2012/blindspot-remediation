@@ -94,7 +94,12 @@ def test_release_builder_is_deterministic_and_self_verifying(tmp_path: Path) -> 
 
     first_bytes = {path.name: path.read_bytes() for path in sorted(first.iterdir())}
     second_bytes = {path.name: path.read_bytes() for path in sorted(second.iterdir())}
-    assert first_bytes == second_bytes
+    assert set(first_bytes) == set(second_bytes)
+    for name in first_bytes:
+        assert (
+            hashlib.sha256(first_bytes[name]).hexdigest()
+            == hashlib.sha256(second_bytes[name]).hexdigest()
+        ), f"non-deterministic release asset: {name}"
     with tarfile.open(first / f"release_gate-{__version__}.tar.gz", "r:gz") as sdist:
         assert not any("gauntlet 2.py" in member.name for member in sdist)
     manifest_lines = first_bytes["SHA256SUMS"].decode().splitlines()
@@ -316,3 +321,31 @@ def test_wheel_rejects_symlink_mode_and_oversize_entries(
         archive.writestr("release_gate/module.py", "large")
     with pytest.raises(ValueError, match="size"):
         verifier._verify_wheel(oversized, __version__)
+
+
+def test_sdist_excludes_parallel_coverage_data(tmp_path):
+    import shutil
+
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    shutil.copytree(ROOT / "src", checkout / "src")
+    for name in ("pyproject.toml", "README.md", "LICENSE"):
+        shutil.copyfile(ROOT / name, checkout / name)
+    (checkout / ".coverage.runner.123.random").write_bytes(b"transient coverage")
+    output = tmp_path / "dist"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--no-isolation",
+            "--sdist",
+            "--outdir",
+            str(output),
+        ],
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+    )
+    with tarfile.open(next(output.glob("*.tar.gz"))) as archive:
+        assert not any("/.coverage" in member.name for member in archive)

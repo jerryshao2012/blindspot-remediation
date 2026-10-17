@@ -22,7 +22,7 @@ def setup_repo(tmp_path, *, xml=None, mode="enforce", mapped=True, minimum=1):
             f"from pathlib import Path; Path('junit.xml').write_text({xml!r})",
         ]
     repo = repository(tmp_path, command)
-    (repo / "tests.txt").write_text(source)
+    (repo / "tests.txt").write_bytes(source.encode("utf-8"))
     gate = yaml.safe_load((repo / ".release-gate.yaml").read_text())
     if xml is not None:
         gate["checks"][0]["reports"] = [

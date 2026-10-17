@@ -105,7 +105,11 @@ def test_captures_complete_worktree_without_ignored_files(repository: Path) -> N
     (repository / "binary.bin").write_bytes(b"\x00\xff\x10binary\n")
     git(repository, "mv", "rename-me.txt", "renamed.txt")
     (repository / "delete-me.txt").unlink()
-    os.chmod(repository / "script.sh", 0o755)
+    # Windows does not track executable-bit changes; change content there.
+    if os.name == "nt":
+        (repository / "script.sh").write_bytes(b"#!/bin/sh\nexit 1\n")
+    else:
+        os.chmod(repository / "script.sh", 0o755)
     before = repository_snapshot(repository)
 
     capture = capture_candidate(repository, base="HEAD")

@@ -1419,7 +1419,7 @@ def _open_windows_relative_native(  # pragma: no cover - Windows CI
         directory_fd,
         name,
         desired_access=desired_access,
-        share_access=0x0001 | 0x0002 | 0x0004,
+        share_access=0x0001 | 0x0002 | (0 if delete_access else 0x0004),
         disposition=disposition,
     )
     return _windows_fd_from_handle(handle, flags)
@@ -1480,18 +1480,35 @@ def _replace_windows_relative_native(  # pragma: no cover - Windows CI
     ):
         raise OSError("staged observability handle changed before rename")
     directory_path = _windows_directory_path(directory_fd)
-    source_path = os.path.join(directory_path, staged.path.name)
-    target_path = os.path.join(directory_path, target)
+    target_path = os.path.join(directory_path, target).encode("utf-16-le")
+
+    class _FileRenameInformation(ctypes.Structure):
+        _fields_ = (
+            ("replace_if_exists", ctypes.c_ubyte),
+            ("root_directory", ctypes.c_void_p),
+            ("file_name_length", ctypes.c_uint32),
+            ("file_name", ctypes.c_ubyte * len(target_path)),
+        )
+
+    information = _FileRenameInformation()
+    information.replace_if_exists = 1
+    information.file_name_length = len(target_path)
+    information.file_name[:] = target_path
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
-    move_file = kernel32.MoveFileExW
-    move_file.argtypes = (wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD)
-    move_file.restype = wintypes.BOOL
-    move_file_replace_existing = 0x1
-    move_file_write_through = 0x8
-    if not move_file(
-        source_path,
-        target_path,
-        move_file_replace_existing | move_file_write_through,
+    rename = kernel32.SetFileInformationByHandle
+    rename.argtypes = (
+        wintypes.HANDLE,
+        ctypes.c_int,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+    )
+    rename.restype = wintypes.BOOL
+    # Rename the pinned file itself without reopening its mutable source path.
+    if not rename(
+        wintypes.HANDLE(_windows_handle_from_fd(staged.descriptor)),
+        3,  # FileRenameInfo
+        ctypes.byref(information),
+        ctypes.sizeof(information),
     ):
         raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
 

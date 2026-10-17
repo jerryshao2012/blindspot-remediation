@@ -305,7 +305,19 @@ def test_partial_replace_failure_leaves_the_other_file_readable(
             raise OSError("replace denied")
         original(source, target, **kwargs)
 
-    monkeypatch.setattr(runtime.os, "replace", fail_second)
+    if os.name == "nt":
+        original_windows = runtime._replace_windows_child
+
+        def fail_second_windows(directory_fd, staged, target):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("replace denied")
+            original_windows(directory_fd, staged, target)
+
+        monkeypatch.setattr(runtime, "_replace_windows_child", fail_second_windows)
+    else:
+        monkeypatch.setattr(runtime.os, "replace", fail_second)
     with RefreshSession.acquire(root, _summary("run-one")) as session:
         result = session.publish()
     assert "OBSERVABILITY_PUBLISH_FAILED" in result.warning_codes
@@ -2103,3 +2115,67 @@ def test_real_local_contention_has_exact_lock_busy_warning(
 
     with RefreshSession.acquire(root, _summary("third")) as third:
         assert third.locked
+
+
+def test_native_staging_denies_delete_sharing(monkeypatch):
+    import release_gate.observability_runtime as runtime
+
+    calls = []
+
+    def open_handle(*args, **kwargs):
+        calls.append(kwargs)
+        return 123
+
+    monkeypatch.setattr(runtime, "_nt_create_relative_handle", open_handle)
+    monkeypatch.setattr(runtime, "_windows_fd_from_handle", lambda handle, flags: 7)
+    assert (
+        runtime._open_windows_relative_native(
+            4, "staged", os.O_RDWR | os.O_CREAT | os.O_EXCL, delete_access=True
+        )
+        == 7
+    )
+    assert calls[0]["desired_access"] & 0x10000
+    assert calls[0]["share_access"] == 3
+
+
+def test_native_rename_uses_pinned_file_handle(tmp_path, monkeypatch):
+    import ctypes
+    from types import SimpleNamespace
+
+    import release_gate.observability_runtime as runtime
+
+    source = tmp_path / "staged"
+    payload = b"trusted"
+    source.write_bytes(payload)
+    with source.open("r+b") as stream:
+        descriptor = stream.fileno()
+        staged = runtime._StagedPath(
+            source,
+            runtime._file_snapshot(os.fstat(descriptor)),
+            descriptor,
+            payload,
+            hashlib.sha256(payload).hexdigest(),
+        )
+        calls = []
+
+        def rename(handle, kind, pointer, size):
+            information = pointer._obj
+            calls.append((handle.value, kind, bytes(information.file_name)))
+            assert information.replace_if_exists == 1
+            assert information.file_name_length == len(information.file_name)
+            return True
+
+        monkeypatch.setattr(
+            ctypes,
+            "WinDLL",
+            lambda *a, **k: SimpleNamespace(SetFileInformationByHandle=rename),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            runtime, "_windows_directory_path", lambda fd: str(tmp_path)
+        )
+        monkeypatch.setattr(runtime, "_windows_handle_from_fd", lambda fd: fd + 100)
+        runtime._replace_windows_relative_native(4, staged, "published")
+        assert calls == [
+            (descriptor + 100, 3, str(tmp_path / "published").encode("utf-16-le"))
+        ]

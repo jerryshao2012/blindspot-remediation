@@ -232,6 +232,9 @@ def _build_environment(
     temporary.mkdir(mode=0o700)
     environment["HOME"] = str(home)
     if os.name == "nt":
+        system_root = host.get("SystemRoot") or host.get("SYSTEMROOT")
+        if system_root:
+            environment["SystemRoot"] = system_root
         drive, tail = os.path.splitdrive(str(home))
         environment.update(
             {

@@ -52,6 +52,7 @@ packages = ["src/release_gate"]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
+  "/.coverage*",
   "/demo/python-slugify/workbench",
   "/demo/python-slugify/workbench-*",
   "/demo/rate-limiter/workbench",

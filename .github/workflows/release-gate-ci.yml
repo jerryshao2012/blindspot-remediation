@@ -53,7 +53,7 @@ jobs:
       - name: Install package and development dependencies
         run: uv sync --all-groups --locked
       - name: Test
-        run: uv run pytest --cov=release_gate --cov-report=term-missing -q
+        run: uv run pytest --cov=release_gate --cov-report=term-missing -vv --tb=short --durations=20
       - name: Type check
         run: uv run mypy src/release_gate
       - name: Lint
