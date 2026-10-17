@@ -193,3 +193,51 @@ def test_ci_pins_subprocess_coverage_mode_and_configuration() -> None:
     )
     assert "--cov-branch" in command
     assert "--cov-config=pyproject.toml" in command
+
+
+def test_ci_enforces_coverage_on_the_combined_platform_matrix() -> None:
+    jobs = _workflow(CI)["jobs"]
+    test_command = next(
+        step["run"] for step in jobs["test"]["steps"] if step.get("name") == "Test"
+    )
+    assert "--cov-fail-under=0" in test_command
+    coverage = jobs["coverage"]
+    assert coverage["needs"] == "test"
+    commands = "\n".join(step.get("run", "") for step in coverage["steps"])
+    assert "coverage combine coverage-data/*/.coverage" in commands
+    assert "coverage report --fail-under=80" in commands
+    upload = next(
+        step
+        for step in jobs["test"]["steps"]
+        if "upload-artifact@" in step.get("uses", "")
+    )
+    assert upload["with"]["include-hidden-files"] == "true"
+    assert upload["with"]["if-no-files-found"] == "error"
+
+
+def test_combined_coverage_maps_all_runner_paths(tmp_path, monkeypatch):
+    from coverage import Coverage, CoverageData
+
+    product = ROOT / "release-gate"
+    monkeypatch.chdir(product)
+    runner_roots = (
+        "/home/runner/work/project/project/release-gate/src/release_gate",
+        "/Users/runner/work/project/project/release-gate/src/release_gate",
+        r"D:\a\project\project\release-gate\src\release_gate",
+    )
+    files = []
+    for index, prefix in enumerate(runner_roots):
+        file = tmp_path / f".coverage.{index}"
+        data = CoverageData(basename=str(file))
+        separator = "\\" if "\\" in prefix else "/"
+        data.add_arcs({prefix + separator + "__init__.py": [(index + 1, index + 2)]})
+        data.write()
+        files.append(str(file))
+    combined = Coverage(
+        data_file=str(tmp_path / "combined"), config_file="pyproject.toml"
+    )
+    combined.combine(data_paths=files, strict=True)
+    data = combined.get_data()
+    canonical = str((product / "src/release_gate/__init__.py").resolve())
+    assert set(data.measured_files()) == {canonical}
+    assert data.arcs(canonical) == [(1, 2), (2, 3), (3, 4)]

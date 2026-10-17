@@ -73,6 +73,9 @@ filterwarnings = [
 branch = true
 source = ["release_gate"]
 
+[tool.coverage.paths]
+source = ["src/release_gate", "*/release-gate/src/release_gate"]
+
 [tool.coverage.report]
 fail_under = 80
 show_missing = true

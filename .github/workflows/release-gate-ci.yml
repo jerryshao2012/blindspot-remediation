@@ -53,7 +53,16 @@ jobs:
       - name: Install package and development dependencies
         run: uv sync --all-groups --locked
       - name: Test
-        run: uv run pytest --cov=release_gate --cov-branch --cov-config=pyproject.toml --cov-report=term-missing -vv --tb=short --durations=20
+        run: uv run pytest --cov=release_gate --cov-branch --cov-config=pyproject.toml --cov-fail-under=0 --cov-report=term-missing -vv --tb=short --durations=20
+      - name: Upload coverage data
+        # actions/upload-artifact v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: coverage-${{ matrix.os }}-${{ matrix.python }}
+          path: release-gate/.coverage
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
       - name: Type check
         run: uv run mypy src/release_gate
       - name: Lint
@@ -80,6 +89,37 @@ jobs:
           uv run python scripts/build_skill_archives.py --output-dir "${RUNNER_TEMP}/skills-first"
           uv run python scripts/build_skill_archives.py --output-dir "${RUNNER_TEMP}/skills-second"
           diff -r "${RUNNER_TEMP}/skills-first" "${RUNNER_TEMP}/skills-second"
+
+  coverage:
+    name: Combined platform coverage
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: release-gate
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      # astral-sh/setup-uv v8.1.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          python-version: "3.12"
+          version: "0.12.5"
+      - name: Install coverage tools from the lockfile
+        run: uv sync --all-groups --locked
+      - name: Download matrix coverage data
+        # actions/download-artifact v4.3.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: coverage-*
+          path: release-gate/coverage-data
+      - name: Enforce combined coverage
+        run: |
+          uv run coverage combine coverage-data/*/.coverage
+          uv run coverage report --fail-under=80
 
   python-slugify-demo:
     name: python-slugify demo / ${{ matrix.os }}
