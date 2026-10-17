@@ -701,7 +701,7 @@ def _windows_directory_names_native(  # pragma: no cover - Windows CI
             ("information", ctypes.c_size_t),
         )
 
-    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined]
+    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined, unused-ignore]
     query = ntdll.NtQueryDirectoryFile
     query.argtypes = (
         wintypes.HANDLE,
@@ -838,7 +838,7 @@ def _windows_file_lock(  # pragma: no cover - Windows CI
     overlapped = _Overlapped()
     overlapped.offset = _LOCK_OFFSET & 0xFFFFFFFF
     overlapped.offset_high = (_LOCK_OFFSET >> 32) & 0xFFFFFFFF
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined, unused-ignore]
     handle = wintypes.HANDLE(_windows_handle_from_fd(descriptor))
     if lock:
         operation = kernel32.LockFileEx
@@ -871,7 +871,7 @@ def _windows_file_lock(  # pragma: no cover - Windows CI
         operation.restype = wintypes.BOOL
         succeeded = operation(handle, 0, 1, 0, ctypes.byref(overlapped))
     if not succeeded:
-        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined, unused-ignore]
 
 
 def _safe_target_snapshot_at(directory_fd: int, name: str) -> _TargetSnapshot | None:
@@ -1247,7 +1247,7 @@ def _open_windows_directory_native(  # pragma: no cover - Windows CI
     import msvcrt
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined, unused-ignore]
     create_file = kernel32.CreateFileW
     create_file.argtypes = (
         wintypes.LPCWSTR,
@@ -1276,7 +1276,7 @@ def _open_windows_directory_native(  # pragma: no cover - Windows CI
         return None
     try:
         open_osfhandle: Callable[[int, int], int]
-        open_osfhandle = msvcrt.open_osfhandle  # type: ignore[attr-defined]
+        open_osfhandle = msvcrt.open_osfhandle  # type: ignore[attr-defined, unused-ignore]
         return int(open_osfhandle(int(handle), os.O_RDONLY))
     except OSError:
         close_handle(handle)
@@ -1448,7 +1448,7 @@ def _windows_directory_path(directory_fd: int) -> str:  # pragma: no cover - Win
     import ctypes
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined, unused-ignore]
     get_final_path = kernel32.GetFinalPathNameByHandleW
     get_final_path.argtypes = (
         wintypes.HANDLE,
@@ -1461,7 +1461,7 @@ def _windows_directory_path(directory_fd: int) -> str:  # pragma: no cover - Win
     buffer = ctypes.create_unicode_buffer(32768)
     length = get_final_path(handle, buffer, len(buffer), 0)
     if length == 0 or length >= len(buffer):
-        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined, unused-ignore]
     return buffer.value
 
 
@@ -1494,7 +1494,7 @@ def _replace_windows_relative_native(  # pragma: no cover - Windows CI
     information.replace_if_exists = 1
     information.file_name_length = len(target_path)
     information.file_name[:] = target_path
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined, unused-ignore]
     rename = kernel32.SetFileInformationByHandle
     rename.argtypes = (
         wintypes.HANDLE,
@@ -1510,7 +1510,7 @@ def _replace_windows_relative_native(  # pragma: no cover - Windows CI
         ctypes.byref(information),
         ctypes.sizeof(information),
     ):
-        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined, unused-ignore]
 
 
 def _discard_windows_staged_handle(  # pragma: no cover - Windows CI
@@ -1531,7 +1531,7 @@ def _discard_windows_staged_handle(  # pragma: no cover - Windows CI
             _fields_ = (("delete_file", wintypes.BOOLEAN),)
 
         information = _FileDispositionInformation(1)
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined, unused-ignore]
         set_information = kernel32.SetFileInformationByHandle
         set_information.argtypes = (
             wintypes.HANDLE,
@@ -1546,7 +1546,7 @@ def _discard_windows_staged_handle(  # pragma: no cover - Windows CI
             ctypes.byref(information),
             ctypes.sizeof(information),
         ):
-            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined, unused-ignore]
     except OSError:
         return
 
@@ -1603,7 +1603,7 @@ def _nt_create_relative_handle(  # pragma: no cover - Windows CI
     )
     io_status = _IoStatusBlock()
     result_handle = wintypes.HANDLE()
-    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined]
+    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined, unused-ignore]
     nt_create_file = ntdll.NtCreateFile
     nt_create_file.argtypes = (
         ctypes.POINTER(wintypes.HANDLE),
@@ -1647,7 +1647,7 @@ def _windows_handle_from_fd(  # pragma: no cover - Windows CI
     import msvcrt
 
     get_osfhandle: Callable[[int], int]
-    get_osfhandle = msvcrt.get_osfhandle  # type: ignore[attr-defined]
+    get_osfhandle = msvcrt.get_osfhandle  # type: ignore[attr-defined, unused-ignore]
     return int(get_osfhandle(descriptor))
 
 
@@ -1665,7 +1665,7 @@ def _windows_fd_from_handle(  # pragma: no cover - Windows CI
     descriptor_flags |= getattr(os, "O_BINARY", 0)
     try:
         open_osfhandle: Callable[[int, int], int]
-        open_osfhandle = msvcrt.open_osfhandle  # type: ignore[attr-defined]
+        open_osfhandle = msvcrt.open_osfhandle  # type: ignore[attr-defined, unused-ignore]
         return int(open_osfhandle(handle, descriptor_flags))
     except Exception:
         _close_windows_handle(handle)
@@ -1678,7 +1678,7 @@ def _raise_windows_status(  # pragma: no cover - Windows CI
     import ctypes
     from ctypes import wintypes
 
-    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined]
+    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined, unused-ignore]
     convert = ntdll.RtlNtStatusToDosError
     convert.argtypes = (wintypes.LONG,)
     convert.restype = wintypes.ULONG
@@ -1696,7 +1696,7 @@ def _close_windows_handle(  # pragma: no cover - Windows CI
     import ctypes
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined, unused-ignore]
     close_handle = kernel32.CloseHandle
     close_handle.argtypes = (wintypes.HANDLE,)
     close_handle.restype = wintypes.BOOL

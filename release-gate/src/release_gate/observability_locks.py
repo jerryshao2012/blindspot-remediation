@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from typing import Any, cast
 
 _LOCK_OFFSET = 0
 
@@ -22,10 +23,12 @@ def try_lock(descriptor: int, windows_lock: Callable[[int, bool], None]) -> bool
 
     import fcntl
 
+    posix_locker = cast(Any, fcntl)
+
     try:
-        fcntl.lockf(
+        posix_locker.lockf(
             descriptor,
-            fcntl.LOCK_EX | fcntl.LOCK_NB,
+            posix_locker.LOCK_EX | posix_locker.LOCK_NB,
             1,
             _LOCK_OFFSET,
             os.SEEK_SET,
@@ -42,4 +45,6 @@ def unlock(descriptor: int, windows_lock: Callable[[int, bool], None]) -> None:
 
     import fcntl
 
-    fcntl.lockf(descriptor, fcntl.LOCK_UN, 1, _LOCK_OFFSET, os.SEEK_SET)
+    posix_locker = cast(Any, fcntl)
+
+    posix_locker.lockf(descriptor, posix_locker.LOCK_UN, 1, _LOCK_OFFSET, os.SEEK_SET)

@@ -6,6 +6,7 @@ import hashlib
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -358,7 +359,7 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
         except psutil.Error:
             pass
     try:
-        if os.name != "nt":
+        if sys.platform != "win32":
             os.killpg(process.pid, signal.SIGTERM)
         else:
             process.terminate()
@@ -374,7 +375,7 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:
         try:
-            if os.name != "nt":
+            if sys.platform != "win32":
                 os.killpg(process.pid, signal.SIGKILL)
             else:
                 process.kill()
@@ -384,7 +385,7 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
 
 
 def _terminate_remaining_group(process: subprocess.Popen[bytes]) -> None:
-    if os.name == "nt":
+    if sys.platform == "win32":
         return
     try:
         os.killpg(process.pid, signal.SIGTERM)

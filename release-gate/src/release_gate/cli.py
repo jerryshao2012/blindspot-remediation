@@ -571,7 +571,7 @@ def _close_locked_ignore(locked: _LockedIgnore) -> None:
 
 def _acquire_advisory_lock(descriptor: int, path: Path) -> None:
     try:
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             os.lseek(descriptor, 0, os.SEEK_SET)
@@ -589,7 +589,7 @@ def _acquire_advisory_lock(descriptor: int, path: Path) -> None:
 
 def _release_advisory_lock(descriptor: int) -> None:
     try:
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             os.lseek(descriptor, 0, os.SEEK_SET)
