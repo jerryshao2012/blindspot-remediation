@@ -192,6 +192,7 @@ that policy while running assurance. Do not generate tests, retry, repair, merge
 or deploy. Do not run Graphify during `assure`.
 
 Report `GATE_VERDICT`, `ASSURANCE_DISPOSITION`, `ASSURANCE_MODE`, and
-`ASSESSMENT_STATUS` exactly, and link the result. The final assurance disposition
-and exit code govern this operation. An advisory PASS is not a claim of sufficient
-conceptual coverage. Exits 3 and 4 are errors and must not be reported as PASS.
+`ASSESSMENT_STATUS` exactly, link `result.json`, and summarize any
+`unmet_requirements` and `coverage.expansion_requests`. Final disposition and exit
+code govern. An advisory PASS is not a claim of sufficient conceptual coverage.
+Exits 3 and 4 are errors and must not be reported as PASS.

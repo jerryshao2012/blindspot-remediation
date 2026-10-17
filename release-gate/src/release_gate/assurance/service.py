@@ -170,7 +170,12 @@ def _assess(
     coverage = adapter.assess_evidence_bundle(
         EvidenceBundle(candidate, candidate, tuple(evidence)),
         schema,
-        ResourceBudget(max_additional_artifacts=0),
+        ResourceBudget(
+            max_additional_artifacts=len(policy.required_regions),
+            priority_dimension_ids=tuple(
+                dict.fromkeys(r.dimension_id for r in policy.required_regions)
+            ),
+        ),
     )
     unmet = []
     for required in policy.required_regions:

@@ -112,6 +112,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from itertools import combinations, product
 from typing import Any, ClassVar, cast
 
 # =============================================================================
@@ -1269,11 +1270,16 @@ class CoverageEngine:
         sparse_support_ratio: float = UNIVERSAL_SPARSE_SUPPORT_RATIO,
         repeated_support_ratio: float = UNIVERSAL_REPEATED_SUPPORT_RATIO,
         uncertainty_threshold: float = UNIVERSAL_UNCERTAINTY_THRESHOLD,
+        max_interaction_order: int = 1,
     ) -> None:
 
         self.sparse_support_ratio = sparse_support_ratio
         self.repeated_support_ratio = repeated_support_ratio
         self.uncertainty_threshold = uncertainty_threshold
+        self.max_interaction_order = max_interaction_order
+
+        if max_interaction_order not in (1, 2):
+            raise ValueError("max_interaction_order must be 1 or 2.")
 
         for value in (
             sparse_support_ratio,
@@ -1571,6 +1577,80 @@ class CoverageEngine:
                                 f"raw support={raw_count}, "
                                 f"lineage-aware support="
                                 f"{lineage_aware_count}."
+                            ),
+                        )
+                    )
+
+        if self.max_interaction_order == 2:
+            for dim_a, dim_b in combinations(schema.dimensions, 2):
+                pair_support: dict[str, list[tuple[str, float]]] = defaultdict(list)
+                pair_lookup: dict[
+                    str, tuple[tuple[str, Any], tuple[str, Any]]
+                ] = {}
+                for val_a, val_b in product(
+                    self._expected_values(dim_a), self._expected_values(dim_b)
+                ):
+                    coords = ((dim_a.dimension_id, val_a), (dim_b.dimension_id, val_b))
+                    pair_lookup[stable_hash(coords)] = coords
+                for mapping in mappings:
+                    map_a = mapping.mapping_for(dim_a.dimension_id)
+                    map_b = mapping.mapping_for(dim_b.dimension_id)
+                    if (
+                        map_a.status != MappingStatus.MAPPED
+                        or map_b.status != MappingStatus.MAPPED
+                    ):
+                        continue
+                    vals_a = self._normalize_dimension_values(dim_a, map_a.value)
+                    vals_b = self._normalize_dimension_values(dim_b, map_b.value)
+                    conf = min(map_a.confidence, map_b.confidence)
+                    for val_a, val_b in product(vals_a, vals_b):
+                        coords = (
+                            (dim_a.dimension_id, val_a),
+                            (dim_b.dimension_id, val_b),
+                        )
+                        key = stable_hash(coords)
+                        pair_lookup[key] = coords
+                        pair_support[key].append((mapping.artifact_id, conf))
+                for key in sorted(pair_lookup):
+                    coords = pair_lookup[key]
+                    items = pair_support.get(key, [])
+                    artifact_ids = tuple(aid for aid, _ in items)
+                    raw_count = len(artifact_ids)
+                    roots = {
+                        r
+                        for aid, _ in items
+                        for r in duplicate_lookup[aid].lineage_root_ids
+                    }
+                    dup_count = sum(
+                        len(duplicate_lookup[aid].conceptual_duplicate_of)
+                        for aid, _ in items
+                    )
+                    mean_conf = (
+                        sum(c for _, c in items) / raw_count if raw_count else 0.0
+                    )
+                    status = self._region_status(
+                        raw_count, total_artifacts, mean_conf
+                    )
+                    regions.append(
+                        CoverageRegion(
+                            region_id=stable_hash(
+                                {
+                                    "schema": (
+                                        schema.schema_id,
+                                        schema.schema_version,
+                                    ),
+                                    "coordinates": coords,
+                                }
+                            ),
+                            coordinates=coords,
+                            status=status,
+                            artifact_ids=artifact_ids,
+                            raw_artifact_count=raw_count,
+                            lineage_aware_count=len(roots),
+                            mean_mapping_confidence=mean_conf,
+                            conceptual_duplicate_count=dup_count,
+                            rationale=self._region_rationale(
+                                status, raw_count, total_artifacts, len(roots)
                             ),
                         )
                     )

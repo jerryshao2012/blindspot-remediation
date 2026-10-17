@@ -186,3 +186,32 @@ def test_reference_poc_runs():
     """Criterion 16 and 17: the end-to-end example executes."""
 
     edmr.run_reference_poc()
+
+
+def test_pairwise_interaction_coverage_regions():
+    """CoverageEngine(max_interaction_order=2) evaluates 2-way concept combinations."""
+
+    schema = edmr.build_example_evidence_schema()
+    mapper = edmr.RuleBasedArtifactConceptMapper(
+        rules=edmr.build_example_evidence_mapping_rules(),
+    )
+    engine = edmr.GenericDiversityEngine(
+        concept_mapper=mapper,
+        coverage_engine=edmr.CoverageEngine(max_interaction_order=2),
+    )
+    adapter = edmr.EvidenceDiversityMapperAdapter(engine=engine)
+    result = adapter.assess_evidence_bundle(
+        bundle=edmr.build_example_evidence_bundle(),
+        schema=schema,
+        budget=edmr.ResourceBudget(max_additional_artifacts=2),
+    )
+    pairwise = [r for r in result.coverage_regions if len(r.coordinates) == 2]
+    assert pairwise
+    auth_boundary = [
+        r
+        for r in pairwise
+        if r.coordinates == (("behavior_type", "boundary"), ("authorization", True))
+    ]
+    assert len(auth_boundary) == 1
+    assert auth_boundary[0].status is edmr.RegionStatus.ABSENT
+

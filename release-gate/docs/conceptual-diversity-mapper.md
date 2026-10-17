@@ -1,4 +1,4 @@
-> This engine is bundled with Release Gate. Install `release-gate`; no separate mapper package is required. Source: `src/conceptual_diversity_mapper/`. Evidence adapters: `src/release_gate/assurance/`. Reference example: `examples/E1_evidence_diversity_mapper_reference.py`.
+> This engine is bundled with Release Gate. Install `release-gate`; no separate mapper package is required. Source: `src/release_gate/conceptual_diversity_mapper/`. Evidence adapters: `src/release_gate/assurance/`. Reference example: `examples/E1_evidence_diversity_mapper_reference.py`.
 
 # Conceptual Diversity Mapper
 
@@ -1716,9 +1716,9 @@ The current implementation is maintained in one distribution:
 
 ```text
 release-gate/
-  src/conceptual_diversity_mapper/__init__.py   # generic engine
-  src/release_gate/assurance/adapter.py         # evidence contracts and adapter
-  src/release_gate/assurance/service.py         # release assurance integration
+  src/release_gate/conceptual_diversity_mapper/__init__.py  # generic engine
+  src/release_gate/assurance/adapter.py                     # evidence contracts and adapter
+  src/release_gate/assurance/service.py                     # release assurance integration
   examples/E1_evidence_diversity_mapper_reference.py
   tests/test_mapper_reference.py
   docs/conceptual-diversity-mapper.md

@@ -433,3 +433,61 @@ def test_spawned_normalization_preserves_declared_junit_reports(tmp_path):
     )
     assert missing["status"] == "UNAVAILABLE"
     assert missing["observation"] == {"reason": "report missing"}
+
+
+def test_assurance_emits_expansion_requests_for_gaps(tmp_path):
+    repo = setup_repo(tmp_path, mode="enforce", mapped=True)
+    _, result = assure(repo, tmp_path)
+    requests = result["coverage"]["expansion_requests"]
+    assert len(requests) == 1
+    assert requests[0]["requested_characteristics"] == [["Behavior", "normal"]]
+
+
+def test_python_ast_concept_inspector_and_normalization_signals(tmp_path):
+    from release_gate.assurance.evidence import inspect_python_test_concepts
+
+    py_src = (
+        b"import asyncio\n"
+        b"import pytest\n\n"
+        b"@pytest.mark.concept(behavior='boundary')\n"
+        b"def test_spoofed_without_assert():\n"
+        b"    pass\n\n"
+        b"class C:\n"
+        b"    @pytest.mark.concept(behavior='boundary')\n"
+        b"    async def boundary(self):\n"
+        b"        await asyncio.sleep(0.01)\n"
+        b"        with pytest.raises(ValueError):\n"
+        b"            raise ValueError('bad')\n"
+    )
+    signals = inspect_python_test_concepts(py_src)
+    assert signals["test_spoofed_without_assert"]["has_assertions"] is False
+    assert signals["test_spoofed_without_assert"]["verified_markers"] == {}
+    assert signals["C.boundary"] == {
+        "has_assertions": True,
+        "error_handling": True,
+        "concurrency": True,
+        "temporal_behavior": True,
+        "verified_markers": {"behavior": "boundary"},
+    }
+
+    xml = (
+        '<testsuite name="suite" tests="1">'
+        '<testcase classname="C" name="boundary"/>'
+        "</testsuite>"
+    )
+    repo = setup_repo(tmp_path, xml=xml)
+    (repo / "test_mod.py").write_bytes(py_src)
+    policy_path = repo / ".release-gate-assurance.yaml"
+    policy = yaml.safe_load(policy_path.read_text())
+    policy["mappings"][0]["sources"] = {
+        "test_mod.py": hashlib.sha256(py_src).hexdigest()
+    }
+    policy_path.write_text(yaml.safe_dump(policy))
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "map python test file")
+    (repo / "tracked.txt").write_text("candidate\n")
+
+    code, result = assure(repo, tmp_path)
+    assert code == 0
+    assert result["artifacts"][0]["ast_signals"] == signals["C.boundary"]
+

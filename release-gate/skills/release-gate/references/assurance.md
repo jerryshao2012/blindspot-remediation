@@ -63,3 +63,20 @@ bytecode caches are relevant.
 
 Initialization only proposes these controls from repository declarations. Never
 execute them during `init`.
+
+## Conceptual diversity assurance and expansion (`assure`)
+
+The `release-gate` CLI executes deterministically without an internal LLM so CI/CD
+runs remain reproducible and offline-safe. Semantic reasoning belongs in the host
+agent under human approval:
+
+1. **Result inspection**: After `release-gate assure --base <ref>`, read the linked
+   `_assurance/<run_id>/result.json`. Report `unmet_requirements`,
+   `coverage.expansion_requests`, and any `ast_signals` attached to Python test
+   artifacts (`has_assertions`, `error_handling`, `concurrency`, `temporal_behavior`,
+   `verified_markers`).
+2. **Closed-loop expansion (outside `assure`)**: Never mutate `.release-gate-assurance.yaml`
+   or generate tests during an `assure` invocation. When the user subsequently asks
+   to close reported gaps, use `coverage.expansion_requests` to draft targeted tests
+   with real assertions and present the proposed test and `.release-gate-assurance.yaml`
+   diff (with exact SHA-256 source digests) for explicit human review.

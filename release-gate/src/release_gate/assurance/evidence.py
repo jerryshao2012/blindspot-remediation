@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import time
@@ -99,6 +100,87 @@ def base_blob(capture: NormalizationInput, path: str, limit: int = 1048576) -> b
     return _source_git(capture.repository, "cat-file", "blob", spec)
 
 
+def inspect_python_test_concepts(source: bytes) -> dict[str, dict[str, Any]]:
+    """Deterministically extract AST structural signals from Python test sources."""
+    try:
+        tree = ast.parse(source.decode("utf-8"))
+    except (SyntaxError, UnicodeDecodeError, ValueError):
+        return {}
+    results: dict[str, dict[str, Any]] = {}
+
+    def visit_func(
+        node: ast.FunctionDef | ast.AsyncFunctionDef, prefix: str = ""
+    ) -> None:
+        names: set[str] = set()
+        has_assert = False
+        has_raises = False
+        has_await = isinstance(node, ast.AsyncFunctionDef)
+        for child in ast.walk(node):
+            if isinstance(child, ast.Assert):
+                has_assert = True
+            elif isinstance(child, ast.Await):
+                has_await = True
+            elif isinstance(child, ast.Try) and child.handlers:
+                has_raises = True
+            elif isinstance(child, ast.Name):
+                names.add(child.id)
+            elif isinstance(child, ast.Attribute):
+                names.add(child.attr)
+                if child.attr in ("raises", "assertRaises", "warns", "fail"):
+                    has_assert = True
+                if child.attr in ("raises", "assertRaises"):
+                    has_raises = True
+                if child.attr.startswith("assert"):
+                    has_assert = True
+        markers: dict[str, str | bool] = {}
+        if has_assert:
+            for dec in node.decorator_list:
+                if (
+                    isinstance(dec, ast.Call)
+                    and isinstance(dec.func, ast.Attribute)
+                    and dec.func.attr == "concept"
+                ):
+                    for kw in dec.keywords:
+                        if kw.arg and isinstance(kw.value, ast.Constant):
+                            if isinstance(kw.value.value, (str, bool)):
+                                markers[kw.arg] = kw.value.value
+        key = f"{prefix}.{node.name}" if prefix else node.name
+        results[key] = {
+            "has_assertions": has_assert,
+            "error_handling": has_assert and has_raises,
+            "concurrency": has_assert
+            and (
+                has_await
+                or bool(
+                    names
+                    & {
+                        "asyncio",
+                        "threading",
+                        "multiprocessing",
+                        "ThreadPoolExecutor",
+                        "ProcessPoolExecutor",
+                        "gather",
+                    }
+                )
+            ),
+            "temporal_behavior": has_assert
+            and bool(
+                names
+                & {"sleep", "monotonic", "freeze_time", "freezegun", "timeout"}
+            ),
+            "verified_markers": markers,
+        }
+
+    for item in tree.body:
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            visit_func(item)
+        elif isinstance(item, ast.ClassDef):
+            for sub in item.body:
+                if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    visit_func(sub, item.name)
+    return results
+
+
 def normalize(
     capture: CandidateCapture | NormalizationCapture,
     run: Path,
@@ -134,16 +216,20 @@ def normalize(
     artifacts: list[dict[str, Any]] = []
     total_bytes = 0
     source_validity: dict[str, bool] = {}
+    source_ast: dict[str, dict[str, dict[str, Any]]] = {}
     for mapping in policy.mappings:
         for source, expected_digest in mapping.sources.items():
             key = source + expected_digest
             if key not in source_validity:
                 try:
-                    source_validity[key] = (
+                    blob = base_blob(capture, source, 4194304)
+                    valid = (
                         source not in capture.changed_paths
-                        and digest(base_blob(capture, source, 4194304))
-                        == expected_digest
+                        and digest(blob) == expected_digest
                     )
+                    source_validity[key] = valid
+                    if valid and source.endswith(".py") and source not in source_ast:
+                        source_ast[source] = inspect_python_test_concepts(blob)
                 except (ValueError, OSError):
                     source_validity[key] = False
     mappings = {m.selector.model_dump_json(): m for m in policy.mappings}
@@ -183,6 +269,21 @@ def normalize(
             and checks[selector.check_id]["status"] == "PASS"
         )
         concepts = mapping.concepts if mapping and trusted and eligible else {}
+        ast_signals: dict[str, Any] | None = None
+        if mapping and trusted and selector.name:
+            short_cls = (selector.classname or "").rsplit(".", 1)[-1]
+            candidates = (
+                f"{short_cls}.{selector.name}" if short_cls else selector.name,
+                selector.name,
+            )
+            for src in mapping.sources:
+                table = source_ast.get(src, {})
+                for key_name in candidates:
+                    if key_name in table:
+                        ast_signals = table[key_name]
+                        break
+                if ast_signals is not None:
+                    break
         artifact_id = digest(
             json.dumps(
                 [capture.candidate_tree, selector.model_dump(), len(artifacts)],
@@ -191,28 +292,29 @@ def normalize(
         )
         # Duplicate observations within a check cannot create new independent support.
         content_hash = digest(json.dumps(observation, sort_keys=True).encode())
-        artifacts.append(
-            {
-                "evidence_id": artifact_id,
-                "selector": selector.model_dump(),
-                "status": status,
-                "eligible": eligible,
-                "mapping_trusted": trusted,
-                "concepts": concepts,
-                "independence_group": (mapping.independence_group if mapping else None)
-                or f"check:{selector.check_id}",
-                "reviewed_sources": mapping.sources if mapping else {},
-                "candidate_tree": capture.candidate_tree,
-                "patch_sha256": capture.patch_sha256,
-                "execution": record,
-                "observation": observation,
-                "report_path": report_path,
-                "report_sha256": inventory[report_path]["sha256"]
-                if report_path
-                else None,
-                "content_sha256": content_hash,
-            }
-        )
+        entry: dict[str, Any] = {
+            "evidence_id": artifact_id,
+            "selector": selector.model_dump(),
+            "status": status,
+            "eligible": eligible,
+            "mapping_trusted": trusted,
+            "concepts": concepts,
+            "independence_group": (mapping.independence_group if mapping else None)
+            or f"check:{selector.check_id}",
+            "reviewed_sources": mapping.sources if mapping else {},
+            "candidate_tree": capture.candidate_tree,
+            "patch_sha256": capture.patch_sha256,
+            "execution": record,
+            "observation": observation,
+            "report_path": report_path,
+            "report_sha256": inventory[report_path]["sha256"]
+            if report_path
+            else None,
+            "content_sha256": content_hash,
+        }
+        if ast_signals is not None:
+            entry["ast_signals"] = ast_signals
+        artifacts.append(entry)
 
     for check in declared_checks:
         check_id = check.id
