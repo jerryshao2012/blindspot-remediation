@@ -224,6 +224,9 @@ def test_combined_coverage_maps_all_runner_paths(tmp_path, monkeypatch):
         "/home/runner/work/project/project/release-gate/src/release_gate",
         "/Users/runner/work/project/project/release-gate/src/release_gate",
         r"D:\a\project\project\release-gate\src\release_gate",
+        "/tmp/release-gate-wheel-test/installed/release_gate",
+        r"C:\Users\runneradmin\AppData\Local\Temp\release-gate-wheel-test\installed\release_gate",
+        r"/home/runner/work/project/project/release-gate/C:\Users\runneradmin\AppData\Local\Temp\release-gate-wheel-test\installed\release_gate",
     )
     files = []
     for index, prefix in enumerate(runner_roots):
@@ -240,4 +243,4 @@ def test_combined_coverage_maps_all_runner_paths(tmp_path, monkeypatch):
     data = combined.get_data()
     canonical = str((product / "src/release_gate/__init__.py").resolve())
     assert set(data.measured_files()) == {canonical}
-    assert data.arcs(canonical) == [(1, 2), (2, 3), (3, 4)]
+    assert data.arcs(canonical) == [(i + 1, i + 2) for i in range(len(runner_roots))]

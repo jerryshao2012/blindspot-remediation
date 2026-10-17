@@ -74,7 +74,11 @@ branch = true
 source = ["release_gate"]
 
 [tool.coverage.paths]
-source = ["src/release_gate", "*/release-gate/src/release_gate"]
+source = [
+  "src/release_gate",
+  "*/release-gate/src/release_gate",
+  "*/release-gate-wheel-*/installed/release_gate",
+]
 
 [tool.coverage.report]
 fail_under = 80
