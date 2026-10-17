@@ -182,3 +182,14 @@ def test_promotion_reuses_rc_assets_and_never_deletes_or_rebuilds() -> None:
         'test "$(gh api "repos/$GITHUB_REPOSITORY/'
         'releases/tags/$RC_TAG" --jq .prerelease)" = true' in promotion
     )
+
+
+def test_ci_pins_subprocess_coverage_mode_and_configuration() -> None:
+    workflow = _workflow(CI)
+    command = next(
+        step["run"]
+        for step in workflow["jobs"]["test"]["steps"]
+        if step.get("name") == "Test"
+    )
+    assert "--cov-branch" in command
+    assert "--cov-config=pyproject.toml" in command

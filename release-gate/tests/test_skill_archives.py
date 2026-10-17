@@ -197,12 +197,16 @@ def test_archives_are_safe_normalized_and_have_expected_files(tmp_path: Path) ->
             ROOT / "skills" / "release-gate" / "references" / "compatibility.json"
         ).read_bytes()
     )
-    canonical_schema = (
-        ROOT / "src" / "release_gate" / "schemas" / "config-v1.schema.json"
-    ).read_bytes()
-    canonical_observability_schema = (
-        ROOT / "src" / "release_gate" / "schemas" / "gate-decisions-v1.schema.json"
-    ).read_bytes()
+    canonical_schema = _lf(
+        (
+            ROOT / "src" / "release_gate" / "schemas" / "config-v1.schema.json"
+        ).read_bytes()
+    )
+    canonical_observability_schema = _lf(
+        (
+            ROOT / "src" / "release_gate" / "schemas" / "gate-decisions-v1.schema.json"
+        ).read_bytes()
+    )
     canonical_initialization = _lf(
         (
             ROOT / "skills" / "release-gate" / "references" / "initialization.md"
@@ -364,3 +368,18 @@ def test_source_path_and_descriptor_ctimes_need_not_match(tmp_path, monkeypatch)
 
     monkeypatch.setattr(os, "lstat", path_stat)
     assert reader(source) == b"unchanged"
+
+
+def test_archive_expectations_are_checkout_line_ending_independent(
+    tmp_path, monkeypatch
+):
+    original = Path.read_bytes
+
+    def crlf_schema(path):
+        data = original(path)
+        if path.name.endswith(".schema.json"):
+            return _lf(data).replace(b"\n", b"\r\n")
+        return data
+
+    monkeypatch.setattr(Path, "read_bytes", crlf_schema)
+    test_archives_are_safe_normalized_and_have_expected_files(tmp_path)

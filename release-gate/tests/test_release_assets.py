@@ -135,12 +135,18 @@ def test_skill_archive_rejects_extra_and_special_members(tmp_path: Path) -> None
             archive_path,
             "copilot",
             __version__,
-            (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
-            (
+            verifier._normalized_text_bytes(
+                ROOT / "src/release_gate/schemas/config-v1.schema.json"
+            ),
+            verifier._normalized_text_bytes(
                 ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
-            ).read_bytes(),
-            (ROOT / "skills/release-gate/references/assurance.md").read_bytes(),
-            (ROOT / "skills/release-gate/references/repair.md").read_bytes(),
+            ),
+            verifier._normalized_text_bytes(
+                ROOT / "skills/release-gate/references/assurance.md"
+            ),
+            verifier._normalized_text_bytes(
+                ROOT / "skills/release-gate/references/repair.md"
+            ),
         )
 
 
@@ -167,13 +173,15 @@ def test_skill_archive_rejects_exact_names_with_swapped_path_types(
             ("release-gate/references/compatibility.json", compatibility),
             (
                 "release-gate/references/config-v1.schema.json",
-                (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
+                verifier._normalized_text_bytes(
+                    ROOT / "src/release_gate/schemas/config-v1.schema.json"
+                ),
             ),
             (
                 "release-gate/references/gate-decisions-v1.schema.json",
-                (
+                verifier._normalized_text_bytes(
                     ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
-                ).read_bytes(),
+                ),
             ),
             ("release-gate/references/initialization.md", b"reference"),
             ("release-gate/references/assurance.md", b"assurance reference"),
@@ -188,12 +196,18 @@ def test_skill_archive_rejects_exact_names_with_swapped_path_types(
             archive_path,
             "copilot",
             __version__,
-            (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
-            (
+            verifier._normalized_text_bytes(
+                ROOT / "src/release_gate/schemas/config-v1.schema.json"
+            ),
+            verifier._normalized_text_bytes(
                 ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
-            ).read_bytes(),
-            (ROOT / "skills/release-gate/references/assurance.md").read_bytes(),
-            (ROOT / "skills/release-gate/references/repair.md").read_bytes(),
+            ),
+            verifier._normalized_text_bytes(
+                ROOT / "skills/release-gate/references/assurance.md"
+            ),
+            verifier._normalized_text_bytes(
+                ROOT / "skills/release-gate/references/repair.md"
+            ),
         )
 
 
@@ -216,10 +230,16 @@ def test_skill_archive_rejects_observability_schema_mismatch(tmp_path: Path) -> 
             archive_path,
             "copilot",
             __version__,
-            (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
+            verifier._normalized_text_bytes(
+                ROOT / "src/release_gate/schemas/config-v1.schema.json"
+            ),
             b"not the canonical observability schema",
-            (ROOT / "skills/release-gate/references/assurance.md").read_bytes(),
-            (ROOT / "skills/release-gate/references/repair.md").read_bytes(),
+            verifier._normalized_text_bytes(
+                ROOT / "skills/release-gate/references/assurance.md"
+            ),
+            verifier._normalized_text_bytes(
+                ROOT / "skills/release-gate/references/repair.md"
+            ),
         )
 
 
@@ -242,12 +262,16 @@ def test_skill_archive_rejects_assurance_reference_mismatch(tmp_path: Path) -> N
             archive_path,
             "copilot",
             __version__,
-            (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
-            (
+            verifier._normalized_text_bytes(
+                ROOT / "src/release_gate/schemas/config-v1.schema.json"
+            ),
+            verifier._normalized_text_bytes(
                 ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
-            ).read_bytes(),
+            ),
             b"not the canonical assurance reference",
-            (ROOT / "skills/release-gate/references/repair.md").read_bytes(),
+            verifier._normalized_text_bytes(
+                ROOT / "skills/release-gate/references/repair.md"
+            ),
         )
 
 
@@ -270,11 +294,15 @@ def test_skill_archive_rejects_repair_reference_mismatch(tmp_path: Path) -> None
             archive_path,
             "copilot",
             __version__,
-            (ROOT / "src/release_gate/schemas/config-v1.schema.json").read_bytes(),
-            (
+            verifier._normalized_text_bytes(
+                ROOT / "src/release_gate/schemas/config-v1.schema.json"
+            ),
+            verifier._normalized_text_bytes(
                 ROOT / "src/release_gate/schemas/gate-decisions-v1.schema.json"
-            ).read_bytes(),
-            (ROOT / "skills/release-gate/references/assurance.md").read_bytes(),
+            ),
+            verifier._normalized_text_bytes(
+                ROOT / "skills/release-gate/references/assurance.md"
+            ),
             b"not the canonical repair reference",
         )
 

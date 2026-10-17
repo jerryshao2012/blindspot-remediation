@@ -283,8 +283,9 @@ def test_stale_or_corrupt_cache_is_recovered_by_rescan(tmp_path: Path) -> None:
     assert "OBSERVABILITY_HISTORY_INVALID" in result.warning_codes
 
 
+@pytest.mark.parametrize("backend", _BACKENDS)
 def test_partial_replace_failure_leaves_the_other_file_readable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
 ) -> None:
     import release_gate.observability_runtime as runtime
     from release_gate.observability_runtime import RefreshSession
@@ -301,17 +302,18 @@ def test_partial_replace_failure_leaves_the_other_file_readable(
     ) -> None:
         nonlocal calls
         calls += 1
-        if calls == 2:
+        if calls >= 2:
             raise OSError("replace denied")
         original(source, target, **kwargs)
 
-    if os.name == "nt":
+    if backend == "windows":
+        monkeypatch.setattr(runtime, "_uses_windows_backend", lambda: True)
         original_windows = runtime._replace_windows_child
 
         def fail_second_windows(directory_fd, staged, target):
             nonlocal calls
             calls += 1
-            if calls == 2:
+            if calls >= 2:
                 raise OSError("replace denied")
             original_windows(directory_fd, staged, target)
 
