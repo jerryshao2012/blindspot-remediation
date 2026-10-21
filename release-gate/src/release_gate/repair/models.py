@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, cast
 
 from pydantic import TypeAdapter
 
@@ -51,7 +51,9 @@ def sha256_file(path: Path) -> str:
 
 class _RepairModel:
     def to_dict(self) -> dict[str, Any]:
-        return TypeAdapter(type(self)).dump_python(self, mode="json")
+        return cast(
+            dict[str, Any], TypeAdapter(type(self)).dump_python(self, mode="json")
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:

@@ -518,6 +518,8 @@ def approve_repair(session_dir: Path, approval_file: Path) -> RepairSessionOutco
         )
 
     approval_data = json.loads(approval_file.read_text(encoding="utf-8"))
+    if not isinstance(approval_data, dict):
+        raise ValueError("approval must be a JSON object")
     if approval_data.get("session_id") != session.session_id:
         raise ValueError("approval session_id mismatch")
 

@@ -448,3 +448,42 @@ def test_evaluation_error_keeps_session_recoverable(
     assert cancel_repair(started.session_dir).state is RepairState.CANCELLED
     assert not started.workspace_path.parent.exists()
     assert (repo / "calc.py").read_text() == original
+
+
+@pytest.mark.parametrize("approval_json", ["[]", "null", '"approved"', "42", "true"])
+def test_cli_rejects_non_object_start_approval(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], approval_json: str
+) -> None:
+    from release_gate.cli import main
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    (repo / "calc.py").write_text("def multiply(a, b): return a + b\n")
+    started = start_repair(repo, output=tmp_path / "evidence")
+    try:
+        approval = tmp_path / "approval.json"
+        approval.write_text(approval_json)
+        assert (
+            main(
+                [
+                    "repair-approve",
+                    "--session",
+                    str(started.session_dir),
+                    "--approval",
+                    str(approval),
+                ]
+            )
+            == 3
+        )
+        diagnostic = capsys.readouterr().err
+        assert "approval must be a JSON object" in diagnostic
+        assert "internal" not in diagnostic
+        evidence = RepairEvidence(started.session_dir, started.session_id)
+        assert evidence.read_session().state is RepairState.AWAITING_APPROVAL
+        approval.write_text(json.dumps({"session_id": started.session_id}))
+        assert (
+            approve_repair(started.session_dir, approval).state is RepairState.REPAIRING
+        )
+    finally:
+        cancel_repair(started.session_dir)
