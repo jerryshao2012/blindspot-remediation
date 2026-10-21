@@ -266,8 +266,11 @@ V1 parsers expose these JSON-shaped metrics:
   `NEEDS_HUMAN`; mixed parent totals cannot be aggregated safely without a
   declared counting convention.
 - `coverage-json`: `/percent_covered`, `/covered_lines`, `/missing_lines`,
-  `/excluded_lines`, and `/statements` from coverage.py totals.
+  `/excluded_lines`, and `/statements` from coverage.py totals. Percentages must
+  be between 0 and 100 inclusive; counts must be nonnegative integers.
 - `json-metrics`: the parsed JSON value itself; it must contain only JSON data.
+  JSON nesting that exceeds the parser or validator recursion limit is a report
+  parse error, producing `NEEDS_HUMAN` with finalized evidence.
 
 `metric` is an RFC 6901 JSON Pointer. The empty pointer `""` selects the entire
 parsed JSON value, which permits scalar-root `json-metrics` assertions while

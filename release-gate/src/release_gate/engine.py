@@ -433,8 +433,6 @@ def _run_checks(
             assertions=assertions,
             diagnostics=tuple(sorted(report_errors)),
         )
-        if report_errors:
-            outcome = replace(outcome, status=CheckStatus.ERROR)
         outcomes.append(outcome)
         trace.add(
             "check_finished",

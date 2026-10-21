@@ -219,3 +219,47 @@ def test_junit_leaf_cannot_hide_failure(tmp_path: Path, counter: str | None) -> 
     else:
         with pytest.raises(ReportError):
             parse_report(ReportParser.JUNIT_XML, path, 10_000)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("percent_covered", -1), ("percent_covered", 100.1),
+     ("percent_covered", 1000), ("covered_lines", -1),
+     ("missing_lines", -1), ("excluded_lines", -1),
+     ("num_statements", -1), ("covered_lines", 1.5)],
+)
+def test_coverage_rejects_impossible_values(tmp_path: Path, field: str, value) -> None:
+    totals = {"percent_covered": 100, "covered_lines": 1, "missing_lines": 0,
+              "excluded_lines": 0, "num_statements": 1}
+    totals[field] = value
+    path = tmp_path / "coverage.json"
+    path.write_text(json.dumps({"totals": totals}))
+
+    with pytest.raises(ReportError):
+        parse_report(ReportParser.COVERAGE_JSON, path, 10_000)
+
+
+@pytest.mark.parametrize(
+    "parser", [ReportParser.JSON_METRICS, ReportParser.COVERAGE_JSON]
+)
+def test_deep_json_is_report_error(tmp_path: Path, parser: ReportParser) -> None:
+    path = tmp_path / "deep.json"
+    path.write_bytes(b"[" * 1500 + b"0" + b"]" * 1500)
+
+    with pytest.raises(ReportError, match="parse failed"):
+        parse_report(parser, path, 10_000)
+
+
+@pytest.mark.parametrize("percentage", [0, 100])
+def test_coverage_accepts_percentage_boundaries(
+    tmp_path: Path, percentage: int
+) -> None:
+    path = tmp_path / "coverage.json"
+    path.write_text(json.dumps({"totals": {
+        "percent_covered": percentage, "covered_lines": int(percentage == 100),
+        "missing_lines": int(percentage == 0), "excluded_lines": 0, "num_statements": 1,
+    }}))
+
+    assert parse_report(ReportParser.COVERAGE_JSON, path, 10_000)[
+        "percent_covered"
+    ] == percentage

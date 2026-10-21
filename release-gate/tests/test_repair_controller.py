@@ -371,3 +371,44 @@ def test_changed_session_scope_is_rejected_before_approval(tmp_path: Path) -> No
 
     assert (started.session_dir / "repair-manifest.json").read_bytes() == manifest
     shutil.rmtree(started.workspace_path.parent)
+
+
+@pytest.mark.parametrize("recovery", ["retry", "cancel"])
+def test_rejected_apply_keeps_session_recoverable(
+    tmp_path: Path, recovery: str
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    original = "def multiply(a,b): return a+b\n"
+    (repo / "calc.py").write_text(original)
+    started = start_repair(repo)
+    approval = tmp_path / "approve.json"
+    approval.write_text(json.dumps({"session_id": started.session_id}))
+    approve_repair(started.session_dir, approval)
+    fixed = "def multiply(a,b): return a*b # repaired\n"
+    (started.workspace_path / "calc.py").write_text(fixed)
+    evaluated = evaluate_repair(started.session_dir)
+    passing = evaluated.session.attempts[-1]
+    approval.write_text(json.dumps(FinalApproval(
+        started.session_id, passing.candidate_tree, passing.patch_digest,
+        "2026-10-21T00:00:00Z",
+    ).to_dict()))
+    changed = original + "# intervening edit\n"
+    (repo / "calc.py").write_text(changed)
+
+    with pytest.raises(RuntimeError, match="source_changed"):
+        apply_repair(started.session_dir, approval)
+
+    assert (repo / "calc.py").read_text() == changed
+    RepairEvidence(started.session_dir, started.session_id).verify_manifest()
+    finalized = finalize_repair(started.session_dir)
+    assert finalized.state is RepairState.AWAITING_FINAL_APPROVAL
+    if recovery == "retry":
+        (repo / "calc.py").write_text(original)
+        assert apply_repair(started.session_dir, approval).state is RepairState.APPLIED
+        assert (repo / "calc.py").read_text() == fixed
+    else:
+        assert cancel_repair(started.session_dir).state is RepairState.CANCELLED
+        assert (repo / "calc.py").read_text() == changed
+    assert not started.workspace_path.exists()

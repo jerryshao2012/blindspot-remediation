@@ -98,7 +98,10 @@ def combine_check(
     assertion_reasons = {
         reason for outcome in assertions for reason in outcome.reason_codes
     }
-    if any(outcome.state is AssertionState.ERROR for outcome in assertions):
+    if any(
+        reason not in {"OPTIONAL_REPORT_MISSING", "STREAM_TRUNCATED"}
+        for reason in diagnostics
+    ) or any(outcome.state is AssertionState.ERROR for outcome in assertions):
         status = CheckStatus.ERROR
     elif status is not CheckStatus.ERROR and any(
         outcome.state is AssertionState.FAIL for outcome in assertions

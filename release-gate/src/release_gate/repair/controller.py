@@ -882,6 +882,7 @@ def apply_repair(session_dir: Path, approval_file: Path) -> RepairSessionOutcome
     original_patch = (repair_ev.session_dir / "C0.patch").read_bytes()
 
     repair_ev.write_final_approval(final_approval)
+    repair_ev.write_manifest()
 
     apply_candidate_to_source(
         Path(session.repo_path),

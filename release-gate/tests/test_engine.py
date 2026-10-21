@@ -893,3 +893,34 @@ def test_mixed_junit_report_cannot_pass_zero_failures_assertion(tmp_path: Path) 
     assert result["checks"][0]["status"] == "ERROR"
     assert "REPORT_PARSE_FAILED" in result["checks"][0]["reason_codes"]
     verify_run(outcome.result_path.parent)
+
+
+@pytest.mark.parametrize("parser", ["json-metrics", "coverage-json"])
+def test_invalid_report_finishes_with_needs_human(tmp_path: Path, parser: str) -> None:
+    content = (
+        "[" * 1500 + "0" + "]" * 1500 if parser == "json-metrics"
+        else json.dumps({"totals": {
+            "percent_covered": 1000, "covered_lines": 1, "missing_lines": 0,
+            "excluded_lines": 0, "num_statements": 1,
+        }})
+    )
+    command = [sys.executable, "-c",
+               f"from pathlib import Path;Path('report.json').write_text({content!r})"]
+    repo = repository(tmp_path, command)
+    with (repo / ".release-gate.yaml").open("a") as stream:
+        stream.write(f"""\
+    reports:
+      - id: metrics
+        parser: {parser}
+        path: report.json
+""")
+    git(repo, "add", ".release-gate.yaml")
+    git(repo, "commit", "-qm", "declare report")
+
+    outcome = engine.run_gate(repo, base="HEAD", output=tmp_path / "evidence")
+
+    assert outcome.exit_code == 2
+    result = json.loads(outcome.result_path.read_bytes())
+    assert result["checks"][0]["status"] == "ERROR"
+    assert "REPORT_PARSE_FAILED" in result["checks"][0]["reason_codes"]
+    verify_run(outcome.result_path.parent)

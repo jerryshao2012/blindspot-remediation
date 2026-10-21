@@ -176,6 +176,7 @@ def _parse_bytes(parser: ReportParser, content: bytes) -> object:
     except (
         DefusedXmlException,
         ParseError,
+        RecursionError,
         UnicodeDecodeError,
         ValueError,
         TypeError,
@@ -241,6 +242,11 @@ def _parse_coverage(content: bytes) -> dict[str, int | float]:
             raise ValueError(f"coverage metric is missing: {source}")
         if not math.isfinite(float(metric)):
             raise ValueError(f"coverage metric is non-finite: {source}")
+        if output == "percent_covered":
+            if not 0 <= metric <= 100:
+                raise ValueError("coverage percentage is outside 0 through 100")
+        elif not isinstance(metric, int) or metric < 0:
+            raise ValueError(f"coverage count must be a nonnegative integer: {source}")
         result[output] = metric
     return result
 

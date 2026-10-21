@@ -302,6 +302,10 @@ workspace. Unmarked workspaces from older versions are retained for manual
 cleanup. A cleanup failure is reported after the terminal state is saved;
 `repair-finalize` can retry it.
 
+Final approval and its inventory are saved before applying source changes. If
+source verification rejects apply, the session remains valid and can be finalized
+or canceled. Apply can be retried once the source matches `C0` again.
+
 Keep approval input files outside the managed session directory; unexpected files
 inside that directory fail session inventory verification.
 
