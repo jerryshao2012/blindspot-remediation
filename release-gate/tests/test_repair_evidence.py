@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -67,6 +68,7 @@ def test_repair_evidence_lifecycle(tmp_path: Path) -> None:
         updated_at="2026-08-21T21:05:00Z",
     )
     repair_ev.write_session(session)
+    repair_ev.write_manifest()
     assert repair_ev.read_session() == session
 
     # Write summary
@@ -115,3 +117,33 @@ def test_observability_ignores_repairs_directory(tmp_path: Path) -> None:
 def test_repair_evidence_rejects_path_escaping_session_id(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="session ID"):
         RepairEvidence.create(tmp_path, "../escape")
+
+
+@pytest.mark.parametrize(
+    "damage", ["changed", "missing", "extra", "manifest", "duplicate", "path"]
+)
+def test_session_inventory_rejects_invalid_evidence(
+    tmp_path: Path, damage: str
+) -> None:
+    evidence = RepairEvidence.create(tmp_path, "rep-verify")
+    artifact = evidence.session_dir / "C0.patch"
+    artifact.write_bytes(b"original")
+    manifest = evidence.write_manifest()
+    manifest_path = evidence.session_dir / "repair-manifest.json"
+    if damage == "changed":
+        artifact.write_bytes(b"modified")
+    elif damage == "missing":
+        artifact.unlink()
+    elif damage == "extra":
+        (evidence.session_dir / "extra.patch").write_bytes(b"extra")
+    elif damage == "manifest":
+        manifest_path.unlink()
+    else:
+        if damage == "duplicate":
+            manifest["artifacts"].append(manifest["artifacts"][0])
+        else:
+            manifest["artifacts"][0]["path"] = "../outside"
+        manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(ValueError, match="repair evidence"):
+        evidence.verify_manifest()

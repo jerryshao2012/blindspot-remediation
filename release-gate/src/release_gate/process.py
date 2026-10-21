@@ -172,8 +172,11 @@ def run_command(
                 stdout_thread.join(timeout=2)
                 stderr_thread.join(timeout=2)
 
-        stdout_evidence = captured.get("stdout") or _stream_evidence(stdout_path, b"")
-        stderr_evidence = captured.get("stderr") or _stream_evidence(stderr_path, b"")
+        if stdout_thread.is_alive() or stderr_thread.is_alive() or len(captured) != 2:
+            raise RuntimeError("unable to complete command stream capture")
+
+        stdout_evidence = captured["stdout"]
+        stderr_evidence = captured["stderr"]
         duration_ms = _duration_ms(started)
         if timed_out:
             return ExecutionResult(
@@ -383,6 +386,8 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
             pass
         process.wait(timeout=2)
 
+    _terminate_remaining_group(process)
+
 
 def _terminate_remaining_group(process: subprocess.Popen[bytes]) -> None:
     if sys.platform == "win32":
@@ -393,3 +398,9 @@ def _terminate_remaining_group(process: subprocess.Popen[bytes]) -> None:
         return
     except OSError:
         return
+
+    time.sleep(0.1)
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, OSError):
+        pass

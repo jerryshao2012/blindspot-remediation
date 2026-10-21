@@ -302,6 +302,9 @@ workspace. Unmarked workspaces from older versions are retained for manual
 cleanup. A cleanup failure is reported after the terminal state is saved;
 `repair-finalize` can retry it.
 
+Keep approval input files outside the managed session directory; unexpected files
+inside that directory fail session inventory verification.
+
 Protocol commands emit line-oriented status headers:
 - `REPAIR_SESSION: <path>`
 - `REPAIR_STATE: <state>`

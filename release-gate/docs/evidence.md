@@ -447,4 +447,8 @@ Repair sessions write chained lifecycle artifacts under `<evidence_root>/_repair
 └── ...
 ```
 
-The repair evidence namespace is isolated from ordinary gate runs. Observability scanners explicitly skip `_repairs` directories so that repair iterations do not pollute release trend metrics or rolling window statistics. All session documents are validated with SHA-256 digests in `repair-manifest.json`.
+The repair evidence namespace is isolated from ordinary gate runs. Observability scanners explicitly skip `_repairs` directories so that repair iterations do not pollute release trend metrics or rolling window statistics. Before session state is consumed, its complete file inventory, sizes, and SHA-256
+hashes are checked against `repair-manifest.json`. Missing or changed files,
+extra entries, duplicate inventory paths, and symbolic links stop the command.
+`repair-finalize` also requires valid existing evidence; it cannot bless changes
+by replacing their manifest.

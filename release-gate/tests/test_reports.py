@@ -205,3 +205,17 @@ def test_rejects_mixed_junit_suites_instead_of_losing_parent_failures(
     )
     with pytest.raises(ReportError, match="parse"):
         parse_report(ReportParser.JUNIT_XML, path, 10_000)
+
+
+@pytest.mark.parametrize("counter", [None, ' failures="0"'])
+def test_junit_leaf_cannot_hide_failure(tmp_path: Path, counter: str | None) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        f'<testsuite tests="1"{counter or ""}>'
+        '<testcase name="broken"><failure>bad</failure></testcase></testsuite>'
+    )
+    if counter is None:
+        assert parse_report(ReportParser.JUNIT_XML, path, 10_000)["failures"] == 1
+    else:
+        with pytest.raises(ReportError):
+            parse_report(ReportParser.JUNIT_XML, path, 10_000)

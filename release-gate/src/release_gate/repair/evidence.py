@@ -98,6 +98,7 @@ class RepairEvidence:
         self._atomic_write(SESSION_FILENAME, data)
 
     def read_session(self) -> RepairSession:
+        self.verify_manifest()
         path = self.session_dir / SESSION_FILENAME
         if not path.exists():
             raise FileNotFoundError(f"repair session file not found: {path}")
@@ -200,6 +201,51 @@ class RepairEvidence:
         ).encode("utf-8")
         self._atomic_write(MANIFEST_FILENAME, manifest_bytes)
         return manifest
+
+    def verify_manifest(self) -> None:
+        """Reject incomplete or changed session evidence before consuming state."""
+        try:
+            manifest_path = self.session_dir / MANIFEST_FILENAME
+            if manifest_path.is_symlink():
+                raise ValueError("unsafe manifest")
+            manifest = self.read_manifest()
+            if (
+                manifest is None
+                or manifest.get("version") != 1
+                or manifest.get("session_id") != self.session_id
+                or not isinstance(manifest.get("artifacts"), list)
+            ):
+                raise ValueError("invalid manifest")
+            records = {}
+            for record in manifest["artifacts"]:
+                name = record["path"]
+                if (
+                    not isinstance(name, str)
+                    or not name
+                    or name in {".", "..", MANIFEST_FILENAME}
+                    or "/" in name
+                    or "\\" in name
+                    or name in records
+                ):
+                    raise ValueError("invalid inventory path")
+                records[name] = record
+            actual = {
+                p.name: p for p in self.session_dir.iterdir()
+                if p.name != MANIFEST_FILENAME
+            }
+            if records.keys() != actual.keys():
+                raise ValueError("inventory mismatch")
+            for name, path in actual.items():
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError("unsafe artifact")
+                data = path.read_bytes()
+                if (
+                    len(data) != records[name]["size_bytes"]
+                    or sha256_bytes(data) != records[name]["sha256"]
+                ):
+                    raise ValueError("artifact changed")
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            raise ValueError("invalid repair evidence: " + str(error)) from error
 
     def read_manifest(self) -> dict[str, Any] | None:
         path = self.session_dir / MANIFEST_FILENAME

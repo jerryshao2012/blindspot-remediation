@@ -269,8 +269,26 @@ def _parse_junit(content: bytes) -> dict[str, int | float]:
         "duration_seconds": 0.0,
     }
     for suite in leaves:
+        cases = [child for child in suite if _local_name(child) == "testcase"]
+        observed = {"tests": len(cases), "failures": 0, "errors": 0, "skipped": 0}
+        for case in cases:
+            tags = {_local_name(child) for child in case}
+            status = (case.get("status") or case.get("result") or "").casefold()
+            if "error" in tags or status in {"error", "errored"}:
+                observed["errors"] += 1
+            elif "failure" in tags or status in {"fail", "failed", "failure"}:
+                observed["failures"] += 1
+            elif "skipped" in tags or status in {
+                "notrun", "disabled", "skip", "skipped"
+            }:
+                observed["skipped"] += 1
         for field in ("tests", "failures", "errors", "skipped"):
-            totals[field] += _integer_attribute(suite, field)
+            value = _integer_attribute(suite, field)
+            if cases:
+                if field in suite.attrib and value != observed[field]:
+                    raise ValueError(f"JUnit counter contradicts testcases: {field}")
+                value = observed[field]
+            totals[field] += value
         duration = float(suite.attrib.get("time", "0"))
         if not math.isfinite(duration) or duration < 0:
             raise ValueError("invalid JUnit duration")

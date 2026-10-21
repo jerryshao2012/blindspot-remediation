@@ -20,6 +20,7 @@ from release_gate.repair.controller import (
     request_repair,
     start_repair,
 )
+from release_gate.repair.evidence import RepairEvidence
 from release_gate.repair.models import (
     FinalApproval,
     RepairState,
@@ -242,6 +243,7 @@ def test_apply_rejects_invalid_passing_evidence(tmp_path: Path, damage: str) -> 
         data = json.loads(session_path.read_bytes())
         data["attempts"][-1][damage] = "0" * (40 if damage == "candidate_tree" else 64)
         session_path.write_text(json.dumps(data))
+        RepairEvidence(started.session_dir, started.session_id).write_manifest()
     final = FinalApproval(
         started.session_id, passing.candidate_tree, passing.patch_digest,
         "2026-10-20T00:00:00Z",
@@ -316,6 +318,7 @@ def test_cancel_does_not_delete_unowned_workspace(tmp_path: Path) -> None:
     session = json.loads(path.read_bytes())
     session["workspace_path"] = str(repo)
     path.write_text(json.dumps(session))
+    RepairEvidence(started.session_dir, started.session_id).write_manifest()
 
     cancel_repair(started.session_dir)
 
@@ -347,3 +350,24 @@ def test_cleanup_failure_preserves_terminal_state_and_can_be_retried(
     finalize_repair(started.session_dir)
     assert not started.workspace_path.parent.exists()
     assert (started.session_dir / "C0.patch").exists()
+
+
+def test_changed_session_scope_is_rejected_before_approval(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    (repo / "calc.py").write_text("def multiply(a,b): return a+b\n")
+    started = start_repair(repo)
+    path = started.session_dir / "repair-session-v1.json"
+    data = json.loads(path.read_bytes())
+    data["approved_paths"].append("extra.py")
+    path.write_text(json.dumps(data))
+    approval = tmp_path / "approve.json"
+    approval.write_text(json.dumps({"session_id": started.session_id}))
+    manifest = (started.session_dir / "repair-manifest.json").read_bytes()
+
+    with pytest.raises(ValueError, match="repair evidence"):
+        approve_repair(started.session_dir, approval)
+
+    assert (started.session_dir / "repair-manifest.json").read_bytes() == manifest
+    shutil.rmtree(started.workspace_path.parent)

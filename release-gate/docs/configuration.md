@@ -217,6 +217,11 @@ a safely finalized operator interruption all use a null exit code and
 `timed_out: false`, and no metrics. Platform-specific termination statuses are
 normalized to these records before policy aggregation.
 
+On POSIX, surviving members of the command's process group receive `SIGTERM`
+followed by `SIGKILL` after a short grace period, including when the parent has
+already exited. Stream capture must finish before a command result is returned;
+incomplete capture is an internal engine failure (exit 4), never a passing check.
+
 ## Modes and severities
 
 `candidate` runs only against the reconstructed candidate. `differential`
@@ -254,7 +259,9 @@ V1 parsers expose these JSON-shaped metrics:
 
 - `junit-xml`: `/tests`, `/failures`, `/errors`, `/skipped`, and
   `/duration_seconds`, aggregated across suites without resolving external
-  entities. A suite containing both direct testcases and child suites is
+  entities. Leaf suites with testcases derive missing counters from case outcomes
+  and reject supplied counters that contradict those outcomes. Summary-only
+  suites retain their declared counters. A suite containing both direct testcases and child suites is
   rejected as `REPORT_PARSE_FAILED`, making the check `ERROR` and the verdict
   `NEEDS_HUMAN`; mixed parent totals cannot be aggregated safely without a
   declared counting convention.

@@ -289,3 +289,49 @@ def test_windows_environment_preserves_system_directory(tmp_path, monkeypatch):
     assert not missing
     assert environment["SystemRoot"] == "C:\\Windows"
     assert "SECRET" not in environment
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process groups")
+def test_normal_exit_kills_child_ignoring_sigterm(tmp_path: Path) -> None:
+    ready = tmp_path / "ready"
+    child = (
+        "import os,signal,time; from pathlib import Path; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        f"Path({str(ready)!r}).write_text(str(os.getpid())); time.sleep(60)"
+    )
+    parent = (
+        "import subprocess,sys,time; from pathlib import Path; "
+        f"subprocess.Popen([sys.executable,'-c',{child!r}]); "
+        f"ready=Path({str(ready)!r})\n"
+        "while not ready.exists(): time.sleep(0.01)\n"
+    )
+    try:
+        started = time.monotonic()
+        run_command(
+            command(parent), workspace=tmp_path,
+            artifact_dir=tmp_path / "logs", stream_limit=100,
+        )
+        pid = int(ready.read_text())
+        assert time.monotonic() - started < 8
+        assert (
+            not psutil.pid_exists(pid)
+            or psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
+        )
+    finally:
+        if ready.exists():
+            try:
+                os.kill(int(ready.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+def test_missing_stream_capture_cannot_return_pass(tmp_path: Path, monkeypatch) -> None:
+    def missing_capture(pipe, *args):
+        pipe.close()
+
+    monkeypatch.setattr(process_module, "_drain", missing_capture)
+    with pytest.raises(RuntimeError, match="stream capture"):
+        run_command(
+            command("pass"), workspace=tmp_path,
+            artifact_dir=tmp_path / "logs", stream_limit=100,
+        )
