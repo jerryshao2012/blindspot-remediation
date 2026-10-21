@@ -24,6 +24,7 @@ from release_gate.conceptual_diversity_mapper import (
     MappingRule,
     ResourceBudget,
     RuleBasedArtifactConceptMapper,
+    stable_hash,
 )
 from release_gate.config import ConfigError
 from release_gate.engine import GateInputError, run_captured_gate
@@ -32,7 +33,13 @@ from release_gate.git import CandidateCapture, CaptureError, capture_candidate
 from release_gate.policy import Verdict
 from release_gate.reports import _read_regular_file
 
-from .adapter import EvidenceArtifact, EvidenceBundle, EvidenceDiversityMapperAdapter
+from .adapter import (
+    EvidenceArtifact,
+    EvidenceBundle,
+    EvidenceCoverageGap,
+    EvidenceDiversityMapperAdapter,
+    EvidenceExpansionRequest,
+)
 from .evidence import (
     AssessmentUnavailable,
     NormalizationCapture,
@@ -190,7 +197,44 @@ def _assess(
         not unmet
         and coverage.mapping_uncertainty_rate <= policy.maximum_mapping_uncertainty_rate
     )
-    return asdict(coverage), unmet, sufficient
+    assessment = asdict(coverage)
+    if unmet:
+        requests = []
+        gaps = list(coverage.coverage_gaps)
+        for requirement in unmet:
+            dimension = schema.dimension_by_id(requirement["dimension_id"])
+            missing = (
+                requirement["minimum_independent_support"]
+                - requirement["independent_support"]
+            )
+            gap_id = stable_hash([candidate, "required-support", requirement])
+            rationale = f"Requires {missing} additional independent observations."
+            gaps.append(
+                EvidenceCoverageGap(
+                    gap_id=gap_id,
+                    evidence_dimension=dimension.name,
+                    desired_evidence_characteristic=requirement["value"],
+                    lineage_aware_support=requirement["independent_support"],
+                    uncertainty=0.0,
+                    priority=1.0,
+                    rationale=rationale,
+                )
+            )
+            requests.append(
+                EvidenceExpansionRequest(
+                    request_id=stable_hash([gap_id, "expansion"]),
+                    source_gap_id=gap_id,
+                    requested_characteristics=((dimension.name, requirement["value"]),),
+                    maximum_additional_evidence=missing,
+                    priority=1.0,
+                    rationale=rationale,
+                )
+            )
+        assessment["coverage_gaps"] = tuple(asdict(gap) for gap in gaps)
+        assessment["expansion_requests"] = tuple(
+            asdict(request) for request in requests
+        )
+    return assessment, unmet, sufficient
 
 
 def persist(root: Path, result: AssuranceResult, policy_bytes: bytes) -> Path:

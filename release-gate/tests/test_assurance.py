@@ -443,6 +443,29 @@ def test_assurance_emits_expansion_requests_for_gaps(tmp_path):
     assert requests[0]["requested_characteristics"] == [["Behavior", "normal"]]
 
 
+@pytest.mark.parametrize("minimum,mapped", [(2, True), (4, True), (3, False)])
+def test_expansion_requests_target_missing_independent_support(
+    tmp_path, minimum, mapped
+):
+    repo = setup_repo(tmp_path, minimum=minimum, mapped=mapped)
+    code, result = assure(repo, tmp_path)
+
+    assert code == 2
+    support = 1 if mapped else 0
+    assert result["unmet_requirements"][0]["independent_support"] == support
+    requests = result["coverage"]["expansion_requests"]
+    assert len(requests) == 1
+    request = requests[0]
+    assert request["requested_characteristics"] == [["Behavior", "boundary"]]
+    assert request["maximum_additional_evidence"] == minimum - support
+    gap = next(
+        gap for gap in result["coverage"]["coverage_gaps"]
+        if gap["gap_id"] == request["source_gap_id"]
+    )
+    assert gap["desired_evidence_characteristic"] == "boundary"
+    assert gap["lineage_aware_support"] == support
+
+
 def test_python_ast_concept_inspector_and_normalization_signals(tmp_path):
     from release_gate.assurance.evidence import inspect_python_test_concepts
 
