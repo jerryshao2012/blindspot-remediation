@@ -184,3 +184,47 @@ def test_cleanup_keeps_unmarked_workspace(tmp_path: Path) -> None:
     cleanup_repair_workspace(workspace, tmp_path / "source", tmp_path / "runs")
 
     assert workspace.exists()
+
+
+@pytest.mark.parametrize("readonly", [True, False])
+def test_cleanup_retries_only_readonly_file_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, readonly: bool
+) -> None:
+    import os
+    import shutil
+    import stat
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    root = tmp_path / "release-gate-repair-ws-test"
+    workspace = root / "worktree"
+    workspace.mkdir(parents=True)
+    (root / ".release-gate-repair-owner").write_text(f"{repo.resolve()}\n{workspace}\n")
+    blob = workspace / "git-object"
+    blob.write_bytes(b"object")
+    if readonly:
+        blob.chmod(stat.S_IREAD)
+    real_rmtree = shutil.rmtree
+
+    def remove_file(path):
+        assert Path(path).stat().st_mode & stat.S_IWRITE
+        os.unlink(path)
+
+    def windows_rmtree(path, *, onerror=None):
+        error = PermissionError("Access is denied")
+        if onerror is None:
+            raise error
+        onerror(remove_file, str(blob), (PermissionError, error, None))
+        real_rmtree(path)
+
+    with monkeypatch.context() as patch:
+        patch.setattr("release_gate.repair.workspace.shutil.rmtree", windows_rmtree)
+        if readonly:
+            cleanup_repair_workspace(workspace, repo)
+            assert not root.exists()
+        else:
+            with pytest.raises(RepairWorkspaceError, match="cleanup failed"):
+                cleanup_repair_workspace(workspace, repo)
+            assert blob.exists()
+    if root.exists():
+        real_rmtree(root)

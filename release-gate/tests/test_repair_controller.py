@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +25,7 @@ from release_gate.repair.models import (
     RepairState,
     RepairStopReason,
 )
+from release_gate.repair.workspace import cleanup_repair_workspace
 
 
 def _init_failing_repo(path: Path) -> str:
@@ -298,7 +298,7 @@ def test_recreated_workspace_is_recorded_and_cleaned_on_cancel(tmp_path: Path) -
     _init_failing_repo(repo)
     (repo / "calc.py").write_text("def multiply(a, b): return a + b\n")
     started = start_repair(repo)
-    shutil.rmtree(started.workspace_path.parent)
+    cleanup_repair_workspace(started.workspace_path, repo)
 
     recreated = Path(request_repair(started.session_dir)["workspace_path"])
     session = json.loads((started.session_dir / "repair-session-v1.json").read_bytes())
@@ -324,7 +324,7 @@ def test_cancel_does_not_delete_unowned_workspace(tmp_path: Path) -> None:
 
     assert (repo / "calc.py").exists()
     assert started.session_dir.exists()
-    shutil.rmtree(started.workspace_path.parent)
+    cleanup_repair_workspace(started.workspace_path, repo)
 
 
 def test_cleanup_failure_preserves_terminal_state_and_can_be_retried(
@@ -370,7 +370,7 @@ def test_changed_session_scope_is_rejected_before_approval(tmp_path: Path) -> No
         approve_repair(started.session_dir, approval)
 
     assert (started.session_dir / "repair-manifest.json").read_bytes() == manifest
-    shutil.rmtree(started.workspace_path.parent)
+    cleanup_repair_workspace(started.workspace_path, repo)
 
 
 @pytest.mark.parametrize("recovery", ["retry", "cancel"])

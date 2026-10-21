@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import shutil
+import stat
 import subprocess
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import TracebackType
+from typing import Any
 
 from pathspec import PathSpec
 
@@ -66,6 +69,25 @@ def compute_approved_paths(
 _OWNER_MARKER = ".release-gate-repair-owner"
 
 
+def _retry_readonly_file(
+    remove: Callable[..., Any],
+    filename: str,
+    error_info: tuple[type[BaseException], BaseException, TracebackType | None],
+) -> None:
+    """Retry Windows deletion of a read-only file without hiding other errors."""
+    error = error_info[1]
+    path = Path(filename)
+    mode = path.lstat().st_mode
+    if (
+        not isinstance(error, PermissionError)
+        or not stat.S_ISREG(mode)
+        or mode & stat.S_IWRITE
+    ):
+        raise error
+    path.chmod(mode | stat.S_IWRITE)
+    remove(filename)
+
+
 def cleanup_repair_workspace(
     workspace: Path, repository: Path, evidence_root: Path | None = None
 ) -> None:
@@ -90,7 +112,7 @@ def cleanup_repair_workspace(
             protected.append(evidence_root.resolve())
         if any(root.is_relative_to(p) or p.is_relative_to(root) for p in protected):
             raise RepairWorkspaceError("refusing to clean a protected repair path")
-        shutil.rmtree(root)
+        shutil.rmtree(root, onerror=_retry_readonly_file)
     except OSError as error:
         raise RepairWorkspaceError(
             f"repair workspace cleanup failed: {root}"
@@ -231,7 +253,10 @@ class RepairWorkspace:
             return instance
 
         except Exception as error:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            try:
+                shutil.rmtree(temp_dir, onerror=_retry_readonly_file)
+            except OSError:
+                pass
             if isinstance(error, RepairWorkspaceError):
                 raise
             raise RepairWorkspaceError(
