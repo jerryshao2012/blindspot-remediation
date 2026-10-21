@@ -287,12 +287,12 @@ error and yields `NEEDS_HUMAN` instead.
 The user-facing repair workflow is invoked exclusively via `/release-gate repair --base <ref>` (or `$release-gate repair --base <ref>`).
 The CLI provides private protocol commands to coordinate the bounded repair state machine:
 
-- `repair-start --repo PATH --base REF [--output PATH] [--session-id ID]`: Initializes a repair session, evaluates `C0`, creates an isolated workspace, and prepares `approval-request.json`.
+- `repair-start --repo PATH --base REF [--output PATH] [--session-id ID]`: Initializes a repair session, evaluates `C0`, creates an isolated workspace, and prepares `approval-request.json`. Existing session IDs are rejected; starting again cannot overwrite an earlier session.
 - `repair-approve --session PATH --approval PATH`: Validates user approval and transitions the session to `repairing`.
 - `repair-request --session PATH`: Returns workspace path, active constraints, and playbook guidance.
 - `repair-evaluate --session PATH`: Exports the candidate from the isolated workspace, runs the release gate, and records lineage.
 - `repair-finalize --session PATH`: Refreshes session summary and evidence manifest.
-- `repair-apply --session PATH --approval PATH`: Verifies that the source worktree matches `C0`, verifies final approval, and transactionally applies the passing patch.
+- `repair-apply --session PATH --approval PATH`: Revalidates the passing run's evidence, stored result and manifest digests, and candidate identity before recording final approval or modifying source files. It verifies that the source worktree matches `C0`, verifies final approval, and transactionally applies the passing patch.
 - `repair-cancel --session PATH`: Cancels the active repair session cleanly.
 
 Protocol commands emit line-oriented status headers:

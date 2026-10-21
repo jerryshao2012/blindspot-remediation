@@ -828,6 +828,26 @@ def apply_repair(session_dir: Path, approval_file: Path) -> RepairSessionOutcome
     if passing_attempt.verdict != "PASS":
         raise ValueError("no passing candidate found in repair attempts")
 
+    gate_run_dir = evidence_root / passing_attempt.gate_run_id
+    assessment = assess_attempt(gate_run_dir)
+    if (
+        assessment.verdict != "PASS"
+        or passing_attempt.base_commit != session.base_commit
+        or assessment.result_data.get("run_id") != passing_attempt.gate_run_id
+        or not _evidence_matches_candidate(
+            assessment,
+            base_commit=session.base_commit,
+            candidate_tree=passing_attempt.candidate_tree,
+            patch_digest=passing_attempt.patch_digest,
+        )
+        or sha256_file(gate_run_dir / "result.json") != passing_attempt.result_digest
+        or (
+            sha256_file(gate_run_dir / "manifest.json")
+            != passing_attempt.manifest_digest
+        )
+    ):
+        raise ValueError("passing gate evidence is missing, changed, or mismatched")
+
     final_patch_path = (
         repair_ev.session_dir / f"{passing_attempt.candidate_label}.patch"
     )

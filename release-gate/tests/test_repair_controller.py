@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from release_gate.git import _base_git_environment
 from release_gate.repair.controller import (
     apply_repair,
@@ -191,3 +193,69 @@ def test_repair_cancel(tmp_path: Path) -> None:
     assert cancelled.state is RepairState.CANCELLED
     assert cancelled.session.stop_reason is RepairStopReason.CANCELLED_BY_USER
     assert cancelled.next_action == "none"
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "missing_manifest", "changed_artifact", "changed_manifest",
+        "result_digest", "manifest_digest", "candidate_tree",
+    ],
+)
+def test_apply_rejects_invalid_passing_evidence(tmp_path: Path, damage: str) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    (repo / "calc.py").write_text("def multiply(a, b): return a + b\n")
+    started = start_repair(repo, output=tmp_path / "evidence")
+    approval = tmp_path / "approval.json"
+    approval.write_text(json.dumps({"session_id": started.session_id}))
+    approve_repair(started.session_dir, approval)
+    (started.workspace_path / "calc.py").write_text(
+        "def multiply(a, b): return a * b  # repaired\n"
+    )
+    evaluated = evaluate_repair(started.session_dir)
+    passing = evaluated.session.attempts[-1]
+    gate_dir = tmp_path / "evidence" / passing.gate_run_id
+    session_path = started.session_dir / "repair-session-v1.json"
+    if damage == "missing_manifest":
+        (gate_dir / "manifest.json").unlink()
+    elif damage == "changed_artifact":
+        with (gate_dir / "result.json").open("ab") as stream:
+            stream.write(b"\n")
+    elif damage == "changed_manifest":
+        with (gate_dir / "manifest.json").open("ab") as stream:
+            stream.write(b"\n")
+    else:
+        data = json.loads(session_path.read_bytes())
+        data["attempts"][-1][damage] = "0" * (40 if damage == "candidate_tree" else 64)
+        session_path.write_text(json.dumps(data))
+    final = FinalApproval(
+        started.session_id, passing.candidate_tree, passing.patch_digest,
+        "2026-10-20T00:00:00Z",
+    )
+    approval.write_text(json.dumps(final.to_dict()))
+    source_before = (repo / "calc.py").read_bytes()
+    session_before = session_path.read_bytes()
+
+    with pytest.raises(ValueError, match="passing gate evidence"):
+        apply_repair(started.session_dir, approval)
+
+    assert (repo / "calc.py").read_bytes() == source_before
+    assert session_path.read_bytes() == session_before
+    assert not (started.session_dir / "final-approval.json").exists()
+
+
+def test_repair_start_rejects_reused_session_id(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    (repo / "calc.py").write_text("def multiply(a, b): return a + b\n")
+    first = start_repair(repo, output=tmp_path / "evidence", session_id="rep-reused")
+    before = {p.name: p.read_bytes() for p in first.session_dir.iterdir()}
+    (repo / "calc.py").write_text("def multiply(a, b): return a - b\n")
+
+    with pytest.raises(ValueError, match="already exists"):
+        start_repair(repo, output=tmp_path / "evidence", session_id="rep-reused")
+
+    assert {p.name: p.read_bytes() for p in first.session_dir.iterdir()} == before

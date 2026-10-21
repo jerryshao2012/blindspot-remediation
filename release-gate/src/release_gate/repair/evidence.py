@@ -48,7 +48,11 @@ class RepairEvidence:
         session_dir = (repairs_dir / session_id).resolve()
         if session_dir.parent != repairs_dir.resolve():
             raise ValueError("repair session path escapes the repairs namespace")
-        session_dir.mkdir(parents=True, exist_ok=True)
+        repairs_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            session_dir.mkdir()
+        except FileExistsError as error:
+            raise ValueError(f"repair session already exists: {session_id}") from error
         return cls(session_dir=session_dir, session_id=session_id)
 
     @classmethod
