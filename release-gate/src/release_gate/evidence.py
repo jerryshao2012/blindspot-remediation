@@ -253,7 +253,7 @@ def verify_run(path: Path) -> None:
     try:
         manifest = json.loads((path / "manifest.json").read_bytes())
         result = json.loads((path / "result.json").read_bytes())
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise EvidenceError("evidence JSON is missing or malformed") from error
     _validate_document("result-v1.schema.json", result)
     _validate_document("manifest-v1.schema.json", manifest)

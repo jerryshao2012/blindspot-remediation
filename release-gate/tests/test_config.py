@@ -224,3 +224,25 @@ def test_deep_yaml_is_a_configuration_error(
     diagnostic = capsys.readouterr().err
     assert "nesting" in diagnostic
     assert "internal" not in diagnostic
+
+
+def test_rejects_oversized_effective_policy_from_yaml_aliases(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from release_gate.cli import main
+
+    policy = 'version: 1\nscope: {allowed_paths: ["**"]}\nchecks:\n'
+    for number in range(8):
+        argument = "&long " + "x" * 4096 if number == 0 else "*long"
+        argv = "[python, " + argument + ", " + ", ".join(["*long"] * 62) + "]"
+        policy += (
+            f"  - id: check-{number}\n    mode: candidate\n"
+            f"    severity: blocking\n    argv: {argv}\n"
+        )
+    raw = policy.encode()
+    assert len(raw) < 1_048_576
+    with pytest.raises(ConfigError, match="effective configuration exceeds"):
+        load_config_bytes(raw)
+    (tmp_path / ".release-gate.yaml").write_bytes(raw)
+    assert main(["validate", "--repo", str(tmp_path)]) == 3
+    assert "effective configuration exceeds" in capsys.readouterr().err

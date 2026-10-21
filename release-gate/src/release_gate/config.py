@@ -104,11 +104,27 @@ def load_config_bytes(data: bytes, *, source: str = "<memory>") -> GateConfig:
         raise ConfigError(_schema_diagnostic(source, schema_errors[0]))
 
     try:
-        return GateConfig.model_validate(value)
+        config = GateConfig.model_validate(value)
     except PydanticValidationError as error:
         issue = error.errors(include_input=False, include_url=False)[0]
         path = _json_path(issue["loc"])
         raise ConfigError(f"{source}: {path}: {issue['msg']}") from error
+
+    effective = (
+        json.dumps(
+            config.model_dump(mode="json", by_alias=True, exclude_none=True),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        + b"\n"
+    )
+    if len(effective) > MAX_CONFIG_BYTES:
+        raise ConfigError(
+            f"{source}: effective configuration exceeds the 1 MiB UTF-8 limit"
+        )
+    return config
 
 
 def _load_schema() -> dict[str, Any]:

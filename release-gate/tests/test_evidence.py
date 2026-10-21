@@ -344,3 +344,25 @@ def test_verify_binds_identity_to_artifacts(tmp_path: Path, field: str) -> None:
     path.write_text(json.dumps(manifest))
     with pytest.raises(EvidenceError, match="identity"):
         verify_run(run)
+
+
+@pytest.mark.parametrize("filename", ["manifest.json", "result.json"])
+def test_invalid_utf8_evidence_is_rejected(tmp_path: Path, filename: str) -> None:
+    import sys
+
+    from test_engine import repository
+
+    from release_gate.engine import run_gate
+    from release_gate.repair.controller import assess_attempt
+    from release_gate.repair.models import RepairStopReason
+
+    repo = repository(tmp_path, [sys.executable, "-c", "raise SystemExit(1)"])
+    outcome = run_gate(repo, base="HEAD", output=tmp_path / "evidence")
+    run = outcome.result_path.parent
+    (run / filename).write_bytes(b"\xff")
+    with pytest.raises(EvidenceError, match="malformed"):
+        verify_run(run)
+    assessment = assess_attempt(run)
+    assert not assessment.eligible
+    assert assessment.stop_reason == RepairStopReason.INVALID_EVIDENCE
+    assert assessment.verdict == "ERROR"
