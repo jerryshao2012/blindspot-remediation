@@ -82,6 +82,10 @@ def load_config_bytes(data: bytes, *, source: str = "<memory>") -> GateConfig:
         raise ConfigError(f"{source}: configuration is not valid UTF-8") from error
     try:
         value = yaml.load(text, Loader=_UniqueKeyLoader)
+    except RecursionError as error:
+        raise ConfigError(
+            f"{source}: YAML nesting exceeds the supported depth"
+        ) from error
     except _DuplicateKeyError as error:
         raise ConfigError(f"{source}: {error}") from error
     except yaml.YAMLError as error:

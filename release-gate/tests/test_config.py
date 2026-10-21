@@ -209,3 +209,18 @@ def test_missing_file_reports_a_safe_source_path(tmp_path: Path) -> None:
     with pytest.raises(ConfigError) as caught:
         load_config(missing)
     assert str(missing) in str(caught.value)
+
+
+def test_deep_yaml_is_a_configuration_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from release_gate.cli import main
+
+    policy = b"version: 1\nextra: " + b"[" * 1100 + b"0" + b"]" * 1100 + b"\n"
+    with pytest.raises(ConfigError, match="nesting"):
+        load_config_bytes(policy, source="policy.yaml")
+    (tmp_path / ".release-gate.yaml").write_bytes(policy)
+    assert main(["validate", "--repo", str(tmp_path)]) == 3
+    diagnostic = capsys.readouterr().err
+    assert "nesting" in diagnostic
+    assert "internal" not in diagnostic

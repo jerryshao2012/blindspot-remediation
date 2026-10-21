@@ -259,6 +259,15 @@ def verify_run(path: Path) -> None:
     _validate_document("manifest-v1.schema.json", manifest)
     _validate_timestamps(result)
     _validate_timestamps(manifest)
+    for field in (
+        "run_id",
+        "base_commit",
+        "candidate_tree",
+        "patch_sha256",
+        "config_sha256",
+    ):
+        if result[field] != manifest[field]:
+            raise EvidenceError(f"evidence identity mismatch: {field}")
     actual: dict[str, Path] = {}
     for candidate in path.rglob("*"):
         if candidate.is_dir():
@@ -283,6 +292,12 @@ def verify_run(path: Path) -> None:
         records[key] = record
     if actual.keys() != records.keys():
         raise EvidenceError("artifact inventory has missing or extra paths")
+    for field, artifact in (
+        ("patch_sha256", "candidate.patch"),
+        ("config_sha256", "effective-config.json"),
+    ):
+        if artifact not in records or records[artifact]["sha256"] != result[field]:
+            raise EvidenceError(f"artifact identity mismatch: {field}")
     for key, candidate in actual.items():
         data = candidate.read_bytes()
         record = records[key]

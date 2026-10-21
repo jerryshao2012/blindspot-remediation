@@ -279,3 +279,68 @@ def test_unsafe_artifact_paths_are_rejected(tmp_path: Path, path: str) -> None:
     )
     with pytest.raises(EvidenceError):
         run.write_artifact(path, b"x", "text/plain")
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("run_id", "another-run"),
+        ("base_commit", "0" * 40),
+        ("candidate_tree", "0" * 40),
+        ("patch_sha256", "0" * 64),
+        ("config_sha256", "0" * 64),
+    ],
+)
+def test_verify_rejects_conflicting_identity(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    import sys
+
+    from test_engine import repository
+
+    from release_gate.engine import run_gate
+    from release_gate.repair.controller import assess_attempt
+
+    repo = repository(tmp_path, [sys.executable, "-c", "raise SystemExit(1)"])
+    outcome = run_gate(repo, base="HEAD", output=tmp_path / "evidence")
+    run = outcome.result_path.parent
+    path = run / "manifest.json"
+    manifest = json.loads(path.read_bytes())
+    manifest[field] = value
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(EvidenceError, match="identity"):
+        verify_run(run)
+    assert assess_attempt(run).verdict == "ERROR"
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "patch_sha256",
+        "config_sha256",
+    ],
+)
+def test_verify_binds_identity_to_artifacts(tmp_path: Path, field: str) -> None:
+    import sys
+
+    from test_engine import repository
+
+    from release_gate.engine import run_gate
+
+    repo = repository(tmp_path, [sys.executable, "-c", "pass"])
+    outcome = run_gate(repo, base="HEAD", output=tmp_path / "evidence")
+    run = outcome.result_path.parent
+    result_path = run / "result.json"
+    result = json.loads(result_path.read_bytes())
+    result[field] = "0" * 64
+    result_bytes = json.dumps(result).encode()
+    result_path.write_bytes(result_bytes)
+    path = run / "manifest.json"
+    manifest = json.loads(path.read_bytes())
+    manifest[field] = "0" * 64
+    for record in manifest["artifacts"]:
+        if record["path"] == "result.json":
+            record.update(sha256=_sha(result_bytes), size_bytes=len(result_bytes))
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(EvidenceError, match="identity"):
+        verify_run(run)

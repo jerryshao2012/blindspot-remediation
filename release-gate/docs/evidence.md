@@ -284,6 +284,10 @@ cannot alias them. It also reserves the manifest's own NFC-plus-casefold key:
 no artifact path may be equal under that comparison to `manifest.json`,
 including `Manifest.json` and non-ASCII casefold aliases.
 
+Verification requires matching run, base, candidate, patch, and configuration
+identities in result and manifest. Patch and configuration identities must also
+match the corresponding artifact digests.
+
 Verification walks the run directory (excluding `manifest.json`) and rejects
 missing, extra, aliased, duplicate, changed-size, or changed-digest retained
 artifacts. The exclusion is the same NFC-plus-casefold manifest key, not only
