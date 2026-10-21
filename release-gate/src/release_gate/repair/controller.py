@@ -522,20 +522,11 @@ def approve_repair(session_dir: Path, approval_file: Path) -> RepairSessionOutco
         raise ValueError("approval session_id mismatch")
 
     now = datetime.now(UTC)
-    updated_session = RepairSession(
-        version=session.version,
-        session_id=session.session_id,
-        repo_path=session.repo_path,
-        base_ref=session.base_ref,
-        base_commit=session.base_commit,
-        approved_paths=session.approved_paths,
-        attempt_cap=session.attempt_cap,
-        attempts=session.attempts,
+    updated_session = replace(
+        session,
         state=RepairState.REPAIRING,
         next_action="edit_workspace",
-        created_at=session.created_at,
         updated_at=utc_timestamp(now),
-        workspace_path=session.workspace_path,
     )
     repair_ev.write_session(updated_session)
     repair_ev.write_manifest()
@@ -674,21 +665,12 @@ def evaluate_repair(session_dir: Path) -> RepairSessionOutcome:
             if "repeated" in str(error)
             else RepairStopReason.INELIGIBLE_REASON_CODES
         )
-        stopped_session = RepairSession(
-            version=session.version,
-            session_id=session.session_id,
-            repo_path=session.repo_path,
-            base_ref=session.base_ref,
-            base_commit=session.base_commit,
-            approved_paths=session.approved_paths,
-            attempt_cap=session.attempt_cap,
-            attempts=session.attempts,
+        stopped_session = replace(
+            session,
             state=RepairState.STOPPED,
             next_action="none",
-            created_at=session.created_at,
             updated_at=utc_timestamp(now),
             stop_reason=workspace_stop_reason,
-            workspace_path=session.workspace_path,
         )
         repair_ev.write_session(stopped_session)
         repair_ev.write_summary(_generate_summary_md(stopped_session))
@@ -761,8 +743,6 @@ def evaluate_repair(session_dir: Path) -> RepairSessionOutcome:
     if gate_outcome.verdict is Verdict.PASS and evidence_matches:
         new_state = RepairState.AWAITING_FINAL_APPROVAL
         next_action = "final_approval_and_apply"
-        eval_stop_reason = None
-        repair_ev.write_lesson_proposal(_generate_lesson_md(session))
     elif repairs_performed >= session.attempt_cap:
         new_state = RepairState.STOPPED
         eval_stop_reason = RepairStopReason.ATTEMPT_BUDGET_EXHAUSTED
@@ -770,28 +750,21 @@ def evaluate_repair(session_dir: Path) -> RepairSessionOutcome:
     elif assessment.eligible:
         new_state = RepairState.REPAIRING
         next_action = "edit_workspace"
-        eval_stop_reason = None
     else:
         new_state = RepairState.STOPPED
         eval_stop_reason = assessment.stop_reason or RepairStopReason.INELIGIBLE_VERDICT
         next_action = "none"
 
-    updated_session = RepairSession(
-        version=session.version,
-        session_id=session.session_id,
-        repo_path=session.repo_path,
-        base_ref=session.base_ref,
-        base_commit=session.base_commit,
-        approved_paths=session.approved_paths,
-        attempt_cap=session.attempt_cap,
+    updated_session = replace(
+        session,
         attempts=all_attempts,
         state=new_state,
         next_action=next_action,
         stop_reason=eval_stop_reason,
-        created_at=session.created_at,
         updated_at=utc_timestamp(now),
-        workspace_path=session.workspace_path,
     )
+    if new_state is RepairState.AWAITING_FINAL_APPROVAL:
+        repair_ev.write_lesson_proposal(_generate_lesson_md(updated_session))
 
     repair_ev.write_session(updated_session)
     repair_ev.write_summary(_generate_summary_md(updated_session))
@@ -896,20 +869,11 @@ def apply_repair(session_dir: Path, approval_file: Path) -> RepairSessionOutcome
     )
 
     now = datetime.now(UTC)
-    updated_session = RepairSession(
-        version=session.version,
-        session_id=session.session_id,
-        repo_path=session.repo_path,
-        base_ref=session.base_ref,
-        base_commit=session.base_commit,
-        approved_paths=session.approved_paths,
-        attempt_cap=session.attempt_cap,
-        attempts=session.attempts,
+    updated_session = replace(
+        session,
         state=RepairState.APPLIED,
         next_action="none",
-        created_at=session.created_at,
         updated_at=utc_timestamp(now),
-        workspace_path=session.workspace_path,
     )
     repair_ev.write_session(updated_session)
     repair_ev.write_summary(_generate_summary_md(updated_session))
@@ -941,21 +905,12 @@ def cancel_repair(session_dir: Path) -> RepairSessionOutcome:
         raise ValueError(f"session is in terminal state {session.state.value}")
 
     now = datetime.now(UTC)
-    stopped_session = RepairSession(
-        version=session.version,
-        session_id=session.session_id,
-        repo_path=session.repo_path,
-        base_ref=session.base_ref,
-        base_commit=session.base_commit,
-        approved_paths=session.approved_paths,
-        attempt_cap=session.attempt_cap,
-        attempts=session.attempts,
+    stopped_session = replace(
+        session,
         state=RepairState.CANCELLED,
         next_action="none",
         stop_reason=RepairStopReason.CANCELLED_BY_USER,
-        created_at=session.created_at,
         updated_at=utc_timestamp(now),
-        workspace_path=session.workspace_path,
     )
     repair_ev.write_session(stopped_session)
     repair_ev.write_summary(_generate_summary_md(stopped_session))

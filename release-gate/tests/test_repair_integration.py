@@ -160,6 +160,10 @@ def test_repair_integration_e2e_pass(
     eval_out = capsys.readouterr().out
     assert "REPAIR_STATE: awaiting_final_approval" in eval_out
     assert "NEXT_ACTION: final_approval_and_apply" in eval_out
+    assert "Candidate `C1`" in (session_dir / "lesson-proposal.md").read_text(
+        encoding="utf-8"
+    )
+    assert "GUIDANCE:" in req_out
 
     # Read session to get candidate tree and patch digest
     session_json = json.loads(

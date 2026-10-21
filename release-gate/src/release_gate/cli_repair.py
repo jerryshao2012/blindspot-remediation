@@ -52,6 +52,8 @@ def handle_repair(arguments: Namespace) -> int:
             print(f"WORKSPACE: {info['workspace_path']}")
             print(f"APPROVED_PATHS: {', '.join(info['approved_paths'])}")
             print(f"FAILED_CHECKS: {', '.join(info['failed_check_ids'])}")
+            if info.get("guidance"):
+                print(f"GUIDANCE: {info['guidance']}")
             return 0
         if arguments.command == "repair-evaluate":
             outcome = evaluate_repair(Path(arguments.session))

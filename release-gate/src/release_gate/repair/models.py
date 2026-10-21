@@ -6,7 +6,9 @@ import hashlib
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
+
+from pydantic import TypeAdapter
 
 
 class RepairState(StrEnum):
@@ -47,8 +49,17 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+class _RepairModel:
+    def to_dict(self) -> dict[str, Any]:
+        return TypeAdapter(type(self)).dump_python(self, mode="json")
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        return TypeAdapter(cls).validate_python(data)
+
+
 @dataclass(frozen=True, slots=True)
-class RepairAttempt:
+class RepairAttempt(_RepairModel):
     """Record of a single gate execution within a repair lineage."""
 
     candidate_label: str
@@ -59,81 +70,25 @@ class RepairAttempt:
     result_digest: str
     manifest_digest: str
     verdict: str
-    reason_codes: tuple[str, ...]
-    failed_check_ids: tuple[str, ...]
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "candidate_label": self.candidate_label,
-            "gate_run_id": self.gate_run_id,
-            "base_commit": self.base_commit,
-            "candidate_tree": self.candidate_tree,
-            "patch_digest": self.patch_digest,
-            "result_digest": self.result_digest,
-            "manifest_digest": self.manifest_digest,
-            "verdict": self.verdict,
-            "reason_codes": list(self.reason_codes),
-            "failed_check_ids": list(self.failed_check_ids),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> RepairAttempt:
-        return cls(
-            candidate_label=str(data["candidate_label"]),
-            gate_run_id=str(data["gate_run_id"]),
-            base_commit=str(data["base_commit"]),
-            candidate_tree=str(data["candidate_tree"]),
-            patch_digest=str(data["patch_digest"]),
-            result_digest=str(data["result_digest"]),
-            manifest_digest=str(data["manifest_digest"]),
-            verdict=str(data["verdict"]),
-            reason_codes=tuple(str(item) for item in data.get("reason_codes", ())),
-            failed_check_ids=tuple(
-                str(item) for item in data.get("failed_check_ids", ())
-            ),
-        )
+    reason_codes: tuple[str, ...] = ()
+    failed_check_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
-class ApprovalRequest:
+class ApprovalRequest(_RepairModel):
     """Document presented to the user before starting repair attempts."""
 
     session_id: str
     base_ref: str
     base_commit: str
-    failed_check_ids: tuple[str, ...]
-    approved_paths: tuple[str, ...]
-    attempt_cap: int
-    explanation: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "session_id": self.session_id,
-            "base_ref": self.base_ref,
-            "base_commit": self.base_commit,
-            "failed_check_ids": list(self.failed_check_ids),
-            "approved_paths": list(self.approved_paths),
-            "attempt_cap": self.attempt_cap,
-            "explanation": self.explanation,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ApprovalRequest:
-        return cls(
-            session_id=str(data["session_id"]),
-            base_ref=str(data["base_ref"]),
-            base_commit=str(data["base_commit"]),
-            failed_check_ids=tuple(
-                str(item) for item in data.get("failed_check_ids", ())
-            ),
-            approved_paths=tuple(str(item) for item in data.get("approved_paths", ())),
-            attempt_cap=int(data["attempt_cap"]),
-            explanation=str(data.get("explanation", "")),
-        )
+    failed_check_ids: tuple[str, ...] = ()
+    approved_paths: tuple[str, ...] = ()
+    attempt_cap: int = 2
+    explanation: str = ""
 
 
 @dataclass(frozen=True, slots=True)
-class FinalApproval:
+class FinalApproval(_RepairModel):
     """Document required before applying the final repaired patch to the source."""
 
     session_id: str
@@ -141,26 +96,9 @@ class FinalApproval:
     final_patch_digest: str
     approved_at: str
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "session_id": self.session_id,
-            "final_candidate_tree": self.final_candidate_tree,
-            "final_patch_digest": self.final_patch_digest,
-            "approved_at": self.approved_at,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> FinalApproval:
-        return cls(
-            session_id=str(data["session_id"]),
-            final_candidate_tree=str(data["final_candidate_tree"]),
-            final_patch_digest=str(data["final_patch_digest"]),
-            approved_at=str(data["approved_at"]),
-        )
-
 
 @dataclass(frozen=True, slots=True)
-class RepairSession:
+class RepairSession(_RepairModel):
     """Chained state and lineage of a repair session."""
 
     version: int
@@ -177,48 +115,3 @@ class RepairSession:
     updated_at: str
     stop_reason: RepairStopReason | None = None
     workspace_path: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "version": self.version,
-            "session_id": self.session_id,
-            "repo_path": self.repo_path,
-            "base_ref": self.base_ref,
-            "base_commit": self.base_commit,
-            "approved_paths": list(self.approved_paths),
-            "attempt_cap": self.attempt_cap,
-            "attempts": [attempt.to_dict() for attempt in self.attempts],
-            "state": self.state.value,
-            "next_action": self.next_action,
-            "stop_reason": self.stop_reason.value if self.stop_reason else None,
-            "workspace_path": self.workspace_path,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> RepairSession:
-        stop_reason_raw = data.get("stop_reason")
-        stop_reason = (
-            RepairStopReason(stop_reason_raw) if stop_reason_raw is not None else None
-        )
-        return cls(
-            version=int(data["version"]),
-            session_id=str(data["session_id"]),
-            repo_path=str(data["repo_path"]),
-            base_ref=str(data["base_ref"]),
-            base_commit=str(data["base_commit"]),
-            approved_paths=tuple(str(item) for item in data.get("approved_paths", ())),
-            attempt_cap=int(data["attempt_cap"]),
-            attempts=tuple(
-                RepairAttempt.from_dict(attempt) for attempt in data.get("attempts", ())
-            ),
-            state=RepairState(data["state"]),
-            next_action=str(data["next_action"]),
-            stop_reason=stop_reason,
-            workspace_path=str(data["workspace_path"])
-            if data.get("workspace_path") is not None
-            else None,
-            created_at=str(data["created_at"]),
-            updated_at=str(data["updated_at"]),
-        )

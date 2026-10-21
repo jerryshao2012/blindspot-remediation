@@ -9,7 +9,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from defusedxml import ElementTree
 
@@ -24,35 +24,6 @@ class AssessmentUnavailable(ValueError):
     """No complete assessment can be made within the evidence contract."""
 
 
-class NormalizationInput(Protocol):
-    @property
-    def repository(self) -> Path: ...
-
-    @property
-    def base_commit(self) -> str: ...
-
-    @property
-    def candidate_tree(self) -> str: ...
-
-    @property
-    def patch_sha256(self) -> str: ...
-
-    @property
-    def changed_paths(self) -> tuple[str, ...]: ...
-
-
-@dataclass(frozen=True, slots=True)
-class NormalizationReport:
-    id: str
-    parser: str
-
-
-@dataclass(frozen=True, slots=True)
-class NormalizationCheck:
-    id: str
-    reports: tuple[NormalizationReport, ...]
-
-
 @dataclass(frozen=True, slots=True)
 class NormalizationCapture:
     repository: Path
@@ -60,7 +31,7 @@ class NormalizationCapture:
     candidate_tree: str
     patch_sha256: str
     changed_paths: tuple[str, ...]
-    checks: tuple[NormalizationCheck, ...]
+    checks: tuple[tuple[str, tuple[str, ...]], ...]
 
     @classmethod
     def from_candidate(cls, capture: CandidateCapture) -> NormalizationCapture:
@@ -71,11 +42,12 @@ class NormalizationCapture:
             patch_sha256=capture.patch_sha256,
             changed_paths=capture.changed_paths,
             checks=tuple(
-                NormalizationCheck(
-                    id=check.id,
-                    reports=tuple(
-                        NormalizationReport(id=report.id, parser=report.parser.value)
+                (
+                    check.id,
+                    tuple(
+                        report.id
                         for report in check.reports
+                        if report.parser.value == "junit-xml"
                     ),
                 )
                 for check in capture.config.checks
@@ -87,7 +59,11 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def base_blob(capture: NormalizationInput, path: str, limit: int = 1048576) -> bytes:
+def base_blob(
+    capture: CandidateCapture | NormalizationCapture,
+    path: str,
+    limit: int = 1048576,
+) -> bytes:
     entries = _source_git(
         capture.repository, "ls-tree", "-z", capture.base_commit, "--", path
     )
@@ -236,16 +212,7 @@ def normalize(
     declared_checks = (
         capture.checks
         if isinstance(capture, NormalizationCapture)
-        else tuple(
-            NormalizationCheck(
-                id=check.id,
-                reports=tuple(
-                    NormalizationReport(id=report.id, parser=report.parser.value)
-                    for report in check.reports
-                ),
-            )
-            for check in capture.config.checks
-        )
+        else NormalizationCapture.from_candidate(capture).checks
     )
 
     def add(
@@ -316,12 +283,9 @@ def normalize(
             entry["ast_signals"] = ast_signals
         artifacts.append(entry)
 
-    for check in declared_checks:
-        check_id = check.id
+    for check_id, junit_reports in declared_checks:
         record = executions[(check_id, "candidate")]
-        junit = sorted(
-            report.id for report in check.reports if report.parser == "junit-xml"
-        )
+        junit = sorted(junit_reports)
         if not junit:
             add(
                 Selector(check_id=check_id),

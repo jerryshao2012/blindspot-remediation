@@ -5,9 +5,9 @@ from __future__ import annotations
 import math
 import posixpath
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any
 
 from pathspec import PathSpec
 from pydantic import (
@@ -20,36 +20,14 @@ from pydantic import (
 )
 
 
+def _immutable(*_: object, **__: object) -> Any:
+    raise TypeError("mapping is immutable")
+
+
 class FrozenDict(dict[str, str]):
     """A JSON-serializable mapping that rejects mutation."""
 
-    def __setitem__(self, key: str, value: str) -> None:
-        del key, value
-        raise TypeError("mapping is immutable")
-
-    def __delitem__(self, key: str) -> None:
-        del key
-        raise TypeError("mapping is immutable")
-
-    def clear(self) -> None:
-        raise TypeError("mapping is immutable")
-
-    def pop(self, key: str, default: str | None = None) -> str:  # type: ignore[override]
-        del key, default
-        raise TypeError("mapping is immutable")
-
-    def popitem(self) -> tuple[str, str]:
-        raise TypeError("mapping is immutable")
-
-    def setdefault(self, key: str, default: str = "") -> str:
-        del key, default
-        raise TypeError("mapping is immutable")
-
-    def update(  # type: ignore[override]
-        self, other: Mapping[str, str] | None = None, **kwargs: str
-    ) -> None:
-        del other, kwargs
-        raise TypeError("mapping is immutable")
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable
 
 
 def _freeze_mapping(value: dict[str, str]) -> FrozenDict:
@@ -355,7 +333,8 @@ def _validate_report_limits(config: GateConfig) -> None:
 
 def _validate_commands(config: GateConfig) -> None:
     for control in (*config.prepare, *config.checks):
-        _validate_one_command(control, config.scope, None)
+        _validate_argv(control.argv)
+        _validate_launcher(control.argv[0], config.scope)
         if control.platform:
             for platform in PlatformName:
                 override = control.platform.for_platform(platform)
@@ -365,14 +344,6 @@ def _validate_commands(config: GateConfig) -> None:
                     _validate_argv(resolved.argv)
                     _validate_launcher(resolved.argv[0], config.scope)
         _validate_common_environment(control)
-
-
-def _validate_one_command(
-    command: CommandSpec, scope: Scope, platform: PlatformName | None
-) -> None:
-    del platform
-    _validate_argv(command.argv)
-    _validate_launcher(command.argv[0], scope)
 
 
 def _validate_argv(argv: tuple[str, ...]) -> None:
@@ -440,13 +411,3 @@ def _validate_environment_names(
             reserved.update({"USERPROFILE", "HOMEDRIVE", "HOMEPATH", "TEMP", "TMP"})
         if comparison in reserved or comparison.startswith("RELEASE_GATE_"):
             raise ValueError(f"reserved environment name: {name}")
-
-
-ModelT = TypeVar("ModelT", bound=FrozenModel)
-
-
-def iter_commands(config: GateConfig) -> Iterator[PrepareStep | Check]:
-    """Yield controls in deterministic configuration order."""
-
-    yield from config.prepare
-    yield from config.checks

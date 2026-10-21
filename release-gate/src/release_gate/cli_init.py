@@ -105,12 +105,9 @@ def read_approved_config(path: Path) -> bytes:
         data = _read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
         if len(data) > MAX_CONFIG_BYTES:
             raise ConfigError(f"{path}: configuration exceeds the 1 MiB UTF-8 limit")
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        confirmation = _read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
         final = os.fstat(descriptor)
         if (
-            confirmation != data
-            or _file_change_signature(final) != _file_change_signature(opened)
+            _file_change_signature(final) != _file_change_signature(opened)
             or final.st_size != len(data)
         ):
             raise ConfigError(f"{path}: configuration changed while being read")

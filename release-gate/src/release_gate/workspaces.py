@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import shutil
 import subprocess
 import tempfile
@@ -12,7 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from release_gate.git import CandidateCapture
+from release_gate.git import CandidateCapture, _base_git_environment
 
 
 class WorkspaceError(RuntimeError):
@@ -158,7 +157,7 @@ def _run(
         command,
         input=input_bytes,
         capture_output=True,
-        env=_git_environment(),
+        env=_base_git_environment(),
         check=True,
     ).stdout
 
@@ -168,18 +167,3 @@ def _git_binary() -> str:
     if binary is None:
         raise WorkspaceError("Git executable is unavailable")
     return binary
-
-
-def _git_environment() -> dict[str, str]:
-    environment = {
-        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
-    }
-    environment.update(
-        {
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_OPTIONAL_LOCKS": "0",
-            "LC_ALL": "C",
-            "LANG": "C",
-        }
-    )
-    return environment

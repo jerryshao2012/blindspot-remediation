@@ -11,7 +11,7 @@ import secrets
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -35,7 +35,6 @@ from release_gate.models import (
     Scalar,
 )
 from release_gate.observability_runtime import (
-    ObservabilityResult,
     ObservabilityWarning,
     RefreshSession,
 )
@@ -80,33 +79,6 @@ class RunOutcome:
 
 
 @dataclass(slots=True)
-class _DisabledObservabilitySession:
-    """Best-effort fallback when the runtime integration itself raises."""
-
-    _result: ObservabilityResult = field(default_factory=ObservabilityResult)
-
-    @property
-    def locked(self) -> bool:
-        return False
-
-    @property
-    def result(self) -> ObservabilityResult:
-        return self._result
-
-    def write_snapshot(self, _: EvidenceRun) -> None:
-        return None
-
-    def publish(self) -> None:
-        return None
-
-    def close(self) -> None:
-        return None
-
-    def record_warning(self, warning: ObservabilityWarning) -> None:
-        self._result = self._result.with_warning(warning)
-
-
-@dataclass(slots=True)
 class _Execution:
     record: dict[str, Any]
     result: ExecutionResult
@@ -143,7 +115,7 @@ def run_captured_gate(
     started_wall = datetime.now(UTC)
     started_clock = time.monotonic_ns()
     family = _platform_name()
-    config_bytes = _effective_config(capture.config, family)
+    config_bytes = _effective_config(capture.config)
     root = _evidence_root(capture, output)
     identifier = run_id or _default_run_id(started_wall)
     try:
@@ -254,11 +226,9 @@ def run_captured_gate(
     )
     trace.add("verdict_decided", verdict=decision.verdict.value)
     try:
-        session: RefreshSession | _DisabledObservabilitySession = (
-            RefreshSession.acquire(root, result)
-        )
+        session = RefreshSession.acquire(root, result)
     except Exception:
-        session = _DisabledObservabilitySession()
+        session = RefreshSession(root=root, pending_result=result)
         session.record_warning(ObservabilityWarning.PUBLISH_FAILED)
     try:
         # The per-run artifact deliberately contains the exact pending decision.
@@ -862,12 +832,8 @@ def _manifest_document(
     }
 
 
-def _effective_config(config: GateConfig, family: PlatformName) -> bytes:
+def _effective_config(config: GateConfig) -> bytes:
     value = config.model_dump(mode="json", by_alias=True, exclude_none=True)
-    value["effective_platform"] = family.value
-    # The platform identity is useful evidence, but the config schema is closed;
-    # keep the effective representation strictly to the authoritative model.
-    value.pop("effective_platform")
     return (
         json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         + "\n"
