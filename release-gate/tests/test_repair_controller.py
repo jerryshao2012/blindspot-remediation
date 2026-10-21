@@ -412,3 +412,39 @@ def test_rejected_apply_keeps_session_recoverable(
         assert cancel_repair(started.session_dir).state is RepairState.CANCELLED
         assert (repo / "calc.py").read_text() == changed
     assert not started.workspace_path.exists()
+
+
+@pytest.mark.parametrize("recovery", ["retry", "cancel"])
+def test_evaluation_error_keeps_session_recoverable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recovery: str
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    original = "def multiply(a,b): return a+b\n"
+    (repo / "calc.py").write_text(original)
+    started = start_repair(repo)
+    approval = tmp_path / "approve.json"
+    approval.write_text(json.dumps({"session_id": started.session_id}))
+    approve_repair(started.session_dir, approval)
+    (started.workspace_path / "calc.py").write_text(
+        "def multiply(a,b): return a*b # fixed\n"
+    )
+
+    def fail_gate(*args, **kwargs):
+        raise RuntimeError("unable to complete command stream capture")
+
+    with monkeypatch.context() as patch:
+        patch.setattr("release_gate.repair.controller.run_gate", fail_gate)
+        with pytest.raises(RuntimeError, match="stream capture"):
+            evaluate_repair(started.session_dir)
+
+    assert (started.session_dir / "C1.patch").exists()
+    RepairEvidence(started.session_dir, started.session_id).verify_manifest()
+    assert finalize_repair(started.session_dir).state is RepairState.REPAIRING
+    if recovery == "retry":
+        evaluated = evaluate_repair(started.session_dir)
+        assert evaluated.state is RepairState.AWAITING_FINAL_APPROVAL
+    assert cancel_repair(started.session_dir).state is RepairState.CANCELLED
+    assert not started.workspace_path.parent.exists()
+    assert (repo / "calc.py").read_text() == original

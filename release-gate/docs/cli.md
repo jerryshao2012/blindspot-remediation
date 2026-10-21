@@ -302,6 +302,10 @@ workspace. Unmarked workspaces from older versions are retained for manual
 cleanup. A cleanup failure is reported after the terminal state is saved;
 `repair-finalize` can retry it.
 
+Repair evaluation saves each exported patch and its inventory before running the
+gate. If gate execution raises, the session remains valid for retry, finalization,
+or cancellation.
+
 Final approval and its inventory are saved before applying source changes. If
 source verification rejects apply, the session remains valid and can be finalized
 or canceled. Apply can be retried once the source matches `C0` again.

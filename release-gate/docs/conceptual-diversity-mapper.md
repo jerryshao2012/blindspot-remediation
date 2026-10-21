@@ -141,6 +141,11 @@ It does not need to know that these are translated internally into generic contr
 - `CoverageGap`;
 - `ExpansionRequest`.
 
+The evidence adapter requires unique dimension display names because expansion
+requests use those names when resolving characteristics back to dimension IDs.
+Both bundle assessment and generated-evidence assessment reject duplicate names
+before mapping. The generic engine continues to identify dimensions by ID.
+
 This boundary is intentional.
 
 The generic engine can therefore potentially support other domains such as:

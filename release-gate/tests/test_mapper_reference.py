@@ -10,7 +10,10 @@ No external model is required. The deterministic mapper is used throughout.
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples"))
 
@@ -282,3 +285,39 @@ def test_interaction_order_changes_coverage_configuration_hash():
     ]
     assert hashes[0] != hashes[1]
     assert hashes[1] == hashes[2]
+
+
+@pytest.mark.parametrize("operation", ["bundle", "generated"])
+def test_adapter_rejects_duplicate_dimension_names(operation):
+    schema, _engine, adapter = build_stack()
+    duplicate = replace(
+        schema, dimensions=tuple(replace(d, name="Coverage") for d in schema.dimensions)
+    )
+    duplicate.validate()  # Generic schemas identify dimensions by ID.
+    bundle = edmr.build_example_evidence_bundle()
+    coverage = adapter.assess_evidence_bundle(bundle, schema, edmr.ResourceBudget())
+    request = coverage.expansion_requests[0]
+    generated = replace(
+        bundle.artifacts[0], metadata={"expansion_request_id": request.request_id}
+    )
+
+    with pytest.raises(ValueError, match="unique dimension names"):
+        if operation == "bundle":
+            adapter.assess_evidence_bundle(bundle, duplicate, edmr.ResourceBudget())
+        else:
+            adapter.assess_generated_evidence([generated], [request], duplicate)
+
+
+def test_unique_dimension_names_allow_expansion_round_trip():
+    schema, _engine, adapter = build_stack()
+    bundle = edmr.build_example_evidence_bundle()
+    coverage = adapter.assess_evidence_bundle(bundle, schema, edmr.ResourceBudget())
+    request = coverage.expansion_requests[0]
+    generated = replace(
+        bundle.artifacts[0], metadata={"expansion_request_id": request.request_id}
+    )
+
+    result = adapter.assess_generated_evidence([generated], [request], schema)
+
+    assert len(result) == 1
+    assert result[0].request_id == request.request_id

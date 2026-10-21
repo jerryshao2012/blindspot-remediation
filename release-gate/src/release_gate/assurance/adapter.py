@@ -195,6 +195,7 @@ class EvidenceDiversityMapperAdapter:
         No release decision is produced.
         """
 
+        self._require_unique_dimension_names(schema)
         if not bundle.artifacts:
             raise ValueError("EvidenceBundle cannot be empty.")
 
@@ -268,6 +269,7 @@ class EvidenceDiversityMapperAdapter:
         requested concept because a generator was asked to create it.
         """
 
+        self._require_unique_dimension_names(schema)
         generic_request_lookup = {
             request.request_id: ExpansionRequest(
                 request_id=request.request_id,
@@ -414,6 +416,12 @@ class EvidenceDiversityMapperAdapter:
             priority=request.priority,
             rationale=request.rationale,
         )
+
+    @staticmethod
+    def _require_unique_dimension_names(schema: ConceptSchema) -> None:
+        names = [dimension.name for dimension in schema.dimensions]
+        if len(names) != len(set(names)):
+            raise ValueError("Evidence mapping requires unique dimension names.")
 
     @staticmethod
     def _dimension_id_from_name(

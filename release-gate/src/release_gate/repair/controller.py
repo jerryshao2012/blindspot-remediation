@@ -705,6 +705,7 @@ def evaluate_repair(session_dir: Path) -> RepairSessionOutcome:
 
     # Save candidate patch
     (repair_ev.session_dir / f"{candidate_label}.patch").write_bytes(exported.patch)
+    repair_ev.write_manifest()
 
     # Run release-gate on the candidate workspace
     gate_outcome = run_gate(
