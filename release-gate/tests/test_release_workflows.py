@@ -33,7 +33,7 @@ def test_pr_ci_is_read_only_secret_free_and_keeps_full_matrix() -> None:
     text = CI.read_text(encoding="utf-8")
     assert "secrets." not in text
     assert "contents: write" not in text
-    assert "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" in text
+    assert "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09" in text
     assert "astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b" in text
     assert 'version: "0.12.5"' in text
     assert "uv sync --all-groups --locked" in text
@@ -95,9 +95,9 @@ def test_write_token_jobs_never_execute_or_checkout_candidate_code() -> None:
 
 def test_all_actions_are_pinned_to_reviewed_immutable_commits() -> None:
     allowed = {
-        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-        "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+        "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+        "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+        "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
         "astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b",
     }
     for path in (CI, RELEASE):

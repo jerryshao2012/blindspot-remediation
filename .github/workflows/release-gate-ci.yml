@@ -42,7 +42,7 @@ jobs:
         working-directory: release-gate
     steps:
       # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
       # astral-sh/setup-uv v8.1.0; upgrade only with reviewed lock/tool changes.
@@ -56,7 +56,7 @@ jobs:
         run: uv run pytest --cov=release_gate --cov-branch --cov-config=pyproject.toml --cov-fail-under=0 --cov-report=term-missing -vv --tb=short --durations=20
       - name: Upload coverage data
         # actions/upload-artifact v4.6.2
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-${{ matrix.os }}-${{ matrix.python }}
           path: release-gate/.coverage
@@ -100,7 +100,7 @@ jobs:
         working-directory: release-gate
     steps:
       # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
       # astral-sh/setup-uv v8.1.0
@@ -112,7 +112,7 @@ jobs:
         run: uv sync --all-groups --locked
       - name: Download matrix coverage data
         # actions/download-artifact v4.3.0
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: coverage-*
           path: release-gate/coverage-data
@@ -138,7 +138,7 @@ jobs:
       UV_LINK_MODE: "copy"
     steps:
       # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
       # astral-sh/setup-uv v8.1.0; upgrade only with reviewed lock/tool changes.
@@ -168,7 +168,7 @@ jobs:
       UV_LINK_MODE: "copy"
     steps:
       # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
       # astral-sh/setup-uv v8.1.0; upgrade only with reviewed lock/tool changes.
