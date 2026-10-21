@@ -15,7 +15,7 @@ from defusedxml import ElementTree
 
 from release_gate.evidence import EvidenceError, verify_run
 from release_gate.git import CandidateCapture, _source_git
-from release_gate.reports import _read_regular_file
+from release_gate.reports import _local_name, _read_regular_file
 
 from .policy import AssurancePolicy, Selector
 
@@ -357,19 +357,19 @@ def normalize(
             if digest(data) != inventory[path]["sha256"]:
                 raise EvidenceError("report hash mismatch")
             root = ElementTree.fromstring(data)
-            if root.tag not in ("testsuite", "testsuites"):
+            if _local_name(root) not in ("testsuite", "testsuites"):
                 raise AssessmentUnavailable("invalid JUnit root")
             cases: list[tuple[Selector, str, dict[str, Any]]] = []
             stack = [(root, "")]
             while stack:
                 element, suite = stack.pop()
-                if element.tag == "testsuite":
+                if _local_name(element) == "testsuite":
                     suite = (
                         f"{suite}/{element.get('name', '')}"
                         if suite
                         else element.get("name", "")
                     )
-                if element.tag == "testcase":
+                if _local_name(element) == "testcase":
                     declared_status = (
                         element.get("status") or element.get("result") or ""
                     ).casefold()
@@ -387,11 +387,12 @@ def normalize(
                         status = "ERROR"
                     else:
                         status = "UNKNOWN"
-                    if element.find("error") is not None:
+                    child_tags = {_local_name(child) for child in element}
+                    if "error" in child_tags:
                         status = "ERROR"
-                    elif element.find("failure") is not None:
+                    elif "failure" in child_tags:
                         status = "FAIL"
-                    elif element.find("skipped") is not None:
+                    elif "skipped" in child_tags:
                         status = "SKIPPED"
                     selector = Selector(
                         check_id=check_id,

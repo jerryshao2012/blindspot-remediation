@@ -514,3 +514,42 @@ def test_python_ast_concept_inspector_and_normalization_signals(tmp_path):
     assert code == 0
     assert result["artifacts"][0]["ast_signals"] == signals["C.boundary"]
 
+
+
+@pytest.mark.parametrize("prefix", ["", "j:"])
+@pytest.mark.parametrize("root", ["testsuite", "testsuites"])
+@pytest.mark.parametrize(
+    "child,status,exit_code",
+    [
+        (None, "PASS", 0),
+        ("failure", "FAIL", 2),
+        ("error", "ERROR", 2),
+        ("skipped", "SKIPPED", 2),
+    ],
+)
+def test_namespaced_junit_preserves_case_outcomes(
+    tmp_path, prefix, root, child, status, exit_code
+):
+    declaration = ' xmlns:j="urn:junit"' if prefix else ' xmlns="urn:junit"'
+    body = f"<{prefix}{child}/>" if child else ""
+    suite_declaration = declaration if root == "testsuite" else ""
+    xml = (
+        f'<{prefix}testsuite{suite_declaration} name="suite" tests="1">'
+        f'<{prefix}testcase classname="C" name="boundary">{body}'
+        f'</{prefix}testcase></{prefix}testsuite>'
+    )
+    if root == "testsuites":
+        xml = f'<{prefix}testsuites{declaration}>{xml}</{prefix}testsuites>'
+    repo = setup_repo(tmp_path, xml=xml)
+
+    code, result = assure(repo, tmp_path)
+
+    assert code == exit_code
+    assert result["gate_verdict"] == "PASS"
+    assert result["assessment_status"] == "COMPLETE"
+    assert len(result["artifacts"]) == 1
+    artifact = result["artifacts"][0]
+    assert artifact["selector"]["suite"] == "suite"
+    assert artifact["status"] == status
+    assert artifact["eligible"] is (status == "PASS")
+    assert result["evidence_sufficient"] is (status == "PASS")
