@@ -1221,6 +1221,8 @@ class CoverageGap:
 
     rationale: str
 
+    desired_dimensions: tuple[tuple[str, Any], ...] = ()
+
 
 @dataclass(frozen=True)
 class CoverageAssessment:
@@ -1523,64 +1525,6 @@ class CoverageEngine:
                     )
                 )
 
-                if status in {
-                    RegionStatus.ABSENT,
-                    RegionStatus.SPARSE,
-                    RegionStatus.UNCERTAIN,
-                }:
-
-                    support_ratio = (
-                        raw_count / total_artifacts
-                        if total_artifacts
-                        else 0.0
-                    )
-
-                    uncertainty = (
-                        1.0 - mean_confidence
-                        if raw_count
-                        else 1.0
-                    )
-
-                    priority = self._gap_priority(
-                        status=status,
-                        support_ratio=support_ratio,
-                        uncertainty=uncertainty,
-                        dimension_maturity=(
-                            dimension.maturity_confidence
-                        ),
-                    )
-
-                    gaps.append(
-                        CoverageGap(
-                            gap_id=new_id("gap"),
-                            schema_id=schema.schema_id,
-                            schema_version=(
-                                schema.schema_version
-                            ),
-                            dimension_id=(
-                                dimension.dimension_id
-                            ),
-                            desired_value=value,
-                            current_support=(
-                                lineage_aware_count
-                            ),
-                            reference_support=None,
-                            uncertainty=uncertainty,
-                            priority=priority,
-                            provenance=(
-                                "CoverageEngine "
-                                f"{UNIVERSAL_MAPPER_VERSION}"
-                            ),
-                            rationale=(
-                                f"Region classified as "
-                                f"{status.value}; "
-                                f"raw support={raw_count}, "
-                                f"lineage-aware support="
-                                f"{lineage_aware_count}."
-                            ),
-                        )
-                    )
-
         if self.max_interaction_order == 2:
             for dim_a, dim_b in combinations(schema.dimensions, 2):
                 pair_support: dict[str, list[tuple[str, float]]] = defaultdict(list)
@@ -1655,6 +1599,52 @@ class CoverageEngine:
                         )
                     )
 
+        for region in regions:
+            if region.status not in {
+                RegionStatus.ABSENT,
+                RegionStatus.SPARSE,
+                RegionStatus.UNCERTAIN,
+            }:
+                continue
+            uncertainty = (
+                1.0 - region.mean_mapping_confidence
+                if region.raw_artifact_count
+                else 1.0
+            )
+            maturity = min(
+                schema.dimension_by_id(d).maturity_confidence
+                for d, _ in region.coordinates
+            )
+            gaps.append(
+                CoverageGap(
+                    gap_id=new_id("gap"),
+                    schema_id=schema.schema_id,
+                    schema_version=schema.schema_version,
+                    dimension_id=region.coordinates[0][0],
+                    desired_value=region.coordinates[0][1],
+                    current_support=region.lineage_aware_count,
+                    reference_support=None,
+                    uncertainty=uncertainty,
+                    priority=self._gap_priority(
+                        status=region.status,
+                        support_ratio=(
+                            region.raw_artifact_count / total_artifacts
+                            if total_artifacts
+                            else 0.0
+                        ),
+                        uncertainty=uncertainty,
+                        dimension_maturity=maturity,
+                    ),
+                    provenance=f"CoverageEngine {UNIVERSAL_MAPPER_VERSION}",
+                    rationale=(
+                        f"Region classified as {region.status.value}; "
+                        f"raw support={region.raw_artifact_count}, "
+                        f"lineage-aware support={region.lineage_aware_count}."
+                    ),
+                    desired_dimensions=region.coordinates,
+                )
+            )
+
         exact_pairs = (
             sum(
                 len(item.exact_duplicate_of)
@@ -1682,6 +1672,7 @@ class CoverageEngine:
 
         configuration_hash = stable_hash(
             {
+                "max_interaction_order": self.max_interaction_order,
                 "sparse_support_ratio":
                     self.sparse_support_ratio,
                 "repeated_support_ratio":
@@ -2071,8 +2062,13 @@ class ExpansionPlanner:
         ranked_gaps = sorted(
             gaps,
             key=lambda gap: (
-                gap.dimension_id
-                in priority_dimensions,
+                any(
+                    d in priority_dimensions
+                    for d, _ in (
+                        gap.desired_dimensions
+                        or ((gap.dimension_id, gap.desired_value),)
+                    )
+                ),
                 gap.priority,
             ),
             reverse=True,
@@ -2107,10 +2103,8 @@ class ExpansionPlanner:
                     ),
                     source_gap_id=gap.gap_id,
                     desired_dimensions=(
-                        (
-                            gap.dimension_id,
-                            gap.desired_value,
-                        ),
+                        gap.desired_dimensions
+                        or ((gap.dimension_id, gap.desired_value),)
                     ),
                     priority=gap.priority,
                     maximum_artifacts=allocation,

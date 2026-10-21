@@ -706,9 +706,16 @@ without testing:
         +
     boundary condition
 
-Future coverage methods should therefore support:
+`CoverageEngine(max_interaction_order=2)` enables pairwise coverage in the
+mapper API; the default remains single-dimension coverage. Absent, sparse, and
+uncertain pairs produce gaps with both coordinates in `desired_dimensions`.
+Expansion requests preserve both coordinates and respect the artifact and model
+call budgets. The evidence adapter exposes the full pair as
+`requested_characteristics`; legacy single-dimension fields remain available.
+The assessment configuration hash includes the interaction order.
 
-- pairwise interaction coverage;
+Future coverage methods can extend this with:
+
 - higher-order interaction coverage;
 - combinatorial coverage;
 - graph-based concept interactions;

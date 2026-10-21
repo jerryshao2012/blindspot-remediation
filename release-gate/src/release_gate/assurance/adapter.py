@@ -91,6 +91,8 @@ class EvidenceCoverageGap:
 
     rationale: str
 
+    requested_characteristics: tuple[tuple[str, Any], ...] = ()
+
 
 @dataclass(frozen=True)
 class EvidenceExpansionRequest:
@@ -375,6 +377,12 @@ class EvidenceDiversityMapperAdapter:
             uncertainty=gap.uncertainty,
             priority=gap.priority,
             rationale=gap.rationale,
+            requested_characteristics=tuple(
+                (schema.dimension_by_id(d).name, value)
+                for d, value in (
+                    gap.desired_dimensions or ((gap.dimension_id, gap.desired_value),)
+                )
+            ),
         )
 
     @staticmethod

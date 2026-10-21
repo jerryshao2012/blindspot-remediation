@@ -215,3 +215,70 @@ def test_pairwise_interaction_coverage_regions():
     assert len(auth_boundary) == 1
     assert auth_boundary[0].status is edmr.RegionStatus.ABSENT
 
+
+def test_pairwise_gaps_produce_joint_expansion_requests():
+    schema = edmr.build_example_evidence_schema()
+    engine = edmr.GenericDiversityEngine(
+        concept_mapper=edmr.RuleBasedArtifactConceptMapper(
+            rules=edmr.build_example_evidence_mapping_rules()
+        ),
+        coverage_engine=edmr.CoverageEngine(max_interaction_order=2),
+    )
+    bundle = edmr.build_example_evidence_bundle()
+    artifacts = tuple(
+        edmr.EvidenceDiversityMapperAdapter._to_artifact_descriptor(e)
+        for e in bundle.artifacts
+    )
+    assessment = engine.assess_coverage(
+        artifacts, engine.map_artifacts(artifacts, schema), schema
+    )
+    coordinates = (("behavior_type", "boundary"), ("authorization", True))
+    gap = next(
+        (g for g in assessment.gaps if g.desired_dimensions == coordinates),
+        None,
+    )
+    assert gap is not None
+    assert gap.current_support == 0
+    requests = engine.plan_expansion(
+        assessment,
+        edmr.ResourceBudget(max_additional_artifacts=100, max_model_calls=100),
+    )
+    request = next(r for r in requests if r.source_gap_id == gap.gap_id)
+    assert request.desired_dimensions == coordinates
+    assert request.maximum_artifacts == 1
+    adapter = edmr.EvidenceDiversityMapperAdapter(engine)
+    expected = tuple((schema.dimension_by_id(d).name, v) for d, v in coordinates)
+    result = adapter.assess_evidence_bundle(
+        bundle, schema,
+        edmr.ResourceBudget(max_additional_artifacts=100, max_model_calls=100),
+    )
+    converted_gap = next(
+        g for g in result.coverage_gaps if g.requested_characteristics == expected
+    )
+    converted_request = next(
+        r for r in result.expansion_requests if r.source_gap_id == converted_gap.gap_id
+    )
+    assert converted_request.requested_characteristics == expected
+    assert len(engine.plan_expansion(
+        assessment, edmr.ResourceBudget(max_additional_artifacts=1, max_model_calls=1)
+    )) == 1
+    assert engine.plan_expansion(
+        assessment, edmr.ResourceBudget(max_additional_artifacts=0)
+    ) == ()
+
+
+def test_interaction_order_changes_coverage_configuration_hash():
+    schema, engine, _adapter = build_stack()
+    artifacts = tuple(
+        edmr.EvidenceDiversityMapperAdapter._to_artifact_descriptor(e)
+        for e in edmr.build_example_evidence_bundle().artifacts
+    )
+    mappings = engine.map_artifacts(artifacts, schema)
+    hashes = [
+        edmr.CoverageEngine(max_interaction_order=order).assess(
+            artifacts, mappings, schema, "test"
+        ).configuration_hash
+        for order in (1, 2, 2)
+    ]
+    assert hashes[0] != hashes[1]
+    assert hashes[1] == hashes[2]
