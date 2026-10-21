@@ -291,9 +291,16 @@ The CLI provides private protocol commands to coordinate the bounded repair stat
 - `repair-approve --session PATH --approval PATH`: Validates user approval and transitions the session to `repairing`.
 - `repair-request --session PATH`: Returns workspace path, active constraints, and playbook guidance.
 - `repair-evaluate --session PATH`: Exports the candidate from the isolated workspace, runs the release gate, and records lineage.
-- `repair-finalize --session PATH`: Refreshes session summary and evidence manifest.
+- `repair-finalize --session PATH`: Refreshes session summary and evidence manifest, and retries workspace cleanup for a terminal session.
 - `repair-apply --session PATH --approval PATH`: Revalidates the passing run's evidence, stored result and manifest digests, and candidate identity before recording final approval or modifying source files. It verifies that the source worktree matches `C0`, verifies final approval, and transactionally applies the passing patch.
 - `repair-cancel --session PATH`: Cancels the active repair session cleanly.
+
+Applied, canceled, and stopped sessions remove their marked, controller-owned
+workspace after saving terminal evidence. Active sessions retain their workspace.
+Terminal sessions reject `repair-request` so it cannot recreate a finished
+workspace. Unmarked workspaces from older versions are retained for manual
+cleanup. A cleanup failure is reported after the terminal state is saved;
+`repair-finalize` can retry it.
 
 Protocol commands emit line-oriented status headers:
 - `REPAIR_SESSION: <path>`

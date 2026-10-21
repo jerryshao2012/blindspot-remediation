@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ from release_gate.repair.controller import (
     approve_repair,
     cancel_repair,
     evaluate_repair,
+    finalize_repair,
     request_repair,
     start_repair,
 )
@@ -139,6 +141,8 @@ def test_repair_lifecycle_from_start_to_apply(tmp_path: Path) -> None:
 
     # Verify source repo is fixed
     assert (repo / "calc.py").read_text() == "def multiply(a, b): return a * b\n"
+    assert not workspace_path.parent.exists()
+    assert (outcome.session_dir / "C1.patch").exists()
 
 
 def test_repair_budget_exhaustion(tmp_path: Path) -> None:
@@ -160,6 +164,7 @@ def test_repair_budget_exhaustion(tmp_path: Path) -> None:
     (workspace_path / "calc.py").write_text("def multiply(a, b): return a - b\n")
     eval1 = evaluate_repair(outcome.session_dir)
     assert eval1.state is RepairState.REPAIRING
+    assert workspace_path.exists()
 
     # Attempt 2 (C2): Still broken edit
     (workspace_path / "calc.py").write_text("def multiply(a, b): return a ^ b\n")
@@ -167,6 +172,8 @@ def test_repair_budget_exhaustion(tmp_path: Path) -> None:
     assert eval2.state is RepairState.STOPPED
     assert eval2.session.stop_reason is RepairStopReason.ATTEMPT_BUDGET_EXHAUSTED
     assert eval2.next_action == "none"
+    assert not workspace_path.parent.exists()
+    assert (outcome.session_dir / "C2.patch").exists()
 
 
 def test_repair_start_already_pass_stops(tmp_path: Path) -> None:
@@ -193,6 +200,11 @@ def test_repair_cancel(tmp_path: Path) -> None:
     assert cancelled.state is RepairState.CANCELLED
     assert cancelled.session.stop_reason is RepairStopReason.CANCELLED_BY_USER
     assert cancelled.next_action == "none"
+    assert not outcome.workspace_path.parent.exists()
+    assert (outcome.session_dir / "C0.patch").exists()
+    assert (repo / "calc.py").read_text() == "def multiply(a, b): return a + b\n"
+    with pytest.raises(ValueError, match="terminal state"):
+        request_repair(outcome.session_dir)
 
 
 @pytest.mark.parametrize(
@@ -259,3 +271,79 @@ def test_repair_start_rejects_reused_session_id(tmp_path: Path) -> None:
         start_repair(repo, output=tmp_path / "evidence", session_id="rep-reused")
 
     assert {p.name: p.read_bytes() for p in first.session_dir.iterdir()} == before
+
+
+def test_repeated_candidate_stop_cleans_workspace(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    (repo / "calc.py").write_text("def multiply(a, b): return a + b\n")
+    started = start_repair(repo)
+    approval = tmp_path / "approval.json"
+    approval.write_text(json.dumps({"session_id": started.session_id}))
+    approve_repair(started.session_dir, approval)
+
+    stopped = evaluate_repair(started.session_dir)
+
+    assert stopped.state is RepairState.STOPPED
+    assert not started.workspace_path.parent.exists()
+    assert (started.session_dir / "C0.patch").exists()
+
+
+def test_recreated_workspace_is_recorded_and_cleaned_on_cancel(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    (repo / "calc.py").write_text("def multiply(a, b): return a + b\n")
+    started = start_repair(repo)
+    shutil.rmtree(started.workspace_path.parent)
+
+    recreated = Path(request_repair(started.session_dir)["workspace_path"])
+    session = json.loads((started.session_dir / "repair-session-v1.json").read_bytes())
+    assert session["workspace_path"] == str(recreated)
+    cancel_repair(started.session_dir)
+
+    assert not recreated.parent.exists()
+
+
+def test_cancel_does_not_delete_unowned_workspace(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    (repo / "calc.py").write_text("def multiply(a, b): return a + b\n")
+    started = start_repair(repo)
+    path = started.session_dir / "repair-session-v1.json"
+    session = json.loads(path.read_bytes())
+    session["workspace_path"] = str(repo)
+    path.write_text(json.dumps(session))
+
+    cancel_repair(started.session_dir)
+
+    assert (repo / "calc.py").exists()
+    assert started.session_dir.exists()
+    shutil.rmtree(started.workspace_path.parent)
+
+
+def test_cleanup_failure_preserves_terminal_state_and_can_be_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_failing_repo(repo)
+    (repo / "calc.py").write_text("def multiply(a, b): return a + b\n")
+    started = start_repair(repo)
+
+    def denied(*args, **kwargs):
+        raise PermissionError("workspace is busy")
+
+    with monkeypatch.context() as patch:
+        patch.setattr("release_gate.repair.workspace.shutil.rmtree", denied)
+        with pytest.raises(RuntimeError, match="workspace cleanup failed"):
+            cancel_repair(started.session_dir)
+
+    session = json.loads((started.session_dir / "repair-session-v1.json").read_bytes())
+    assert session["state"] == "cancelled"
+    assert started.workspace_path.exists()
+    finalize_repair(started.session_dir)
+    assert not started.workspace_path.parent.exists()
+    assert (started.session_dir / "C0.patch").exists()

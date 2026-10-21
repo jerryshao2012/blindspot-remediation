@@ -63,6 +63,40 @@ def compute_approved_paths(
     return tuple(approved)
 
 
+_OWNER_MARKER = ".release-gate-repair-owner"
+
+
+def cleanup_repair_workspace(
+    workspace: Path, repository: Path, evidence_root: Path | None = None
+) -> None:
+    """Remove only a marked, disjoint workspace created by this controller."""
+    root = workspace.parent
+    marker = root / _OWNER_MARKER
+    if (
+        not root.exists()
+        or root.resolve() != root
+        or workspace.name != "worktree"
+        or not root.name.startswith("release-gate-repair-ws-")
+        or marker.is_symlink()
+        or not marker.is_file()
+    ):
+        return
+    expected = f"{repository.resolve()}\n{workspace}\n"
+    try:
+        if marker.read_text(encoding="utf-8") != expected:
+            return
+        protected = [repository.resolve()]
+        if evidence_root is not None:
+            protected.append(evidence_root.resolve())
+        if any(root.is_relative_to(p) or p.is_relative_to(root) for p in protected):
+            raise RepairWorkspaceError("refusing to clean a protected repair path")
+        shutil.rmtree(root)
+    except OSError as error:
+        raise RepairWorkspaceError(
+            f"repair workspace cleanup failed: {root}"
+        ) from error
+
+
 class RepairWorkspace:
     """Disposable clone workspace for making and testing repair attempts."""
 
@@ -190,6 +224,9 @@ class RepairWorkspace:
                 temp_root=temp_dir,
                 workspace_path=ws_path,
             )
+            (temp_dir / _OWNER_MARKER).write_text(
+                f"{repository_path.resolve()}\n{ws_path}\n", encoding="utf-8"
+            )
             instance.record_attempt(c0_tree, c0_patch_digest)
             return instance
 
@@ -303,8 +340,7 @@ class RepairWorkspace:
             ) from error
 
     def cleanup(self) -> None:
-        if self.temp_root.exists():
-            shutil.rmtree(self.temp_root, ignore_errors=True)
+        cleanup_repair_workspace(self.workspace_path, self.repository_path)
 
 
 def apply_candidate_to_source(

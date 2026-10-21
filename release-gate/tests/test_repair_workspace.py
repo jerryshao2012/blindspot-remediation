@@ -11,6 +11,7 @@ from release_gate.git import _base_git_environment, capture_candidate
 from release_gate.repair.workspace import (
     RepairWorkspace,
     RepairWorkspaceError,
+    cleanup_repair_workspace,
     compute_approved_paths,
 )
 
@@ -156,3 +157,30 @@ def test_compute_approved_paths() -> None:
     extra = ("test_app.py",)
     approved = compute_approved_paths(changed, scope, extra_paths=extra)
     assert approved == ("app.py", "test_app.py")
+
+
+@pytest.mark.parametrize("protected", ["source", "evidence"])
+def test_cleanup_refuses_protected_paths(tmp_path: Path, protected: str) -> None:
+    root = tmp_path / "release-gate-repair-ws-protected"
+    workspace = root / "worktree"
+    workspace.mkdir(parents=True)
+    repository = workspace if protected == "source" else tmp_path / "source"
+    evidence_root = root / "evidence" if protected == "evidence" else tmp_path / "runs"
+    (root / ".release-gate-repair-owner").write_text(
+        f"{repository.resolve()}\n{workspace}\n", encoding="utf-8"
+    )
+
+    with pytest.raises(RepairWorkspaceError, match="protected repair path"):
+        cleanup_repair_workspace(workspace, repository, evidence_root)
+
+    assert workspace.exists()
+    assert (root / ".release-gate-repair-owner").exists()
+
+
+def test_cleanup_keeps_unmarked_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "release-gate-repair-ws-legacy" / "worktree"
+    workspace.mkdir(parents=True)
+
+    cleanup_repair_workspace(workspace, tmp_path / "source", tmp_path / "runs")
+
+    assert workspace.exists()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import secrets
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -37,6 +37,7 @@ from release_gate.repair.workspace import (
     RepairWorkspace,
     RepairWorkspaceError,
     apply_candidate_to_source,
+    cleanup_repair_workspace,
     compute_approved_paths,
 )
 from release_gate.timestamps import utc_timestamp
@@ -548,6 +549,16 @@ def approve_repair(session_dir: Path, approval_file: Path) -> RepairSessionOutco
     )
 
 
+def _cleanup_terminal_workspace(session: RepairSession, session_dir: Path) -> None:
+    if session.workspace_path and session.state in {
+        RepairState.APPLIED, RepairState.CANCELLED, RepairState.STOPPED,
+    }:
+        cleanup_repair_workspace(
+            Path(session.workspace_path), Path(session.repo_path),
+            session_dir.parent.parent,
+        )
+
+
 def _get_workspace_path(session: RepairSession, session_dir: Path) -> Path:
     if session.workspace_path:
         path = Path(session.workspace_path)
@@ -567,6 +578,9 @@ def _get_workspace_path(session: RepairSession, session_dir: Path) -> Path:
         approved_paths=session.approved_paths,
         parent=None,
     )
+    repair_ev = RepairEvidence(session_dir, session.session_id)
+    repair_ev.write_session(replace(session, workspace_path=str(ws.workspace_path)))
+    repair_ev.write_manifest()
     return ws.workspace_path
 
 
@@ -577,6 +591,11 @@ def request_repair(session_dir: Path) -> dict[str, Any]:
     evidence_root = resolved_session_dir.parent.parent
     repair_ev = RepairEvidence.load(evidence_root, resolved_session_dir.name)
     session = repair_ev.read_session()
+
+    if session.state in {
+        RepairState.APPLIED, RepairState.CANCELLED, RepairState.STOPPED,
+    }:
+        raise ValueError(f"session is in terminal state {session.state.value}")
 
     ws_path = _get_workspace_path(session, resolved_session_dir)
     last_attempt = session.attempts[-1]
@@ -613,6 +632,7 @@ def evaluate_repair(session_dir: Path) -> RepairSessionOutcome:
         raise ValueError(f"session is in state {session.state.value}, not repairing")
 
     ws_path = _get_workspace_path(session, resolved_session_dir)
+    session = replace(session, workspace_path=str(ws_path))
     ws_temp_root = ws_path.parent
     git_bin = _git_binary()
     env = _base_git_environment()
@@ -673,6 +693,7 @@ def evaluate_repair(session_dir: Path) -> RepairSessionOutcome:
         repair_ev.write_session(stopped_session)
         repair_ev.write_summary(_generate_summary_md(stopped_session))
         repair_ev.write_manifest()
+        _cleanup_terminal_workspace(stopped_session, repair_ev.session_dir)
         return RepairSessionOutcome(
             session_id=session.session_id,
             state=stopped_session.state,
@@ -774,6 +795,7 @@ def evaluate_repair(session_dir: Path) -> RepairSessionOutcome:
     repair_ev.write_session(updated_session)
     repair_ev.write_summary(_generate_summary_md(updated_session))
     repair_ev.write_manifest()
+    _cleanup_terminal_workspace(updated_session, repair_ev.session_dir)
 
     return RepairSessionOutcome(
         session_id=session.session_id,
@@ -795,6 +817,7 @@ def finalize_repair(session_dir: Path) -> RepairSessionOutcome:
 
     repair_ev.write_summary(_generate_summary_md(session))
     repair_ev.write_manifest()
+    _cleanup_terminal_workspace(session, repair_ev.session_dir)
 
     return RepairSessionOutcome(
         session_id=session.session_id,
@@ -889,6 +912,7 @@ def apply_repair(session_dir: Path, approval_file: Path) -> RepairSessionOutcome
     repair_ev.write_session(updated_session)
     repair_ev.write_summary(_generate_summary_md(updated_session))
     repair_ev.write_manifest()
+    _cleanup_terminal_workspace(updated_session, repair_ev.session_dir)
 
     return RepairSessionOutcome(
         session_id=session.session_id,
@@ -934,6 +958,7 @@ def cancel_repair(session_dir: Path) -> RepairSessionOutcome:
     repair_ev.write_session(stopped_session)
     repair_ev.write_summary(_generate_summary_md(stopped_session))
     repair_ev.write_manifest()
+    _cleanup_terminal_workspace(stopped_session, repair_ev.session_dir)
 
     return RepairSessionOutcome(
         session_id=session.session_id,
