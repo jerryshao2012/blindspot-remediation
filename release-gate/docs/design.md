@@ -102,7 +102,9 @@ developer's real index, the engine:
    through `GIT_ALTERNATE_OBJECT_DIRECTORIES`, encoded with the native
    path-list separator and Git's platform quoting rules, and uses
    `GIT_OPTIONAL_LOCKS=0` for source-repository reads;
-3. populates the temporary index with the base tree using `git read-tree`;
+3. populates the temporary index from `HEAD` and overlays the real index's
+   tracked entries, preserving force-added ignored files without copying index
+   flags that could suppress working-tree updates;
 4. stages the current working tree into that temporary index with
    `git add -A`, including non-ignored untracked files and deletions but
    excluding descendants of only the literal, no-follow-verified-or-absent

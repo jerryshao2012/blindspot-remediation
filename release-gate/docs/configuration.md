@@ -254,7 +254,10 @@ V1 parsers expose these JSON-shaped metrics:
 
 - `junit-xml`: `/tests`, `/failures`, `/errors`, `/skipped`, and
   `/duration_seconds`, aggregated across suites without resolving external
-  entities.
+  entities. A suite containing both direct testcases and child suites is
+  rejected as `REPORT_PARSE_FAILED`, making the check `ERROR` and the verdict
+  `NEEDS_HUMAN`; mixed parent totals cannot be aggregated safely without a
+  declared counting convention.
 - `coverage-json`: `/percent_covered`, `/covered_lines`, `/missing_lines`,
   `/excluded_lines`, and `/statements` from coverage.py totals.
 - `json-metrics`: the parsed JSON value itself; it must contain only JSON data.

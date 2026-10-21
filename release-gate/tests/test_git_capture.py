@@ -214,3 +214,25 @@ def test_rejects_unmerged_index_without_mutation(repository: Path) -> None:
         capture_candidate(repository, base="HEAD")
 
     assert repository_snapshot(repository) == before
+
+
+@pytest.mark.parametrize("committed", [False, True])
+def test_capture_includes_force_added_ignored_files(repository: Path, committed: bool):
+    (repository / "ignored.txt").write_text("staged release artifact\n")
+    git(repository, "add", "-f", "ignored.txt")
+    if committed:
+        git(repository, "commit", "-qm", "track ignored artifact")
+        base = "HEAD~1"
+    else:
+        base = "HEAD"
+    # Capture working-copy contents, rather than the older staged blob.
+    (repository / "ignored.txt").write_text("latest release artifact\n")
+    # Refresh Git's stat cache before taking the immutable index snapshot.
+    git(repository, "status", "--porcelain=v2")
+    before = repository_snapshot(repository)
+
+    capture = capture_candidate(repository, base=base)
+
+    assert "ignored.txt" in capture.changed_paths
+    assert b"+latest release artifact" in capture.patch
+    assert repository_snapshot(repository) == before

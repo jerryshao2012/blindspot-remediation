@@ -85,7 +85,16 @@ def capture_candidate(
             object_dir=object_dir,
             source_objects=source_objects,
         )
-        _capture_git(root, environment, "read-tree", base_commit)
+        # Ignore rules must not hide paths tracked after the trusted base.
+        _capture_git(root, environment, "read-tree", "HEAD")
+        _capture_git(
+            root,
+            environment,
+            "update-index",
+            "-z",
+            "--index-info",
+            input_bytes=_source_git(root, "ls-files", "--stage", "-z"),
+        )
         _capture_git(
             root,
             environment,
@@ -254,10 +263,16 @@ def _source_git(root: Path, *arguments: str) -> bytes:
     ).stdout
 
 
-def _capture_git(root: Path, environment: dict[str, str], *arguments: str) -> bytes:
+def _capture_git(
+    root: Path,
+    environment: dict[str, str],
+    *arguments: str,
+    input_bytes: bytes | None = None,
+) -> bytes:
     try:
         return subprocess.run(
             [_git_binary(), "-C", str(root), *arguments],
+            input=input_bytes,
             capture_output=True,
             env=environment,
             check=True,

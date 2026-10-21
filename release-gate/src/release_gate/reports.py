@@ -248,6 +248,10 @@ def _parse_coverage(content: bytes) -> dict[str, int | float]:
 def _parse_junit(content: bytes) -> dict[str, int | float]:
     root = SafeElementTree.fromstring(content)
     suites = [element for element in root.iter() if _local_name(element) == "testsuite"]
+    for suite in suites:
+        child_tags = {_local_name(child) for child in suite}
+        if {"testcase", "testsuite"} <= child_tags:
+            raise ValueError("mixed JUnit suites cannot be aggregated safely")
     leaves = [
         suite
         for suite in suites

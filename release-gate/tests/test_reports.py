@@ -190,3 +190,18 @@ def test_present_optional_malformed_report_is_still_error(tmp_path: Path) -> Non
             artifact_dir=tmp_path / "artifacts",
             global_limit=100,
         )
+
+
+@pytest.mark.parametrize("namespace", ["", ' xmlns="urn:junit"'])
+def test_rejects_mixed_junit_suites_instead_of_losing_parent_failures(
+    tmp_path: Path, namespace: str
+) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        f'<testsuite{namespace} name="parent" tests="2" failures="1">'
+        '<testcase name="fails"><failure>broken</failure></testcase>'
+        '<testsuite name="child" tests="1" failures="0">'
+        '<testcase name="passes"/></testsuite></testsuite>'
+    )
+    with pytest.raises(ReportError, match="parse"):
+        parse_report(ReportParser.JUNIT_XML, path, 10_000)

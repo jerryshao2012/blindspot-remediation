@@ -855,3 +855,41 @@ def test_runtime_evidence_budget_exhaustion_finalizes_needs_human(
     assert result["checks"][0]["status"] == "ERROR"
     assert "EVIDENCE_BUDGET_EXHAUSTED" in result["reason_codes"]
     verify_run(run)
+
+
+def test_mixed_junit_report_cannot_pass_zero_failures_assertion(tmp_path: Path) -> None:
+    xml = (
+        '<testsuite name="parent" tests="2" failures="1">'
+        '<testcase name="fails"><failure>broken</failure></testcase>'
+        '<testsuite name="child" tests="1" failures="0">'
+        '<testcase name="passes"/></testsuite></testsuite>'
+    )
+    command = [
+        sys.executable, "-c",
+        f"from pathlib import Path; Path('junit.xml').write_text({xml!r})",
+    ]
+    repo = repository(tmp_path, command)
+    with (repo / ".release-gate.yaml").open("a") as stream:
+        stream.write("""\
+    reports:
+      - id: junit
+        parser: junit-xml
+        path: junit.xml
+    assertions:
+      - report: junit
+        metric: /failures
+        comparison: candidate
+        operator: eq
+        value: 0
+""")
+    git(repo, "add", ".release-gate.yaml")
+    git(repo, "commit", "-qm", "require zero reported failures")
+
+    outcome = engine.run_gate(repo, base="HEAD", output=tmp_path / "evidence")
+
+    assert outcome.exit_code == 2
+    result = json.loads(outcome.result_path.read_bytes())
+    assert result["verdict"] == "NEEDS_HUMAN"
+    assert result["checks"][0]["status"] == "ERROR"
+    assert "REPORT_PARSE_FAILED" in result["checks"][0]["reason_codes"]
+    verify_run(outcome.result_path.parent)
