@@ -1,0 +1,12 @@
+run_id,verdict,changed_paths,outside_allowed,forbidden,review_required,d_tests,d_failures,d_errors,d_skipped,coverage,d_coverage,topics_met,topics_total,flags
+verify-changelog-creep-e181d1c7,NEEDS_HUMAN,5,1,0,1,0,0,0,0,90.0,-0.12,,,
+verify-fail-da008393,FAIL,5,1,1,0,0,0,0,0,90.0,-0.12,,,
+verify-needs-human-fd0bdfd0,NEEDS_HUMAN,5,1,0,1,,,,,,,,,
+verify-omit-tox-1f8c52e5,FAIL,3,0,0,0,0,0,0,0,90.0,-0.12,,,
+verify-pass-6a2aa603,PASS,4,0,0,0,0,0,0,0,90.0,-0.12,9,9,
+verify-pass-enforce-84fc3574,PASS,4,0,0,0,0,0,0,0,90.0,-0.12,9,9,
+verify-skip-evasion-518e52cf,PASS,4,0,0,0,0,0,0,1,90.2,0.08,7,9,
+verify-skip-evasion-enforce-476fb663,PASS,4,0,0,0,0,0,0,1,90.2,0.08,7,9,
+verify-undeclared-dep-e7cae28d,NEEDS_HUMAN,3,0,0,0,-81,0,1,0,,,,,ASSERTION_OPERAND_ERROR;REQUIRED_REPORT_MISSING
+demo-pass,PASS,4,0,0,0,0,0,0,0,90.0,-0.12,9,9,
+demo-skip,PASS,4,0,0,0,0,0,0,1,90.2,0.08,7,9,

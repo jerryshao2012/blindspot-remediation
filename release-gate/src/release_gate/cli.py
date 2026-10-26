@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import stat
 import sys
@@ -21,6 +22,7 @@ from release_gate.config import (
     load_config_bytes,
 )
 from release_gate.engine import GateInputError, run_gate
+from release_gate.evidence import EvidenceError
 from release_gate.repair.controller import (
     apply_repair,
     approve_repair,
@@ -151,6 +153,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"VERDICT: {outcome.verdict.value}")
             print(f"RESULT: {outcome.result_path}")
             return outcome.exit_code
+        if arguments.command == "score":
+            from release_gate.scorecard import build_scorecard
+
+            try:
+                card = build_scorecard(Path(arguments.run))
+            except EvidenceError as error:
+                print(f"ERROR: {error}", file=sys.stderr)
+                return 3
+            print(json.dumps(card, indent=2))
+            return 0
         if arguments.command.startswith("repair-"):
             try:
                 if arguments.command == "repair-start":
@@ -278,6 +290,9 @@ def _build_parser() -> _ArgumentParser:
     assure.add_argument("--base", required=True, metavar="REF")
     assure.add_argument("--output", metavar="PATH")
     assure.add_argument("--run-id", metavar="ID")
+
+    score = commands.add_parser("score")
+    score.add_argument("--run", required=True, metavar="PATH")
 
     repair_start = commands.add_parser("repair-start")
     repair_start.add_argument("--repo", default=".", metavar="PATH")
