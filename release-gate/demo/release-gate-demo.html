@@ -633,6 +633,7 @@
 
   let gestureRecognizer, gestureStream, gestureVideo, gestureActive = false;
   let lastGestureFrame = -1, heldGesture = null, holdStarted = 0, gestureLocked = false, handAbsentSince = null;
+  let gestureEvidence = { Thumb_Up: 0, Thumb_Down: 0 };
 
   function stopHandControl(status = "Camera off") {
     gestureActive = false;
@@ -645,6 +646,7 @@
     holdStarted = 0;
     gestureLocked = false;
     handAbsentSince = null;
+    gestureEvidence = { Thumb_Up: 0, Thumb_Down: 0 };
     document.getElementById("gestureProgress").value = 0;
     gestureToggle.textContent = "Enable hand control";
     gestureToggle.setAttribute("aria-pressed", "false");
@@ -662,22 +664,33 @@
         const result = gestureRecognizer.recognizeForVideo(gestureVideo, now);
         const progress = document.getElementById("gestureProgress");
         const category = result.gestures?.[0]?.[0];
-        const gesture = category?.score >= 0.6 && ["Thumb_Up", "Thumb_Down"].includes(category.categoryName) ? category.categoryName : null;
+        for (const name of Object.keys(gestureEvidence)) gestureEvidence[name] *= 0.78;
+        if (["Thumb_Up", "Thumb_Down"].includes(category?.categoryName) && category.score >= 0.12) {
+          gestureEvidence[category.categoryName] += Math.max(0.2, category.score);
+        }
+        const [bestGesture, bestEvidence] = Object.entries(gestureEvidence).sort((a, b) => b[1] - a[1])[0];
+        const otherEvidence = gestureEvidence[bestGesture === "Thumb_Up" ? "Thumb_Down" : "Thumb_Up"];
+        const gesture = bestEvidence >= 0.65 && bestEvidence >= otherEvidence * 1.3 ? bestGesture : null;
         if (!result.landmarks?.length) {
           if (handAbsentSince === null) handAbsentSince = now;
-          if (now - handAbsentSince >= 400) gestureLocked = false;
-          heldGesture = null;
-          progress.value = 0;
-          gestureStatus.textContent = gestureLocked ? "Lower hand to reset" : "Ready — 👍 next / 👎 previous";
+          if (now - handAbsentSince >= 400) {
+            gestureLocked = false;
+            heldGesture = null;
+            holdStarted = 0;
+            gestureEvidence = { Thumb_Up: 0, Thumb_Down: 0 };
+            progress.value = 0;
+            gestureStatus.textContent = "Ready — 👍 next / 👎 previous";
+          } else if (heldGesture && !gestureLocked) {
+            progress.value = Math.min(1, (now - holdStarted) / 500);
+            gestureStatus.textContent = `Keep holding ${heldGesture === "Thumb_Up" ? "👍" : "👎"}`;
+          } else {
+            gestureStatus.textContent = gestureLocked ? "Lower hand to reset" : "Show thumb gesture";
+          }
         } else {
           handAbsentSince = null;
           if (gestureLocked) {
             gestureStatus.textContent = "Command sent — lower hand to reset";
-          } else if (!gesture) {
-            heldGesture = null;
-            progress.value = 0;
-            gestureStatus.textContent = "Hand detected — show 👍 or 👎";
-          } else {
+          } else if (gesture) {
             if (heldGesture !== gesture) {
               heldGesture = gesture;
               holdStarted = now;
@@ -689,6 +702,14 @@
               gestureLocked = true;
               gestureStatus.textContent = "Command sent — lower hand to reset";
             }
+          } else if (heldGesture && bestEvidence >= 0.3) {
+            progress.value = Math.min(1, (now - holdStarted) / 700);
+            gestureStatus.textContent = `Keep holding ${heldGesture === "Thumb_Up" ? "👍" : "👎"}`;
+          } else {
+            heldGesture = null;
+            holdStarted = 0;
+            progress.value = 0;
+            gestureStatus.textContent = "Hand detected — show 👍 or 👎";
           }
         }
       }
@@ -718,7 +739,10 @@
       gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
         baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task" },
         runningMode: "VIDEO",
-        numHands: 1
+        numHands: 1,
+        minHandDetectionConfidence: 0.4,
+        minHandPresenceConfidence: 0.4,
+        minTrackingConfidence: 0.4
       });
       if (!gestureActive) return stopHandControl();
       gestureToggle.disabled = false;
