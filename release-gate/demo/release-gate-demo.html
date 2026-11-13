@@ -226,7 +226,7 @@
 <div class="gesture-control">
   <video id="gesturePreview" class="gesture-preview" muted playsinline aria-label="Mirrored camera preview for hand positioning"></video>
   <button id="gestureToggle" type="button" aria-pressed="false">Enable hand control</button>
-  <span class="gesture-guide" title="Face an open palm toward the camera; after each swipe, return it to the same starting position">🖐 ← Prev · return · Next →</span>
+  <span class="gesture-guide" title="Face an open palm toward the camera; move it about 5 cm, then return near center">🖐 ← Prev · return · Next →</span>
   <span id="gestureStatus" role="status" aria-live="polite">Camera off</span>
 </div>
 
@@ -631,7 +631,7 @@
   }
 
   let gestureRecognizer, gestureStream, gestureVideo, gestureActive = false;
-  let lastGestureFrame = -1, swipeNeutralX = null, swipeReady = true, neutralFrames = 0, lastHandSeen = 0, gestureFeedbackUntil = 0;
+  let lastGestureFrame = -1, swipeNeutralX = null, swipeReady = true, neutralFrames = 0, swipeTriggerFrames = 0, swipeCooldownUntil = 0, lastHandSeen = 0, gestureFeedbackUntil = 0;
 
   function stopHandControl(status = "Camera off") {
     gestureActive = false;
@@ -643,6 +643,8 @@
     swipeNeutralX = null;
     swipeReady = true;
     neutralFrames = 0;
+    swipeTriggerFrames = 0;
+    swipeCooldownUntil = 0;
     gestureToggle.textContent = "Enable hand control";
     gestureToggle.setAttribute("aria-pressed", "false");
     gestureToggle.disabled = false;
@@ -662,23 +664,29 @@
         // Use palm landmarks even when the static classifier labels this pose "None".
         const x = 1 - (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5;
         lastHandSeen = now;
-        if (now >= gestureFeedbackUntil) gestureStatus.textContent = "Hand detected — swipe left/right";
+        if (now >= gestureFeedbackUntil) gestureStatus.textContent = swipeReady ? "Ready — move palm left/right" : "Return hand near center";
         if (swipeNeutralX === null) swipeNeutralX = x;
         if (!swipeReady) {
-          if (Math.abs(x - swipeNeutralX) <= 0.055) neutralFrames++;
+          if (Math.abs(x - swipeNeutralX) <= 0.12) neutralFrames++;
           else neutralFrames = 0;
-          if (neutralFrames >= 3) {
+          if (neutralFrames >= 2 && now >= swipeCooldownUntil) {
             swipeReady = true;
             neutralFrames = 0;
+            swipeTriggerFrames = 0;
+            swipeNeutralX = x;
             gestureStatus.textContent = "Ready — swipe left/right";
           }
         } else {
           const movement = x - swipeNeutralX;
-          if (Math.abs(movement) >= 0.08) {
+          if (Math.abs(movement) >= 0.055) swipeTriggerFrames++;
+          else swipeTriggerFrames = 0;
+          if (swipeTriggerFrames >= 2) {
             const direction = movement > 0 ? "right" : "left";
             goTo(current + (direction === "right" ? 1 : -1));
             swipeReady = false;
             neutralFrames = 0;
+            swipeTriggerFrames = 0;
+            swipeCooldownUntil = now + 500;
             gestureFeedbackUntil = now + 1600;
             gestureStatus.textContent = `Swipe ${direction} detected — return hand to start`;
           }
