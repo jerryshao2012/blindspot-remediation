@@ -54,6 +54,9 @@
   .gesture-control button[aria-pressed="true"] { color:#fff; background:var(--blue); }
   .gesture-control [role="status"] { color:var(--muted); max-width:24ch; }
   .gesture-guide { color:var(--muted-dark); white-space:nowrap; }
+  .gesture-preview { display:none; width:128px; aspect-ratio:4/3; object-fit:cover; transform:scaleX(-1);
+    border:1px solid var(--line); border-radius:6px; background:#001928; }
+  .gesture-control.camera-on .gesture-preview { display:block; }
 
   /* ---------- top architecture strip ---------- */
   .pipeline { position:fixed; top:2.2rem; left:50%; transform:translateX(-50%); z-index:35;
@@ -221,8 +224,9 @@
 <div class="hints">← → navigate · F fullscreen · N notes (Screen 2 popup in fullscreen)</div>
 <div class="navdots" id="navdots"></div>
 <div class="gesture-control">
+  <video id="gesturePreview" class="gesture-preview" muted playsinline aria-label="Mirrored camera preview for hand positioning"></video>
   <button id="gestureToggle" type="button" aria-pressed="false">Enable hand control</button>
-  <span class="gesture-guide" title="Face an open palm toward the camera and move it horizontally about 10 cm">🖐 Move ~10 cm · ← Prev · Next →</span>
+  <span class="gesture-guide" title="Face an open palm toward the camera and move it horizontally about 8 cm">🖐 Open palm · ← Prev · Next →</span>
   <span id="gestureStatus" role="status" aria-live="polite">Camera off</span>
 </div>
 
@@ -585,6 +589,8 @@
   const drawerClose = document.getElementById("drawerClose");
   const gestureToggle = document.getElementById("gestureToggle");
   const gestureStatus = document.getElementById("gestureStatus");
+  const gesturePreview = document.getElementById("gesturePreview");
+  const gestureControl = document.querySelector(".gesture-control");
 
   let current = 0;
 
@@ -625,7 +631,7 @@
   }
 
   let gestureRecognizer, gestureStream, gestureVideo, gestureActive = false;
-  let lastGestureFrame = -1, swipeAnchor = null, swipeReady = true, swipeRearmAt = 0, lastHandSeen = 0, gestureFeedbackUntil = 0;
+  let lastGestureFrame = -1, handTrail = [], swipeRearmAt = 0, lastHandSeen = 0, gestureFeedbackUntil = 0;
 
   function stopHandControl(status = "Camera off") {
     gestureActive = false;
@@ -634,13 +640,13 @@
     if (gestureVideo) gestureVideo.srcObject = null;
     gestureRecognizer?.close();
     gestureRecognizer = null;
-    swipeAnchor = null;
-    swipeReady = true;
+    handTrail = [];
     swipeRearmAt = 0;
     gestureToggle.textContent = "Enable hand control";
     gestureToggle.setAttribute("aria-pressed", "false");
     gestureToggle.disabled = false;
     gestureStatus.textContent = status;
+    gestureControl.classList.remove("camera-on");
   }
 
   function detectSwipeFrame() {
@@ -656,22 +662,19 @@
         const x = 1 - (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5;
         lastHandSeen = now;
         if (now >= gestureFeedbackUntil) gestureStatus.textContent = "Hand detected — swipe left/right";
-        if (swipeAnchor === null) swipeAnchor = x;
-        if (swipeReady && Math.abs(x - swipeAnchor) >= 0.10) {
-          const direction = x > swipeAnchor ? "right" : "left";
+        handTrail.push({ x, time: now });
+        handTrail = handTrail.filter(point => now - point.time <= 650);
+        const movement = x - handTrail[0].x;
+        if (now >= swipeRearmAt && Math.abs(movement) >= 0.08) {
+          const direction = movement > 0 ? "right" : "left";
           goTo(current + (direction === "right" ? 1 : -1));
-          swipeReady = false;
           swipeRearmAt = now + 650;
+          handTrail = [];
           gestureFeedbackUntil = now + 1600;
           gestureStatus.textContent = `Detected swipe ${direction} — ${direction === "right" ? "next" : "previous"} slide`;
-        } else if (!swipeReady) {
-          if (now >= swipeRearmAt) {
-            swipeReady = true;
-            swipeAnchor = x;
-          }
         }
-      } else if (swipeReady) {
-        swipeAnchor = null;
+      } else if (now - lastHandSeen > 650) {
+        handTrail = [];
       }
     }
     setTimeout(() => requestAnimationFrame(detectSwipeFrame), 80);
@@ -685,7 +688,7 @@
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access requires HTTPS or localhost.");
       gestureStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
       if (!gestureActive) return stopHandControl();
-      gestureVideo = document.createElement("video");
+      gestureVideo = gesturePreview;
       gestureVideo.muted = true;
       gestureVideo.playsInline = true;
       gestureVideo.srcObject = gestureStream;
@@ -703,6 +706,7 @@
       gestureToggle.disabled = false;
       gestureToggle.textContent = "Disable hand control";
       gestureToggle.setAttribute("aria-pressed", "true");
+      gestureControl.classList.add("camera-on");
       gestureStatus.textContent = "Show one hand to navigate";
       detectSwipeFrame();
     } catch (error) {
