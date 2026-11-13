@@ -622,7 +622,7 @@
   }
 
   let gestureRecognizer, gestureStream, gestureVideo, gestureActive = false;
-  let lastGestureFrame = -1, swipeAnchor = null, swipeReady = true, stillSince = 0, lastHandX = null, lastHandSeen = 0;
+  let lastGestureFrame = -1, swipeAnchor = null, swipeReady = true, stillSince = 0, lastHandX = null, lastHandSeen = 0, gestureFeedbackUntil = 0;
 
   function stopHandControl(status = "Camera off") {
     gestureActive = false;
@@ -646,17 +646,21 @@
       lastGestureFrame = gestureVideo.currentTime;
       const result = gestureRecognizer.recognizeForVideo(gestureVideo, performance.now());
       const hand = result.landmarks?.[0];
+      const now = performance.now();
+      if (now >= gestureFeedbackUntil && now - lastHandSeen > 1500) gestureStatus.textContent = "Show one hand to navigate";
       if (hand?.length >= 18) {
         // Use palm landmarks even when the static classifier labels this pose "None".
         const x = 1 - (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5;
-        const now = performance.now();
         lastHandSeen = now;
-        gestureStatus.textContent = "Hand detected — swipe left/right";
+        if (now >= gestureFeedbackUntil) gestureStatus.textContent = "Hand detected — swipe left/right";
         if (swipeAnchor === null) swipeAnchor = x;
-        if (swipeReady && Math.abs(x - swipeAnchor) >= 0.22) {
-          goTo(current + (x > swipeAnchor ? 1 : -1));
+        if (swipeReady && Math.abs(x - swipeAnchor) >= 0.16) {
+          const direction = x > swipeAnchor ? "right" : "left";
+          goTo(current + (direction === "right" ? 1 : -1));
           swipeReady = false;
           stillSince = 0;
+          gestureFeedbackUntil = now + 1600;
+          gestureStatus.textContent = `Detected swipe ${direction} — ${direction === "right" ? "next" : "previous"} slide`;
         } else if (!swipeReady) {
           if (lastHandX !== null && Math.abs(x - lastHandX) < 0.025) {
             if (stillSince === 0) stillSince = now;
@@ -668,8 +672,6 @@
             swipeAnchor = x;
             stillSince = 0;
           }
-        } else if (Math.abs(x - swipeAnchor) < 0.06) {
-          swipeAnchor = x * 0.8 + swipeAnchor * 0.2;
         }
         lastHandX = x;
       } else if (!swipeReady) {
@@ -678,7 +680,6 @@
       } else {
         swipeAnchor = null;
         lastHandX = null;
-        if (performance.now() - lastHandSeen > 1500) gestureStatus.textContent = "Show one hand to navigate";
       }
     }
     setTimeout(() => requestAnimationFrame(detectSwipeFrame), 80);
