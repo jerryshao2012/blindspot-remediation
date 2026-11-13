@@ -622,7 +622,7 @@
   }
 
   let gestureRecognizer, gestureStream, gestureVideo, gestureActive = false;
-  let lastGestureFrame = -1, swipeAnchor = null, swipeReady = true, stillSince = 0, lastHandX = null;
+  let lastGestureFrame = -1, swipeAnchor = null, swipeReady = true, stillSince = 0, lastHandX = null, lastHandSeen = 0;
 
   function stopHandControl(status = "Camera off") {
     gestureActive = false;
@@ -645,11 +645,13 @@
     if (gestureVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && gestureVideo.currentTime !== lastGestureFrame) {
       lastGestureFrame = gestureVideo.currentTime;
       const result = gestureRecognizer.recognizeForVideo(gestureVideo, performance.now());
-      const category = result.gestures?.[0]?.[0];
       const hand = result.landmarks?.[0];
-      if (category && category.categoryName !== "None" && category.score >= 0.55 && hand?.[0]) {
-        const x = 1 - hand[0].x;
+      if (hand?.length >= 18) {
+        // Use palm landmarks even when the static classifier labels this pose "None".
+        const x = 1 - (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5;
         const now = performance.now();
+        lastHandSeen = now;
+        gestureStatus.textContent = "Hand detected — swipe left/right";
         if (swipeAnchor === null) swipeAnchor = x;
         if (swipeReady && Math.abs(x - swipeAnchor) >= 0.22) {
           goTo(current + (x > swipeAnchor ? 1 : -1));
@@ -676,6 +678,7 @@
       } else {
         swipeAnchor = null;
         lastHandX = null;
+        if (performance.now() - lastHandSeen > 1500) gestureStatus.textContent = "Show one hand to navigate";
       }
     }
     setTimeout(() => requestAnimationFrame(detectSwipeFrame), 80);
@@ -707,7 +710,7 @@
       gestureToggle.disabled = false;
       gestureToggle.textContent = "Disable hand control";
       gestureToggle.setAttribute("aria-pressed", "true");
-      gestureStatus.textContent = "Swipe left/right to navigate";
+      gestureStatus.textContent = "Show one hand to navigate";
       detectSwipeFrame();
     } catch (error) {
       stopHandControl(error.name === "NotAllowedError" ? "Camera permission denied" : `Camera unavailable: ${error.message}`);
