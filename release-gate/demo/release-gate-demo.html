@@ -226,7 +226,8 @@
 <div class="gesture-control">
   <video id="gesturePreview" class="gesture-preview" muted playsinline aria-label="Mirrored camera preview for hand positioning"></video>
   <button id="gestureToggle" type="button" aria-pressed="false">Enable hand control</button>
-  <span class="gesture-guide" title="Face an open palm toward the camera; move it about 5 cm, then return near center">🖐 ← Prev · return · Next →</span>
+  <span class="gesture-guide">👍 Next · 👎 Previous · lower hand to reset</span>
+  <progress id="gestureProgress" max="1" value="0" aria-label="Gesture hold progress" style="width:60px"></progress>
   <span id="gestureStatus" role="status" aria-live="polite">Camera off</span>
 </div>
 
@@ -631,7 +632,7 @@
   }
 
   let gestureRecognizer, gestureStream, gestureVideo, gestureActive = false;
-  let lastGestureFrame = -1, swipeNeutralX = null, swipeReady = true, neutralFrames = 0, swipeTriggerFrames = 0, swipeCooldownUntil = 0, lastHandSeen = 0, gestureFeedbackUntil = 0;
+  let lastGestureFrame = -1, heldGesture = null, holdStarted = 0, gestureLocked = false, handAbsentSince = null;
 
   function stopHandControl(status = "Camera off") {
     gestureActive = false;
@@ -640,11 +641,11 @@
     if (gestureVideo) gestureVideo.srcObject = null;
     gestureRecognizer?.close();
     gestureRecognizer = null;
-    swipeNeutralX = null;
-    swipeReady = true;
-    neutralFrames = 0;
-    swipeTriggerFrames = 0;
-    swipeCooldownUntil = 0;
+    heldGesture = null;
+    holdStarted = 0;
+    gestureLocked = false;
+    handAbsentSince = null;
+    document.getElementById("gestureProgress").value = 0;
     gestureToggle.textContent = "Enable hand control";
     gestureToggle.setAttribute("aria-pressed", "false");
     gestureToggle.disabled = false;
@@ -652,50 +653,49 @@
     gestureControl.classList.remove("camera-on");
   }
 
-  function detectSwipeFrame() {
+  function detectGestureFrame() {
     if (!gestureActive) return;
-    if (gestureVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && gestureVideo.currentTime !== lastGestureFrame) {
-      lastGestureFrame = gestureVideo.currentTime;
-      const result = gestureRecognizer.recognizeForVideo(gestureVideo, performance.now());
-      const hand = result.landmarks?.[0];
-      const now = performance.now();
-      if (now >= gestureFeedbackUntil && now - lastHandSeen > 1500) gestureStatus.textContent = "Show one hand to navigate";
-      if (hand?.length >= 18) {
-        // Use palm landmarks even when the static classifier labels this pose "None".
-        const x = 1 - (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5;
-        lastHandSeen = now;
-        if (now >= gestureFeedbackUntil) gestureStatus.textContent = swipeReady ? "Ready — move palm left/right" : "Return hand near center";
-        if (swipeNeutralX === null) swipeNeutralX = x;
-        if (!swipeReady) {
-          if (Math.abs(x - swipeNeutralX) <= 0.12) neutralFrames++;
-          else neutralFrames = 0;
-          if (neutralFrames >= 2 && now >= swipeCooldownUntil) {
-            swipeReady = true;
-            neutralFrames = 0;
-            swipeTriggerFrames = 0;
-            swipeNeutralX = x;
-            gestureStatus.textContent = "Ready — swipe left/right";
-          }
+    try {
+      if (gestureVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && gestureVideo.currentTime !== lastGestureFrame) {
+        lastGestureFrame = gestureVideo.currentTime;
+        const now = performance.now();
+        const result = gestureRecognizer.recognizeForVideo(gestureVideo, now);
+        const progress = document.getElementById("gestureProgress");
+        const category = result.gestures?.[0]?.[0];
+        const gesture = category?.score >= 0.6 && ["Thumb_Up", "Thumb_Down"].includes(category.categoryName) ? category.categoryName : null;
+        if (!result.landmarks?.length) {
+          if (handAbsentSince === null) handAbsentSince = now;
+          if (now - handAbsentSince >= 400) gestureLocked = false;
+          heldGesture = null;
+          progress.value = 0;
+          gestureStatus.textContent = gestureLocked ? "Lower hand to reset" : "Ready — 👍 next / 👎 previous";
         } else {
-          const movement = x - swipeNeutralX;
-          if (Math.abs(movement) >= 0.055) swipeTriggerFrames++;
-          else swipeTriggerFrames = 0;
-          if (swipeTriggerFrames >= 2) {
-            const direction = movement > 0 ? "right" : "left";
-            goTo(current + (direction === "right" ? 1 : -1));
-            swipeReady = false;
-            neutralFrames = 0;
-            swipeTriggerFrames = 0;
-            swipeCooldownUntil = now + 500;
-            gestureFeedbackUntil = now + 1600;
-            gestureStatus.textContent = `Swipe ${direction} detected — return hand to start`;
+          handAbsentSince = null;
+          if (gestureLocked) {
+            gestureStatus.textContent = "Command sent — lower hand to reset";
+          } else if (!gesture) {
+            heldGesture = null;
+            progress.value = 0;
+            gestureStatus.textContent = "Hand detected — show 👍 or 👎";
+          } else {
+            if (heldGesture !== gesture) {
+              heldGesture = gesture;
+              holdStarted = now;
+            }
+            progress.value = Math.min(1, (now - holdStarted) / 500);
+            gestureStatus.textContent = gesture === "Thumb_Up" ? "Hold 👍 for next slide" : "Hold 👎 for previous slide";
+            if (progress.value >= 1) {
+              goTo(current + (gesture === "Thumb_Up" ? 1 : -1));
+              gestureLocked = true;
+              gestureStatus.textContent = "Command sent — lower hand to reset";
+            }
           }
         }
-      } else if (now - lastHandSeen > 1500) {
-        if (swipeReady) swipeNeutralX = null;
       }
+      setTimeout(() => requestAnimationFrame(detectGestureFrame), 80);
+    } catch (error) {
+      stopHandControl(`Hand recognition stopped: ${error.message}`);
     }
-    setTimeout(() => requestAnimationFrame(detectSwipeFrame), 80);
   }
 
   async function startHandControl() {
@@ -726,7 +726,7 @@
       gestureToggle.setAttribute("aria-pressed", "true");
       gestureControl.classList.add("camera-on");
       gestureStatus.textContent = "Show one hand to navigate";
-      detectSwipeFrame();
+      detectGestureFrame();
     } catch (error) {
       stopHandControl(error.name === "NotAllowedError" ? "Camera permission denied" : `Camera unavailable: ${error.message}`);
     }
