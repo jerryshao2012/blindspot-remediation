@@ -226,7 +226,7 @@
 <div class="gesture-control">
   <video id="gesturePreview" class="gesture-preview" muted playsinline aria-label="Mirrored camera preview for hand positioning"></video>
   <button id="gestureToggle" type="button" aria-pressed="false">Enable hand control</button>
-  <span class="gesture-guide" title="Face an open palm toward the camera and move it horizontally about 8 cm">🖐 Open palm · ← Prev · Next →</span>
+  <span class="gesture-guide" title="Face an open palm toward the camera; after each swipe, return it to the same starting position">🖐 ← Prev · return · Next →</span>
   <span id="gestureStatus" role="status" aria-live="polite">Camera off</span>
 </div>
 
@@ -631,7 +631,7 @@
   }
 
   let gestureRecognizer, gestureStream, gestureVideo, gestureActive = false;
-  let lastGestureFrame = -1, handTrail = [], swipeRearmAt = 0, lastHandSeen = 0, gestureFeedbackUntil = 0;
+  let lastGestureFrame = -1, swipeNeutralX = null, swipeReady = true, neutralFrames = 0, lastHandSeen = 0, gestureFeedbackUntil = 0;
 
   function stopHandControl(status = "Camera off") {
     gestureActive = false;
@@ -640,8 +640,9 @@
     if (gestureVideo) gestureVideo.srcObject = null;
     gestureRecognizer?.close();
     gestureRecognizer = null;
-    handTrail = [];
-    swipeRearmAt = 0;
+    swipeNeutralX = null;
+    swipeReady = true;
+    neutralFrames = 0;
     gestureToggle.textContent = "Enable hand control";
     gestureToggle.setAttribute("aria-pressed", "false");
     gestureToggle.disabled = false;
@@ -662,19 +663,28 @@
         const x = 1 - (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5;
         lastHandSeen = now;
         if (now >= gestureFeedbackUntil) gestureStatus.textContent = "Hand detected — swipe left/right";
-        handTrail.push({ x, time: now });
-        handTrail = handTrail.filter(point => now - point.time <= 650);
-        const movement = x - handTrail[0].x;
-        if (now >= swipeRearmAt && Math.abs(movement) >= 0.08) {
-          const direction = movement > 0 ? "right" : "left";
-          goTo(current + (direction === "right" ? 1 : -1));
-          swipeRearmAt = now + 650;
-          handTrail = [];
-          gestureFeedbackUntil = now + 1600;
-          gestureStatus.textContent = `Detected swipe ${direction} — ${direction === "right" ? "next" : "previous"} slide`;
+        if (swipeNeutralX === null) swipeNeutralX = x;
+        if (!swipeReady) {
+          if (Math.abs(x - swipeNeutralX) <= 0.055) neutralFrames++;
+          else neutralFrames = 0;
+          if (neutralFrames >= 3) {
+            swipeReady = true;
+            neutralFrames = 0;
+            gestureStatus.textContent = "Ready — swipe left/right";
+          }
+        } else {
+          const movement = x - swipeNeutralX;
+          if (Math.abs(movement) >= 0.08) {
+            const direction = movement > 0 ? "right" : "left";
+            goTo(current + (direction === "right" ? 1 : -1));
+            swipeReady = false;
+            neutralFrames = 0;
+            gestureFeedbackUntil = now + 1600;
+            gestureStatus.textContent = `Swipe ${direction} detected — return hand to start`;
+          }
         }
-      } else if (now - lastHandSeen > 650) {
-        handTrail = [];
+      } else if (now - lastHandSeen > 1500) {
+        if (swipeReady) swipeNeutralX = null;
       }
     }
     setTimeout(() => requestAnimationFrame(detectSwipeFrame), 80);
