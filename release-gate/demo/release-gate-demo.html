@@ -45,6 +45,14 @@
   .navdots { position:fixed; right:.9rem; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:.45rem; z-index:40; }
   .navdots button { width:8px; height:8px; border-radius:50%; border:1px solid var(--muted-dark); background:transparent; cursor:pointer; padding:0; transition:all .2s; }
   .navdots button.on { background:var(--blue); border-color:var(--blue); transform:scale(1.25); }
+  .gesture-control { position:fixed; right:var(--pad); bottom:2rem; z-index:45; display:flex; align-items:center; gap:.55rem;
+    padding:.4rem .55rem; background:var(--white); border:1px solid var(--line); border-radius:8px;
+    box-shadow:0 4px 16px rgba(0,25,40,.08); font-family:var(--font-mono); font-size:var(--micro-size); }
+  .gesture-control button { border:1px solid var(--blue); border-radius:5px; padding:.3rem .55rem; color:var(--blue);
+    background:transparent; cursor:pointer; font:inherit; white-space:nowrap; }
+  .gesture-control button:disabled { opacity:.6; cursor:wait; }
+  .gesture-control button[aria-pressed="true"] { color:#fff; background:var(--blue); }
+  .gesture-control [role="status"] { color:var(--muted); max-width:24ch; }
 
   /* ---------- top architecture strip ---------- */
   .pipeline { position:fixed; top:2.2rem; left:50%; transform:translateX(-50%); z-index:35;
@@ -210,6 +218,10 @@
 <div class="counter" id="counter">01 / 10</div>
 <div class="hints">← → navigate · F fullscreen · N notes (Screen 2 popup in fullscreen)</div>
 <div class="navdots" id="navdots"></div>
+<div class="gesture-control">
+  <button id="gestureToggle" type="button" aria-pressed="false">Enable hand control</button>
+  <span id="gestureStatus" role="status" aria-live="polite">Camera off</span>
+</div>
 
 <!-- ======= persistent pipeline map ======= -->
 <div class="pipeline" id="pipeline">
@@ -568,6 +580,8 @@
   const drawerTimerReset = document.getElementById("drawerTimerReset");
   const drawerPopoutBtn = document.getElementById("drawerPopoutBtn");
   const drawerClose = document.getElementById("drawerClose");
+  const gestureToggle = document.getElementById("gestureToggle");
+  const gestureStatus = document.getElementById("gestureStatus");
 
   let current = 0;
 
@@ -606,6 +620,105 @@
     updateChrome(current);
     history.replaceState(null, "", "#slide-" + (current + 1));
   }
+
+  let gestureRecognizer, gestureStream, gestureVideo, gestureActive = false;
+  let lastGestureFrame = -1, swipeAnchor = null, swipeReady = true, stillSince = 0, lastHandX = null;
+
+  function stopHandControl(status = "Camera off") {
+    gestureActive = false;
+    gestureStream?.getTracks().forEach(track => track.stop());
+    gestureStream = null;
+    if (gestureVideo) gestureVideo.srcObject = null;
+    gestureRecognizer?.close();
+    gestureRecognizer = null;
+    swipeAnchor = null;
+    swipeReady = true;
+    lastHandX = null;
+    gestureToggle.textContent = "Enable hand control";
+    gestureToggle.setAttribute("aria-pressed", "false");
+    gestureToggle.disabled = false;
+    gestureStatus.textContent = status;
+  }
+
+  function detectSwipeFrame() {
+    if (!gestureActive) return;
+    if (gestureVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && gestureVideo.currentTime !== lastGestureFrame) {
+      lastGestureFrame = gestureVideo.currentTime;
+      const result = gestureRecognizer.recognizeForVideo(gestureVideo, performance.now());
+      const category = result.gestures?.[0]?.[0];
+      const hand = result.landmarks?.[0];
+      if (category && category.categoryName !== "None" && category.score >= 0.55 && hand?.[0]) {
+        const x = 1 - hand[0].x;
+        const now = performance.now();
+        if (swipeAnchor === null) swipeAnchor = x;
+        if (swipeReady && Math.abs(x - swipeAnchor) >= 0.22) {
+          goTo(current + (x > swipeAnchor ? 1 : -1));
+          swipeReady = false;
+          stillSince = 0;
+        } else if (!swipeReady) {
+          if (lastHandX !== null && Math.abs(x - lastHandX) < 0.025) {
+            if (stillSince === 0) stillSince = now;
+          } else {
+            stillSince = 0;
+          }
+          if (stillSince && now - stillSince >= 550) {
+            swipeReady = true;
+            swipeAnchor = x;
+            stillSince = 0;
+          }
+        } else if (Math.abs(x - swipeAnchor) < 0.06) {
+          swipeAnchor = x * 0.8 + swipeAnchor * 0.2;
+        }
+        lastHandX = x;
+      } else if (!swipeReady) {
+        stillSince = 0;
+        lastHandX = null;
+      } else {
+        swipeAnchor = null;
+        lastHandX = null;
+      }
+    }
+    setTimeout(() => requestAnimationFrame(detectSwipeFrame), 80);
+  }
+
+  async function startHandControl() {
+    gestureActive = true;
+    gestureToggle.disabled = true;
+    gestureStatus.textContent = "Requesting camera…";
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access requires HTTPS or localhost.");
+      gestureStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      if (!gestureActive) return stopHandControl();
+      gestureVideo = document.createElement("video");
+      gestureVideo.muted = true;
+      gestureVideo.playsInline = true;
+      gestureVideo.srcObject = gestureStream;
+      await gestureVideo.play();
+      gestureStatus.textContent = "Loading hand model…";
+      const { FilesetResolver, GestureRecognizer } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs");
+      if (!gestureActive) return stopHandControl();
+      const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm");
+      gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task" },
+        runningMode: "VIDEO",
+        numHands: 1
+      });
+      if (!gestureActive) return stopHandControl();
+      gestureToggle.disabled = false;
+      gestureToggle.textContent = "Disable hand control";
+      gestureToggle.setAttribute("aria-pressed", "true");
+      gestureStatus.textContent = "Swipe left/right to navigate";
+      detectSwipeFrame();
+    } catch (error) {
+      stopHandControl(error.name === "NotAllowedError" ? "Camera permission denied" : `Camera unavailable: ${error.message}`);
+    }
+  }
+
+  gestureToggle.addEventListener("click", () => {
+    if (gestureActive) stopHandControl();
+    else startHandControl();
+  });
+  window.addEventListener("pagehide", () => stopHandControl());
 
   function renderDrawerNotes(i) {
     const aside = slides[i].querySelector("aside.speaker-notes");
@@ -1599,6 +1712,7 @@
 
   document.addEventListener("keydown", (e) => {
     if (e.target.isContentEditable || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.target.closest?.(".gesture-control")) return;
     if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
     else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) { e.preventDefault(); goTo(current - 1); }
     else if (e.key === "f" || e.key === "F") {
