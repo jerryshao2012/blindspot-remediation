@@ -52,8 +52,9 @@
     background:transparent; cursor:pointer; font:inherit; white-space:nowrap; }
   .gesture-control button:disabled { opacity:.6; cursor:wait; }
   .gesture-control button[aria-pressed="true"] { color:#fff; background:var(--blue); }
-  .gesture-control [role="status"] { color:var(--muted); flex:0 0 min(16ch, 100%); line-height:1.5;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gesture-control [role="status"]:not(.error) { position:absolute; width:1px; height:1px;
+    overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  .gesture-control [role="status"].error { color:var(--ink); max-width:24ch; overflow-wrap:anywhere; }
   .gesture-guide { color:var(--muted-dark); white-space:nowrap; }
   .gesture-preview { display:none; width:128px; aspect-ratio:4/3; object-fit:cover; transform:scaleX(-1);
     border:1px solid var(--line); border-radius:6px; background:#001928; }
@@ -653,7 +654,7 @@
     gestureToggle.setAttribute("aria-pressed", "false");
     gestureToggle.disabled = false;
     gestureStatus.textContent = status;
-    gestureStatus.title = status.length > 16 ? status : "";
+    gestureStatus.classList.toggle("error", status !== "Camera off");
     gestureControl.classList.remove("camera-on");
   }
 
@@ -724,7 +725,7 @@
   async function startHandControl() {
     gestureActive = true;
     gestureToggle.disabled = true;
-    gestureStatus.title = "";
+    gestureStatus.classList.remove("error");
     gestureStatus.textContent = "Opening camera…";
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access requires HTTPS or localhost.");
