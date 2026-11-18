@@ -45,7 +45,8 @@
   .navdots { position:fixed; right:.9rem; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:.45rem; z-index:40; }
   .navdots button { width:8px; height:8px; border-radius:50%; border:1px solid var(--muted-dark); background:transparent; cursor:pointer; padding:0; transition:all .2s; }
   .navdots button.on { background:var(--blue); border-color:var(--blue); transform:scale(1.25); }
-  .gesture-control { position:fixed; right:var(--pad); bottom:3rem; z-index:45; display:flex; flex-wrap:wrap; align-items:center; gap:.55rem;
+  .gesture-control { position:fixed; right:var(--pad); bottom:3rem; z-index:45; display:grid; width:min(22rem, calc(100% - 2 * var(--pad))); grid-template-columns:6rem minmax(0, 1fr);
+    grid-template-rows:2rem 1.5rem 1rem; align-items:center; gap:.3rem .6rem;
     max-width:calc(100% - 2 * var(--pad)); padding:.4rem .55rem; background:var(--white); border:1px solid var(--line); border-radius:8px;
     box-shadow:0 4px 16px rgba(0,25,40,.08); font-family:var(--font-mono); font-size:var(--micro-size); }
   .gesture-control button { border:1px solid var(--blue); border-radius:5px; padding:.3rem .55rem; color:var(--blue);
@@ -54,11 +55,14 @@
   .gesture-control button[aria-pressed="true"] { color:#fff; background:var(--blue); }
   .gesture-control [role="status"]:not(.error) { position:absolute; width:1px; height:1px;
     overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-  .gesture-control [role="status"].error { color:var(--ink); max-width:24ch; overflow-wrap:anywhere; }
-  .gesture-guide { color:var(--muted-dark); white-space:nowrap; }
-  .gesture-preview { display:none; width:128px; aspect-ratio:4/3; object-fit:cover; transform:scaleX(-1);
+  .gesture-control [role="status"].error { position:absolute; inset:auto 0 calc(100% + .35rem);
+    padding:.4rem .55rem; border:1px solid var(--line); border-radius:6px; background:var(--white);
+    color:var(--ink); overflow-wrap:anywhere; }
+  .gesture-control .gesture-guide { color:var(--muted); grid-column:2; }
+  .gesture-control progress { grid-column:2; width:100%; }
+  .gesture-preview { visibility:hidden; grid-row:1 / 4; width:6rem; height:4.5rem; object-fit:cover; transform:scaleX(-1);
     border:1px solid var(--line); border-radius:6px; background:#001928; }
-  .gesture-control.camera-on .gesture-preview { display:block; }
+  .gesture-control.camera-on .gesture-preview { visibility:visible; }
 
   /* ---------- top architecture strip ---------- */
   .pipeline { position:fixed; top:2.2rem; left:50%; transform:translateX(-50%); z-index:35;
@@ -214,7 +218,6 @@
     .pipeline{ display:none; }
     .stepno{ display:none; }
     .track-grid { grid-template-columns: 1fr; }
-    .gesture-guide { display:none; }
   }
 </style>
 </head>
@@ -228,8 +231,8 @@
 <div class="gesture-control">
   <video id="gesturePreview" class="gesture-preview" muted playsinline aria-label="Mirrored camera preview for hand positioning"></video>
   <button id="gestureToggle" type="button" aria-pressed="false">Enable hand control</button>
-  <span class="gesture-guide">👍 Next · 👎 Previous · lower hand to reset</span>
-  <progress id="gestureProgress" max="1" value="0" aria-label="Gesture hold progress" style="width:60px"></progress>
+  <span class="gesture-guide">👍 Next · 👎 Previous</span>
+  <progress id="gestureProgress" max="1" value="0" aria-label="Gesture hold progress"></progress>
   <span id="gestureStatus" role="status" aria-live="polite">Camera off</span>
 </div>
 
