@@ -45,15 +45,15 @@
   .navdots { position:fixed; right:.9rem; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:.45rem; z-index:40; }
   .navdots button { width:8px; height:8px; border-radius:50%; border:1px solid var(--muted-dark); background:transparent; cursor:pointer; padding:0; transition:all .2s; }
   .navdots button.on { background:var(--blue); border-color:var(--blue); transform:scale(1.25); }
-  .gesture-control { position:fixed; right:var(--pad); bottom:2rem; z-index:45; display:flex; flex-wrap:wrap; align-items:center; gap:.55rem;
+  .gesture-control { position:fixed; right:var(--pad); bottom:3rem; z-index:45; display:flex; flex-wrap:wrap; align-items:center; gap:.55rem;
     max-width:calc(100% - 2 * var(--pad)); padding:.4rem .55rem; background:var(--white); border:1px solid var(--line); border-radius:8px;
     box-shadow:0 4px 16px rgba(0,25,40,.08); font-family:var(--font-mono); font-size:var(--micro-size); }
   .gesture-control button { border:1px solid var(--blue); border-radius:5px; padding:.3rem .55rem; color:var(--blue);
     background:transparent; cursor:pointer; font:inherit; white-space:nowrap; }
   .gesture-control button:disabled { opacity:.6; cursor:wait; }
   .gesture-control button[aria-pressed="true"] { color:#fff; background:var(--blue); }
-  .gesture-control [role="status"] { color:var(--muted); flex:0 0 min(24ch, 100%); height:3em; line-height:1.5;
-    overflow:auto; overflow-wrap:anywhere; }
+  .gesture-control [role="status"] { color:var(--muted); flex:0 0 min(16ch, 100%); line-height:1.5;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .gesture-guide { color:var(--muted-dark); white-space:nowrap; }
   .gesture-preview { display:none; width:128px; aspect-ratio:4/3; object-fit:cover; transform:scaleX(-1);
     border:1px solid var(--line); border-radius:6px; background:#001928; }
@@ -653,6 +653,7 @@
     gestureToggle.setAttribute("aria-pressed", "false");
     gestureToggle.disabled = false;
     gestureStatus.textContent = status;
+    gestureStatus.title = status.length > 16 ? status : "";
     gestureControl.classList.remove("camera-on");
   }
 
@@ -680,16 +681,16 @@
             holdStarted = 0;
             gestureEvidence = { Thumb_Up: 0, Thumb_Down: 0 };
             progress.value = 0;
-            gestureStatus.textContent = "Ready — 👍 next / 👎 previous";
+            gestureStatus.textContent = "Ready";
           } else if (heldGesture && !gestureLocked) {
-            gestureStatus.textContent = `Keep holding ${heldGesture === "Thumb_Up" ? "👍" : "👎"}`;
+            gestureStatus.textContent = `Hold ${heldGesture === "Thumb_Up" ? "👍" : "👎"}`;
           } else {
-            gestureStatus.textContent = gestureLocked ? "Lower hand to reset" : "Show thumb gesture";
+            gestureStatus.textContent = gestureLocked ? "Lower hand" : "Show 👍 or 👎";
           }
         } else {
           handAbsentSince = null;
           if (gestureLocked) {
-            gestureStatus.textContent = "Command sent — lower hand to reset";
+            gestureStatus.textContent = "Lower hand";
           } else if (gesture && category?.categoryName === gesture && category.score >= 0.12) {
             if (heldGesture !== gesture) {
               heldGesture = gesture;
@@ -698,19 +699,19 @@
             }
             const holdDuration = category.score >= 0.75 && bestEvidence >= 1.2 ? 320 : 500;
             progress.value = Math.max(progress.value, Math.min(1, (now - holdStarted) / holdDuration));
-            gestureStatus.textContent = gesture === "Thumb_Up" ? "Hold 👍 for next slide" : "Hold 👎 for previous slide";
+            gestureStatus.textContent = gesture === "Thumb_Up" ? "Hold 👍" : "Hold 👎";
             if (progress.value >= 1) {
               goTo(current + (gesture === "Thumb_Up" ? 1 : -1));
               gestureLocked = true;
-              gestureStatus.textContent = "Command sent — lower hand to reset";
+              gestureStatus.textContent = "Lower hand";
             }
           } else if (heldGesture && bestEvidence >= 0.3) {
-            gestureStatus.textContent = `Keep holding ${heldGesture === "Thumb_Up" ? "👍" : "👎"}`;
+            gestureStatus.textContent = `Hold ${heldGesture === "Thumb_Up" ? "👍" : "👎"}`;
           } else {
             heldGesture = null;
             holdStarted = 0;
             progress.value = 0;
-            gestureStatus.textContent = "Hand detected — show 👍 or 👎";
+            gestureStatus.textContent = "Show 👍 or 👎";
           }
         }
       }
@@ -723,7 +724,8 @@
   async function startHandControl() {
     gestureActive = true;
     gestureToggle.disabled = true;
-    gestureStatus.textContent = "Requesting camera…";
+    gestureStatus.title = "";
+    gestureStatus.textContent = "Opening camera…";
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access requires HTTPS or localhost.");
       gestureStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
@@ -733,7 +735,7 @@
       gestureVideo.playsInline = true;
       gestureVideo.srcObject = gestureStream;
       await gestureVideo.play();
-      gestureStatus.textContent = "Loading hand model…";
+      gestureStatus.textContent = "Loading model…";
       const { FilesetResolver, GestureRecognizer } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs");
       if (!gestureActive) return stopHandControl();
       const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm");
@@ -750,7 +752,7 @@
       gestureToggle.textContent = "Disable hand control";
       gestureToggle.setAttribute("aria-pressed", "true");
       gestureControl.classList.add("camera-on");
-      gestureStatus.textContent = "Show one hand to navigate";
+      gestureStatus.textContent = "Show 👍 or 👎";
       detectGestureFrame();
     } catch (error) {
       stopHandControl(error.name === "NotAllowedError" ? "Camera permission denied" : `Camera unavailable: ${error.message}`);
